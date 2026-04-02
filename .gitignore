@@ -14,7 +14,7 @@ Cargo.lock
 Thumbs.db
 
 # Claude Code
-.claude/
+.claude/settings.local.json
 
 # Environment
 .env
