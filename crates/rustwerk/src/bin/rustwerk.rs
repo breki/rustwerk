@@ -88,6 +88,18 @@ enum TaskAction {
         #[arg(long)]
         desc: Option<String>,
     },
+    /// Assign a developer to a task.
+    Assign {
+        /// Task ID.
+        id: String,
+        /// Developer name.
+        to: String,
+    },
+    /// Remove the assignee from a task.
+    Unassign {
+        /// Task ID.
+        id: String,
+    },
     /// Add a dependency: FROM depends on TO.
     Depend {
         /// Task that depends on another.
@@ -207,6 +219,30 @@ fn cmd_task_add(
 
     save_project(&root, &project)?;
     println!("Created task {task_id}");
+    Ok(())
+}
+
+fn cmd_task_assign(id: &str, to: &str) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    project
+        .assign(&task_id, to)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    println!("{task_id}: assigned to {to}");
+    Ok(())
+}
+
+fn cmd_task_unassign(id: &str) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    project
+        .unassign(&task_id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    println!("{task_id}: unassigned");
     Ok(())
 }
 
@@ -382,6 +418,12 @@ fn main() -> Result<()> {
             }
             TaskAction::Remove { id } => {
                 cmd_task_remove(&id)
+            }
+            TaskAction::Assign { id, to } => {
+                cmd_task_assign(&id, &to)
+            }
+            TaskAction::Unassign { id } => {
+                cmd_task_unassign(&id)
             }
             TaskAction::Update { id, title, desc } => {
                 cmd_task_update(

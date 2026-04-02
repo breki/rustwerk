@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-02
 
+- Add assignee management and `/next-task` command (v0.8.0)
+
+    `task assign ID --to NAME` and `task unassign ID` CLI commands
+    with `assign`/`unassign` domain methods on `Project`. Added
+    `/next-task` Claude Code skill that lists available WBS tasks,
+    lets the user pick one, marks it in-progress, plans if needed,
+    implements with TDD, and commits. 6 new tests.
+
 - Add `--force` flag to `task status` (v0.7.0)
 
     `task status ID STATUS --force` bypasses transition validation,

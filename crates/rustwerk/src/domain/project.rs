@@ -182,6 +182,41 @@ impl Project {
         Ok(())
     }
 
+    /// Assign a developer to a task.
+    pub fn assign(
+        &mut self,
+        id: &TaskId,
+        assignee: &str,
+    ) -> Result<(), DomainError> {
+        let assignee = assignee.trim();
+        if assignee.is_empty() {
+            return Err(DomainError::ValidationError(
+                "assignee must not be empty".into(),
+            ));
+        }
+        let task =
+            self.tasks.get_mut(id).ok_or_else(|| {
+                DomainError::TaskNotFound(id.to_string())
+            })?;
+        task.assignee = Some(assignee.to_string());
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
+    /// Remove the assignee from a task.
+    pub fn unassign(
+        &mut self,
+        id: &TaskId,
+    ) -> Result<(), DomainError> {
+        let task =
+            self.tasks.get_mut(id).ok_or_else(|| {
+                DomainError::TaskNotFound(id.to_string())
+            })?;
+        task.assignee = None;
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
     /// Set the status of a task, enforcing valid
     /// transitions unless `force` is true.
     pub fn set_status(
@@ -631,6 +666,57 @@ mod tests {
         assert!(
             p.update_task(&id, Some("X"), None).is_err()
         );
+    }
+
+    #[test]
+    fn assign_task() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.assign(&ids[0], "alice").unwrap();
+        assert_eq!(
+            p.tasks.get(&ids[0]).unwrap().assignee.as_deref(),
+            Some("alice")
+        );
+    }
+
+    #[test]
+    fn assign_trims_whitespace() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.assign(&ids[0], "  bob  ").unwrap();
+        assert_eq!(
+            p.tasks.get(&ids[0]).unwrap().assignee.as_deref(),
+            Some("bob")
+        );
+    }
+
+    #[test]
+    fn assign_empty_rejected() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        assert!(p.assign(&ids[0], "").is_err());
+        assert!(p.assign(&ids[0], "   ").is_err());
+    }
+
+    #[test]
+    fn assign_nonexistent_task_errors() {
+        let (mut p, _) = project_with_tasks(&["A"]);
+        let id = TaskId::new("NOPE").unwrap();
+        assert!(p.assign(&id, "alice").is_err());
+    }
+
+    #[test]
+    fn unassign_task() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.assign(&ids[0], "alice").unwrap();
+        p.unassign(&ids[0]).unwrap();
+        assert!(
+            p.tasks.get(&ids[0]).unwrap().assignee.is_none()
+        );
+    }
+
+    #[test]
+    fn unassign_nonexistent_task_errors() {
+        let (mut p, _) = project_with_tasks(&["A"]);
+        let id = TaskId::new("NOPE").unwrap();
+        assert!(p.unassign(&id).is_err());
     }
 
     #[test]
