@@ -7,6 +7,12 @@ reverse chronological order.
 
 ### 2026-04-02
 
+- Add `--force` flag to `task status` (v0.7.0)
+
+    `task status ID STATUS --force` bypasses transition validation,
+    allowing corrections like DONE→TODO. `set_status` domain method
+    now takes a `force: bool` parameter.
+
 - Add task remove and update commands (v0.6.0)
 
     `task remove` deletes a task, guarded by dependency check — cannot

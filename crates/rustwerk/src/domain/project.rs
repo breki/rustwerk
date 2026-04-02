@@ -183,11 +183,12 @@ impl Project {
     }
 
     /// Set the status of a task, enforcing valid
-    /// transitions.
+    /// transitions unless `force` is true.
     pub fn set_status(
         &mut self,
         id: &TaskId,
         new_status: Status,
+        force: bool,
     ) -> Result<(), DomainError> {
         let task = self.tasks.get_mut(id).ok_or_else(|| {
             DomainError::TaskNotFound(id.to_string())
@@ -196,7 +197,7 @@ impl Project {
         if old == new_status {
             return Ok(());
         }
-        if !old.can_transition_to(new_status) {
+        if !force && !old.can_transition_to(new_status) {
             return Err(DomainError::InvalidTransition {
                 from: old.to_string(),
                 to: new_status.to_string(),
@@ -638,7 +639,7 @@ mod tests {
         let id = TaskId::new("T").unwrap();
         p.add_task(id.clone(), Task::new("X").unwrap())
             .unwrap();
-        p.set_status(&id, Status::InProgress).unwrap();
+        p.set_status(&id, Status::InProgress, false).unwrap();
         assert_eq!(
             p.tasks.get(&id).unwrap().status,
             Status::InProgress
@@ -651,7 +652,7 @@ mod tests {
         let id = TaskId::new("T").unwrap();
         p.add_task(id.clone(), Task::new("X").unwrap())
             .unwrap();
-        let result = p.set_status(&id, Status::Done);
+        let result = p.set_status(&id, Status::Done, false);
         assert!(result.is_err());
     }
 
@@ -661,7 +662,7 @@ mod tests {
         let id = TaskId::new("T").unwrap();
         p.add_task(id.clone(), Task::new("X").unwrap())
             .unwrap();
-        p.set_status(&id, Status::Todo).unwrap();
+        p.set_status(&id, Status::Todo, false).unwrap();
     }
 
     #[test]
@@ -669,8 +670,25 @@ mod tests {
         let mut p = Project::new("Test").unwrap();
         let id = TaskId::new("NOPE").unwrap();
         let result =
-            p.set_status(&id, Status::InProgress);
+            p.set_status(&id, Status::InProgress, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn set_status_force_bypasses_validation() {
+        let mut p = Project::new("Test").unwrap();
+        let id = TaskId::new("T").unwrap();
+        p.add_task(id.clone(), Task::new("X").unwrap())
+            .unwrap();
+        p.set_status(&id, Status::InProgress, false)
+            .unwrap();
+        p.set_status(&id, Status::Done, false).unwrap();
+        // DONE -> TODO is normally invalid.
+        p.set_status(&id, Status::Todo, true).unwrap();
+        assert_eq!(
+            p.tasks.get(&id).unwrap().status,
+            Status::Todo
+        );
     }
 
     fn project_with_tasks(
@@ -823,9 +841,9 @@ mod tests {
             project_with_tasks(&["A", "B"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         // Complete A.
-        p.set_status(&ids[0], Status::InProgress)
+        p.set_status(&ids[0], Status::InProgress, false)
             .unwrap();
-        p.set_status(&ids[0], Status::Done).unwrap();
+        p.set_status(&ids[0], Status::Done, false).unwrap();
         // Now B is available.
         let avail = p.available_tasks();
         assert_eq!(avail.len(), 1);
@@ -835,9 +853,9 @@ mod tests {
     #[test]
     fn available_tasks_excludes_done() {
         let (mut p, ids) = project_with_tasks(&["A"]);
-        p.set_status(&ids[0], Status::InProgress)
+        p.set_status(&ids[0], Status::InProgress, false)
             .unwrap();
-        p.set_status(&ids[0], Status::Done).unwrap();
+        p.set_status(&ids[0], Status::Done, false).unwrap();
         let avail = p.available_tasks();
         assert!(avail.is_empty());
     }

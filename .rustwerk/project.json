@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-02T21:27:41.544398800Z"
+    "modified_at": "2026-04-02T21:33:12.163849200Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -68,7 +68,7 @@
     },
     "CLI-DEP": {
       "title": "CLI depend add / depend remove / critical-path",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DEP-ADD",
         "DEP-REMOVE",
@@ -174,7 +174,7 @@
     },
     "DEP-GUARD": {
       "title": "Prevent removal of tasks with dependents",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DEP-ADD",
         "DOM-REMOVE"

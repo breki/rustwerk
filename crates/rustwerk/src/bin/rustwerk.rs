@@ -61,6 +61,9 @@ enum TaskAction {
         id: String,
         /// New status: todo, in-progress, blocked, done.
         status: String,
+        /// Bypass transition validation.
+        #[arg(long)]
+        force: bool,
     },
     /// List all tasks.
     List {
@@ -259,13 +262,17 @@ fn parse_status(s: &str) -> Result<Status> {
     }
 }
 
-fn cmd_task_status(id: &str, status: &str) -> Result<()> {
+fn cmd_task_status(
+    id: &str,
+    status: &str,
+    force: bool,
+) -> Result<()> {
     let (root, mut project) = load_project()?;
     let task_id = TaskId::new(id)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let new_status = parse_status(status)?;
     project
-        .set_status(&task_id, new_status)
+        .set_status(&task_id, new_status, force)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     save_project(&root, &project)?;
     println!("{task_id}: {new_status}");
@@ -370,8 +377,8 @@ fn main() -> Result<()> {
                 complexity,
                 effort.as_deref(),
             ),
-            TaskAction::Status { id, status } => {
-                cmd_task_status(&id, &status)
+            TaskAction::Status { id, status, force } => {
+                cmd_task_status(&id, &status, force)
             }
             TaskAction::Remove { id } => {
                 cmd_task_remove(&id)
