@@ -63,7 +63,26 @@ enum TaskAction {
         status: String,
     },
     /// List all tasks.
-    List,
+    List {
+        /// Show only tasks available to work on (all
+        /// dependencies done, not itself done).
+        #[arg(long)]
+        available: bool,
+    },
+    /// Add a dependency: FROM depends on TO.
+    Depend {
+        /// Task that depends on another.
+        from: String,
+        /// Task that must be completed first.
+        to: String,
+    },
+    /// Remove a dependency.
+    Undepend {
+        /// Task that depends on another.
+        from: String,
+        /// Dependency to remove.
+        to: String,
+    },
 }
 
 /// Find the project root by looking for `.rustwerk/`
@@ -204,21 +223,72 @@ fn cmd_task_status(id: &str, status: &str) -> Result<()> {
 // project.json could contain ANSI escape sequences that
 // affect terminal rendering. Sanitization should be added
 // before this is used in untrusted environments.
-fn cmd_task_list() -> Result<()> {
+fn cmd_task_list(available_only: bool) -> Result<()> {
     let (_root, project) = load_project()?;
     if project.tasks.is_empty() {
         println!("No tasks.");
         return Ok(());
     }
-    for (id, task) in &project.tasks {
-        let complexity = task
-            .complexity
-            .map_or(String::new(), |c| format!(" [{c}]"));
-        println!(
-            "  {id:<16} {:<14} {}{complexity}",
-            task.status, task.title,
-        );
+
+    if available_only {
+        let avail = project.available_tasks();
+        if avail.is_empty() {
+            println!("No available tasks.");
+            return Ok(());
+        }
+        for id in &avail {
+            let task = &project.tasks[*id];
+            let complexity = task
+                .complexity
+                .map_or(String::new(), |c| {
+                    format!(" [{c}]")
+                });
+            println!(
+                "  {id:<16} {}{complexity}",
+                task.title,
+            );
+        }
+    } else {
+        for (id, task) in &project.tasks {
+            let complexity = task
+                .complexity
+                .map_or(String::new(), |c| {
+                    format!(" [{c}]")
+                });
+            println!(
+                "  {id:<16} {:<14} {}{complexity}",
+                task.status, task.title,
+            );
+        }
     }
+    Ok(())
+}
+
+fn cmd_depend(from: &str, to: &str) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let from_id = TaskId::new(from)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let to_id = TaskId::new(to)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    project
+        .add_dependency(&from_id, &to_id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    println!("{from_id} depends on {to_id}");
+    Ok(())
+}
+
+fn cmd_undepend(from: &str, to: &str) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let from_id = TaskId::new(from)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let to_id = TaskId::new(to)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    project
+        .remove_dependency(&from_id, &to_id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    println!("Removed: {from_id} depends on {to_id}");
     Ok(())
 }
 
@@ -244,7 +314,15 @@ fn main() -> Result<()> {
             TaskAction::Status { id, status } => {
                 cmd_task_status(&id, &status)
             }
-            TaskAction::List => cmd_task_list(),
+            TaskAction::List { available } => {
+                cmd_task_list(available)
+            }
+            TaskAction::Depend { from, to } => {
+                cmd_depend(&from, &to)
+            }
+            TaskAction::Undepend { from, to } => {
+                cmd_undepend(&from, &to)
+            }
         },
     }
 }

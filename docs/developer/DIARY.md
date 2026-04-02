@@ -7,6 +7,17 @@ reverse chronological order.
 
 ### 2026-04-02
 
+- Add dependency management and available task filtering (v0.4.0)
+
+    `task depend` and `task undepend` CLI commands manage task
+    dependencies. `add_dependency` validates both task IDs exist,
+    rejects self-dependencies and cycles via DFS. `task list
+    --available` shows only tasks whose dependencies are all done.
+    `available_tasks()` query on `Project` aggregate. All WBS
+    dependencies imported into dogfooding project file. 15 new
+    tests for dependency CRUD, cycle detection, and availability
+    filtering.
+
 - Add task management CLI commands (v0.3.0)
 
     `task add` creates tasks with optional mnemonic ID, description,

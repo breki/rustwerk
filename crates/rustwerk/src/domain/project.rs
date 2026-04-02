@@ -150,6 +150,121 @@ impl Project {
         self.metadata.modified_at = Utc::now();
         Ok(())
     }
+
+    /// Add a dependency: `from` depends on `to`.
+    /// Rejects self-dependencies, unknown task IDs, duplicate
+    /// edges, and cycles.
+    pub fn add_dependency(
+        &mut self,
+        from: &TaskId,
+        to: &TaskId,
+    ) -> Result<(), DomainError> {
+        if from == to {
+            return Err(DomainError::CycleDetected(format!(
+                "{from} -> {from}"
+            )));
+        }
+        if !self.tasks.contains_key(from) {
+            return Err(DomainError::TaskNotFound(
+                from.to_string(),
+            ));
+        }
+        if !self.tasks.contains_key(to) {
+            return Err(DomainError::TaskNotFound(
+                to.to_string(),
+            ));
+        }
+
+        // Check for duplicate edge.
+        let from_task = &self.tasks[from];
+        if from_task.dependencies.contains(to) {
+            return Ok(()); // idempotent
+        }
+
+        // Temporarily add the edge, then check for cycles.
+        self.tasks
+            .get_mut(from)
+            .unwrap()
+            .dependencies
+            .push(to.clone());
+
+        if self.has_cycle(from) {
+            // Roll back.
+            self.tasks
+                .get_mut(from)
+                .unwrap()
+                .dependencies
+                .pop();
+            return Err(DomainError::CycleDetected(format!(
+                "{from} -> {to}"
+            )));
+        }
+
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
+    /// Remove a dependency: `from` no longer depends on `to`.
+    pub fn remove_dependency(
+        &mut self,
+        from: &TaskId,
+        to: &TaskId,
+    ) -> Result<(), DomainError> {
+        let task =
+            self.tasks.get_mut(from).ok_or_else(|| {
+                DomainError::TaskNotFound(from.to_string())
+            })?;
+        let before = task.dependencies.len();
+        task.dependencies.retain(|d| d != to);
+        if task.dependencies.len() == before {
+            return Err(DomainError::ValidationError(
+                format!(
+                    "{from} does not depend on {to}"
+                ),
+            ));
+        }
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
+    /// DFS cycle detection starting from `start`.
+    fn has_cycle(&self, start: &TaskId) -> bool {
+        use std::collections::HashSet;
+        let mut visited = HashSet::new();
+        let mut stack = vec![start.clone()];
+        while let Some(current) = stack.pop() {
+            if !visited.insert(current.clone()) {
+                continue;
+            }
+            if let Some(task) = self.tasks.get(&current) {
+                for dep in &task.dependencies {
+                    if dep == start {
+                        return true;
+                    }
+                    stack.push(dep.clone());
+                }
+            }
+        }
+        false
+    }
+
+    /// Return task IDs whose dependencies are all done.
+    pub fn available_tasks(&self) -> Vec<&TaskId> {
+        self.tasks
+            .iter()
+            .filter(|(_, task)| {
+                task.status != Status::Done
+                    && task.dependencies.iter().all(|dep| {
+                        self.tasks
+                            .get(dep)
+                            .is_some_and(|t| {
+                                t.status == Status::Done
+                            })
+                    })
+            })
+            .map(|(id, _)| id)
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -267,5 +382,174 @@ mod tests {
         let result =
             p.set_status(&id, Status::InProgress);
         assert!(result.is_err());
+    }
+
+    fn project_with_tasks(
+        ids: &[&str],
+    ) -> (Project, Vec<TaskId>) {
+        let mut p = Project::new("Test").unwrap();
+        let task_ids: Vec<TaskId> = ids
+            .iter()
+            .map(|id| {
+                let tid = TaskId::new(id).unwrap();
+                p.add_task(
+                    tid.clone(),
+                    Task::new(&format!("Task {id}"))
+                        .unwrap(),
+                )
+                .unwrap();
+                tid
+            })
+            .collect();
+        (p, task_ids)
+    }
+
+    #[test]
+    fn add_dependency() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap();
+        let task_b = p.tasks.get(&ids[1]).unwrap();
+        assert_eq!(task_b.dependencies.len(), 1);
+        assert_eq!(task_b.dependencies[0].as_str(), "A");
+    }
+
+    #[test]
+    fn add_dependency_idempotent() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap();
+        p.add_dependency(&ids[1], &ids[0]).unwrap();
+        let task_b = p.tasks.get(&ids[1]).unwrap();
+        assert_eq!(task_b.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn add_self_dependency_rejected() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        let result = p.add_dependency(&ids[0], &ids[0]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_dependency_unknown_task_rejected() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        let unknown = TaskId::new("NOPE").unwrap();
+        assert!(
+            p.add_dependency(&ids[0], &unknown).is_err()
+        );
+        assert!(
+            p.add_dependency(&unknown, &ids[0]).is_err()
+        );
+    }
+
+    #[test]
+    fn direct_cycle_detected() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[0], &ids[1]).unwrap();
+        let result = p.add_dependency(&ids[1], &ids[0]);
+        assert!(result.is_err());
+        // Edge should not have been added.
+        assert!(
+            p.tasks
+                .get(&ids[1])
+                .unwrap()
+                .dependencies
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn indirect_cycle_detected() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[0], &ids[1]).unwrap(); // A->B
+        p.add_dependency(&ids[1], &ids[2]).unwrap(); // B->C
+        let result =
+            p.add_dependency(&ids[2], &ids[0]); // C->A
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn valid_dag_no_cycle() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[0], &ids[1]).unwrap(); // A->B
+        p.add_dependency(&ids[0], &ids[2]).unwrap(); // A->C
+        p.add_dependency(&ids[1], &ids[2]).unwrap(); // B->C
+        // Diamond DAG, no cycle.
+        assert_eq!(
+            p.tasks
+                .get(&ids[0])
+                .unwrap()
+                .dependencies
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn remove_dependency() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap();
+        p.remove_dependency(&ids[1], &ids[0]).unwrap();
+        assert!(
+            p.tasks
+                .get(&ids[1])
+                .unwrap()
+                .dependencies
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn remove_nonexistent_dependency_errors() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        assert!(
+            p.remove_dependency(&ids[0], &ids[1]).is_err()
+        );
+    }
+
+    #[test]
+    fn available_tasks_no_deps() {
+        let (p, _) = project_with_tasks(&["A", "B"]);
+        let avail = p.available_tasks();
+        assert_eq!(avail.len(), 2);
+    }
+
+    #[test]
+    fn available_tasks_with_deps() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
+        // Only A is available (no deps).
+        let avail = p.available_tasks();
+        assert_eq!(avail.len(), 1);
+        assert_eq!(avail[0].as_str(), "A");
+    }
+
+    #[test]
+    fn available_tasks_after_completing_dep() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        // Complete A.
+        p.set_status(&ids[0], Status::InProgress)
+            .unwrap();
+        p.set_status(&ids[0], Status::Done).unwrap();
+        // Now B is available.
+        let avail = p.available_tasks();
+        assert_eq!(avail.len(), 1);
+        assert_eq!(avail[0].as_str(), "B");
+    }
+
+    #[test]
+    fn available_tasks_excludes_done() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.set_status(&ids[0], Status::InProgress)
+            .unwrap();
+        p.set_status(&ids[0], Status::Done).unwrap();
+        let avail = p.available_tasks();
+        assert!(avail.is_empty());
     }
 }
