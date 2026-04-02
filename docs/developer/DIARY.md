@@ -7,6 +7,13 @@ reverse chronological order.
 
 ### 2026-04-02
 
+- Add task remove and update commands (v0.6.0)
+
+    `task remove` deletes a task, guarded by dependency check — cannot
+    remove a task that others depend on. `task update` changes title
+    and/or description (use `--desc ""` to clear). Domain methods
+    `remove_task` and `update_task` on `Project`. 9 new tests.
+
 - Add topological sort, critical path analysis, and `*` marker (v0.5.0)
 
     `topological_sort()` via Kahn's algorithm returns tasks in

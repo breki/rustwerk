@@ -126,6 +126,62 @@ impl Project {
         }
     }
 
+    /// Remove a task by ID. Fails if other tasks depend
+    /// on it.
+    pub fn remove_task(
+        &mut self,
+        id: &TaskId,
+    ) -> Result<Task, DomainError> {
+        if !self.tasks.contains_key(id) {
+            return Err(DomainError::TaskNotFound(
+                id.to_string(),
+            ));
+        }
+        // Check if any other task depends on this one.
+        for (other_id, other_task) in &self.tasks {
+            if other_id != id
+                && other_task.dependencies.contains(id)
+            {
+                return Err(DomainError::ValidationError(
+                    format!(
+                        "cannot remove {id}: {other_id} \
+                         depends on it"
+                    ),
+                ));
+            }
+        }
+        let task = self.tasks.remove(id).unwrap();
+        self.metadata.modified_at = Utc::now();
+        Ok(task)
+    }
+
+    /// Update a task's title and/or description.
+    pub fn update_task(
+        &mut self,
+        id: &TaskId,
+        title: Option<&str>,
+        description: Option<Option<&str>>,
+    ) -> Result<(), DomainError> {
+        let task =
+            self.tasks.get_mut(id).ok_or_else(|| {
+                DomainError::TaskNotFound(id.to_string())
+            })?;
+        if let Some(t) = title {
+            let t = t.trim();
+            if t.is_empty() {
+                return Err(DomainError::ValidationError(
+                    "task title must not be empty".into(),
+                ));
+            }
+            task.title = t.to_string();
+        }
+        if let Some(d) = description {
+            task.description = d.map(String::from);
+        }
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
     /// Set the status of a task, enforcing valid
     /// transitions.
     pub fn set_status(
@@ -476,6 +532,104 @@ mod tests {
         assert_eq!(id1.as_str(), "T0001");
         assert_eq!(id2.as_str(), "T0002");
         assert_eq!(p.next_auto_id, 3);
+    }
+
+    #[test]
+    fn remove_task() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        let removed = p.remove_task(&ids[0]).unwrap();
+        assert_eq!(removed.title, "Task A");
+        assert_eq!(p.task_count(), 1);
+    }
+
+    #[test]
+    fn remove_task_nonexistent_errors() {
+        let (mut p, _) = project_with_tasks(&["A"]);
+        let id = TaskId::new("NOPE").unwrap();
+        assert!(p.remove_task(&id).is_err());
+    }
+
+    #[test]
+    fn remove_task_with_dependents_errors() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        let result = p.remove_task(&ids[0]); // A has dependent B
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_task_after_removing_dependency() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.remove_dependency(&ids[1], &ids[0]).unwrap();
+        p.remove_task(&ids[0]).unwrap(); // now OK
+        assert_eq!(p.task_count(), 1);
+    }
+
+    #[test]
+    fn update_task_title() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.update_task(&ids[0], Some("New title"), None)
+            .unwrap();
+        assert_eq!(
+            p.tasks.get(&ids[0]).unwrap().title,
+            "New title"
+        );
+    }
+
+    #[test]
+    fn update_task_description() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.update_task(
+            &ids[0],
+            None,
+            Some(Some("A description")),
+        )
+        .unwrap();
+        assert_eq!(
+            p.tasks
+                .get(&ids[0])
+                .unwrap()
+                .description
+                .as_deref(),
+            Some("A description")
+        );
+    }
+
+    #[test]
+    fn update_task_clear_description() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.update_task(
+            &ids[0],
+            None,
+            Some(Some("desc")),
+        )
+        .unwrap();
+        p.update_task(&ids[0], None, Some(None)).unwrap();
+        assert!(
+            p.tasks
+                .get(&ids[0])
+                .unwrap()
+                .description
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn update_task_empty_title_rejected() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        assert!(
+            p.update_task(&ids[0], Some(""), None).is_err()
+        );
+    }
+
+    #[test]
+    fn update_task_nonexistent_errors() {
+        let (mut p, _) = project_with_tasks(&["A"]);
+        let id = TaskId::new("NOPE").unwrap();
+        assert!(
+            p.update_task(&id, Some("X"), None).is_err()
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-02T21:19:52.152154700Z"
+    "modified_at": "2026-04-02T21:27:41.544398800Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -125,7 +125,7 @@
       "complexity": 2
     },
     "CLI-TASK": {
-      "title": "CLI task add / task remove / task update",
+      "title": "CLI task add / remove / update / status",
       "status": "done",
       "dependencies": [
         "DOM-ADD",
@@ -244,7 +244,7 @@
     },
     "DOM-REMOVE": {
       "title": "Remove task from project",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DOM-ADD"
       ],
@@ -265,7 +265,7 @@
     },
     "DOM-UPDATE": {
       "title": "Update task fields (title, description)",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DOM-ADD"
       ],

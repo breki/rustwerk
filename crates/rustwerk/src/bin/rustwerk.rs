@@ -69,6 +69,22 @@ enum TaskAction {
         #[arg(long)]
         available: bool,
     },
+    /// Remove a task.
+    Remove {
+        /// Task ID to remove.
+        id: String,
+    },
+    /// Update a task's title or description.
+    Update {
+        /// Task ID.
+        id: String,
+        /// New title.
+        #[arg(long)]
+        title: Option<String>,
+        /// New description (use "" to clear).
+        #[arg(long)]
+        desc: Option<String>,
+    },
     /// Add a dependency: FROM depends on TO.
     Depend {
         /// Task that depends on another.
@@ -188,6 +204,43 @@ fn cmd_task_add(
 
     save_project(&root, &project)?;
     println!("Created task {task_id}");
+    Ok(())
+}
+
+fn cmd_task_remove(id: &str) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task = project
+        .remove_task(&task_id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    println!("Removed task {task_id}: {}", task.title);
+    Ok(())
+}
+
+fn cmd_task_update(
+    id: &str,
+    title: Option<&str>,
+    desc: Option<&str>,
+) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    // Empty string for desc means clear it.
+    let description = desc.map(|d| {
+        if d.is_empty() {
+            None
+        } else {
+            Some(d)
+        }
+    });
+    project
+        .update_task(&task_id, title, description)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    let task = &project.tasks[&task_id];
+    println!("Updated {task_id}: {}", task.title);
     Ok(())
 }
 
@@ -319,6 +372,16 @@ fn main() -> Result<()> {
             ),
             TaskAction::Status { id, status } => {
                 cmd_task_status(&id, &status)
+            }
+            TaskAction::Remove { id } => {
+                cmd_task_remove(&id)
+            }
+            TaskAction::Update { id, title, desc } => {
+                cmd_task_update(
+                    &id,
+                    title.as_deref(),
+                    desc.as_deref(),
+                )
             }
             TaskAction::List { available } => {
                 cmd_task_list(available)
