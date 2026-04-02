@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-02T21:10:44.044255900Z"
+    "modified_at": "2026-04-02T21:19:52.152154700Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -166,7 +166,7 @@
     },
     "DEP-CRIT": {
       "title": "Critical path analysis (longest-path on weighted DAG)",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DEP-TOPO"
       ],
@@ -191,7 +191,7 @@
     },
     "DEP-TOPO": {
       "title": "Topological sort (Kahn's algorithm)",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DEP-ADD"
       ],

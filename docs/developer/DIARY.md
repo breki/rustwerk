@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-02
 
+- Add topological sort, critical path analysis, and `*` marker (v0.5.0)
+
+    `topological_sort()` via Kahn's algorithm returns tasks in
+    dependency order. `critical_path()` finds the longest chain by
+    complexity weight using DP on the topological order.
+    `critical_path_set()` returns the set for O(1) membership checks.
+    `task list` now marks critical-path tasks with `*`. 7 new tests.
+
 - Add dependency management and available task filtering (v0.4.0)
 
     `task depend` and `task undepend` CLI commands manage task

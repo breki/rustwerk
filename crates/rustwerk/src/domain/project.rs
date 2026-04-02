@@ -248,6 +248,141 @@ impl Project {
         false
     }
 
+    /// Topological sort of all tasks (Kahn's algorithm).
+    /// Returns task IDs in dependency order — a task
+    /// appears after all its dependencies.
+    pub fn topological_sort(&self) -> Vec<TaskId> {
+        use std::collections::HashMap;
+
+        // Build in-degree map. A task's in-degree is the
+        // number of tasks that list it as a dependency
+        // (i.e. how many tasks it blocks).
+        // NOTE: we reverse the semantics here — "depends
+        // on" means the dependency must come first, so we
+        // compute in-degree based on reverse edges.
+        let mut in_degree: HashMap<&TaskId, usize> =
+            self.tasks.keys().map(|id| (id, 0)).collect();
+        let mut dependents: HashMap<
+            &TaskId,
+            Vec<&TaskId>,
+        > = HashMap::new();
+
+        for (id, task) in &self.tasks {
+            for dep in &task.dependencies {
+                if self.tasks.contains_key(dep) {
+                    *in_degree.entry(id).or_insert(0) += 1;
+                    dependents
+                        .entry(dep)
+                        .or_default()
+                        .push(id);
+                }
+            }
+        }
+
+        // Start with tasks that have no dependencies
+        // (in-degree 0).
+        let mut queue: std::collections::VecDeque<&TaskId> =
+            in_degree
+                .iter()
+                .filter(|(_, &deg)| deg == 0)
+                .map(|(&id, _)| id)
+                .collect();
+        // Sort the initial queue for deterministic output.
+        let mut sorted_queue: Vec<&TaskId> =
+            queue.drain(..).collect();
+        sorted_queue.sort();
+        queue.extend(sorted_queue);
+
+        let mut result = Vec::with_capacity(self.tasks.len());
+        while let Some(id) = queue.pop_front() {
+            result.push(id.clone());
+            if let Some(deps) = dependents.get(id) {
+                let mut next = Vec::new();
+                for &dep_id in deps {
+                    let deg =
+                        in_degree.get_mut(dep_id).unwrap();
+                    *deg -= 1;
+                    if *deg == 0 {
+                        next.push(dep_id);
+                    }
+                }
+                next.sort();
+                queue.extend(next);
+            }
+        }
+        result
+    }
+
+    /// Compute the critical path — the longest chain of
+    /// tasks by complexity weight. Returns (path, total
+    /// complexity). Uses the topological sort and
+    /// dynamic programming.
+    pub fn critical_path(&self) -> (Vec<TaskId>, u32) {
+        use std::collections::HashMap;
+
+        let order = self.topological_sort();
+        if order.is_empty() {
+            return (Vec::new(), 0);
+        }
+
+        // dist[id] = longest path ending at id.
+        // prev[id] = predecessor on that path.
+        let mut dist: HashMap<&TaskId, u32> = HashMap::new();
+        let mut prev: HashMap<&TaskId, Option<&TaskId>> =
+            HashMap::new();
+
+        for id in &order {
+            let task = &self.tasks[id];
+            let weight = task.complexity.unwrap_or(1);
+            dist.insert(id, weight);
+            prev.insert(id, None);
+        }
+
+        for id in &order {
+            let id_dist = dist[id];
+
+            // For each task that depends on `id`, see if
+            // going through `id` gives a longer path.
+            for (other_id, other_task) in &self.tasks {
+                if other_task.dependencies.contains(id) {
+                    let other_weight =
+                        other_task.complexity.unwrap_or(1);
+                    let candidate = id_dist + other_weight;
+                    if candidate > dist[other_id] {
+                        dist.insert(other_id, candidate);
+                        prev.insert(
+                            other_id,
+                            Some(id),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Find the task with the maximum distance.
+        let (&end, &max_dist) =
+            dist.iter().max_by_key(|(_, &d)| d).unwrap();
+
+        // Trace back the path.
+        let mut path = vec![end.clone()];
+        let mut current = end;
+        while let Some(Some(p)) = prev.get(current) {
+            path.push((*p).clone());
+            current = p;
+        }
+        path.reverse();
+
+        (path, max_dist)
+    }
+
+    /// Return the set of task IDs on the critical path.
+    pub fn critical_path_set(
+        &self,
+    ) -> std::collections::HashSet<TaskId> {
+        let (path, _) = self.critical_path();
+        path.into_iter().collect()
+    }
+
     /// Return task IDs whose dependencies are all done.
     pub fn available_tasks(&self) -> Vec<&TaskId> {
         self.tasks
@@ -551,5 +686,123 @@ mod tests {
         p.set_status(&ids[0], Status::Done).unwrap();
         let avail = p.available_tasks();
         assert!(avail.is_empty());
+    }
+
+    #[test]
+    fn topological_sort_simple_chain() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[0], &ids[1]).unwrap(); // A->B
+        p.add_dependency(&ids[1], &ids[2]).unwrap(); // B->C
+        let order = p.topological_sort();
+        let names: Vec<&str> =
+            order.iter().map(TaskId::as_str).collect();
+        assert_eq!(names, vec!["C", "B", "A"]);
+    }
+
+    #[test]
+    fn topological_sort_diamond() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C", "D"]);
+        // A depends on B and C; B and C depend on D.
+        p.add_dependency(&ids[0], &ids[1]).unwrap(); // A->B
+        p.add_dependency(&ids[0], &ids[2]).unwrap(); // A->C
+        p.add_dependency(&ids[1], &ids[3]).unwrap(); // B->D
+        p.add_dependency(&ids[2], &ids[3]).unwrap(); // C->D
+        let order = p.topological_sort();
+        let names: Vec<&str> =
+            order.iter().map(TaskId::as_str).collect();
+        // D must come first, A must come last.
+        assert_eq!(names[0], "D");
+        assert_eq!(*names.last().unwrap(), "A");
+    }
+
+    #[test]
+    fn topological_sort_no_deps() {
+        let (p, _) = project_with_tasks(&["A", "B", "C"]);
+        let order = p.topological_sort();
+        // All independent — alphabetical order.
+        assert_eq!(order.len(), 3);
+    }
+
+    #[test]
+    fn critical_path_linear() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity =
+            Some(3);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity =
+            Some(2);
+        p.tasks.get_mut(&ids[2]).unwrap().complexity =
+            Some(1);
+        p.add_dependency(&ids[0], &ids[1]).unwrap(); // A->B
+        p.add_dependency(&ids[1], &ids[2]).unwrap(); // B->C
+        let (path, total) = p.critical_path();
+        let names: Vec<&str> =
+            path.iter().map(TaskId::as_str).collect();
+        assert_eq!(names, vec!["C", "B", "A"]);
+        assert_eq!(total, 6);
+    }
+
+    #[test]
+    fn critical_path_parallel_branches() {
+        let (mut p, ids) = project_with_tasks(
+            &["END", "LONG", "SHORT", "START"],
+        );
+        // END depends on LONG and SHORT.
+        // LONG depends on START (weight 5).
+        // SHORT depends on START (weight 1).
+        p.tasks
+            .get_mut(&ids[0])
+            .unwrap()
+            .complexity = Some(1); // END
+        p.tasks
+            .get_mut(&ids[1])
+            .unwrap()
+            .complexity = Some(5); // LONG
+        p.tasks
+            .get_mut(&ids[2])
+            .unwrap()
+            .complexity = Some(1); // SHORT
+        p.tasks
+            .get_mut(&ids[3])
+            .unwrap()
+            .complexity = Some(1); // START
+        p.add_dependency(&ids[0], &ids[1]).unwrap(); // END->LONG
+        p.add_dependency(&ids[0], &ids[2]).unwrap(); // END->SHORT
+        p.add_dependency(&ids[1], &ids[3]).unwrap(); // LONG->START
+        p.add_dependency(&ids[2], &ids[3]).unwrap(); // SHORT->START
+        let (path, total) = p.critical_path();
+        let names: Vec<&str> =
+            path.iter().map(TaskId::as_str).collect();
+        // Critical path goes through LONG, not SHORT.
+        assert_eq!(names, vec!["START", "LONG", "END"]);
+        assert_eq!(total, 7);
+    }
+
+    #[test]
+    fn critical_path_empty_project() {
+        let p = Project::new("Empty").unwrap();
+        let (path, total) = p.critical_path();
+        assert!(path.is_empty());
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn critical_path_set_contains_correct_ids() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity =
+            Some(3);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity =
+            Some(2);
+        p.tasks.get_mut(&ids[2]).unwrap().complexity =
+            Some(1);
+        p.add_dependency(&ids[0], &ids[1]).unwrap();
+        p.add_dependency(&ids[1], &ids[2]).unwrap();
+        let crit = p.critical_path_set();
+        assert!(crit.contains(&ids[0]));
+        assert!(crit.contains(&ids[1]));
+        assert!(crit.contains(&ids[2]));
     }
 }

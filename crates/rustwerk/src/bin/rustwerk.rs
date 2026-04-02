@@ -230,6 +230,8 @@ fn cmd_task_list(available_only: bool) -> Result<()> {
         return Ok(());
     }
 
+    let crit = project.critical_path_set();
+
     if available_only {
         let avail = project.available_tasks();
         if avail.is_empty() {
@@ -243,8 +245,10 @@ fn cmd_task_list(available_only: bool) -> Result<()> {
                 .map_or(String::new(), |c| {
                     format!(" [{c}]")
                 });
+            let marker =
+                if crit.contains(*id) { "*" } else { " " };
             println!(
-                "  {id:<16} {}{complexity}",
+                " {marker}{id:<16} {}{complexity}",
                 task.title,
             );
         }
@@ -255,8 +259,10 @@ fn cmd_task_list(available_only: bool) -> Result<()> {
                 .map_or(String::new(), |c| {
                     format!(" [{c}]")
                 });
+            let marker =
+                if crit.contains(id) { "*" } else { " " };
             println!(
-                "  {id:<16} {:<14} {}{complexity}",
+                " {marker}{id:<16} {:<14} {}{complexity}",
                 task.status, task.title,
             );
         }
