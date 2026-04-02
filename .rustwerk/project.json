@@ -1,0 +1,300 @@
+{
+  "metadata": {
+    "name": "RustWerk",
+    "created_at": "2026-04-02T20:56:48.780798500Z",
+    "modified_at": "2026-04-02T20:58:50.851370400Z"
+  },
+  "tasks": {
+    "AI-BATCH": {
+      "title": "Batch command execution (atomic rollback)",
+      "status": "todo",
+      "complexity": 8
+    },
+    "AI-ERRORS": {
+      "title": "Structured JSON error output",
+      "status": "todo",
+      "complexity": 3
+    },
+    "AI-ESTIMATE": {
+      "title": "Effort estimation hooks (request/apply)",
+      "status": "todo",
+      "complexity": 5
+    },
+    "AI-EXPORT": {
+      "title": "CLI wbs export",
+      "status": "todo",
+      "complexity": 3
+    },
+    "AI-INGEST": {
+      "title": "CLI wbs ingest",
+      "status": "todo",
+      "complexity": 5
+    },
+    "AI-SCHEMA": {
+      "title": "WBS JSON import schema",
+      "status": "todo",
+      "complexity": 3
+    },
+    "CLI-ASSIGN": {
+      "title": "CLI task assign / task unassign",
+      "status": "todo",
+      "complexity": 2
+    },
+    "CLI-DEP": {
+      "title": "CLI depend add / depend remove / critical-path",
+      "status": "todo",
+      "complexity": 3
+    },
+    "CLI-EFFORT": {
+      "title": "CLI effort log / effort estimate",
+      "status": "todo",
+      "complexity": 3
+    },
+    "CLI-INIT": {
+      "title": "CLI init command",
+      "status": "done",
+      "complexity": 2
+    },
+    "CLI-JSON": {
+      "title": "Global --json output flag for all commands",
+      "status": "todo",
+      "complexity": 5
+    },
+    "CLI-RPT": {
+      "title": "CLI dashboard and report commands",
+      "status": "todo",
+      "complexity": 3
+    },
+    "CLI-SHOW": {
+      "title": "CLI show command",
+      "status": "done",
+      "complexity": 2
+    },
+    "CLI-STATUS": {
+      "title": "CLI task status (set status)",
+      "status": "done",
+      "complexity": 2
+    },
+    "CLI-TASK": {
+      "title": "CLI task add / task remove / task update",
+      "status": "done",
+      "complexity": 5
+    },
+    "CLI-VIZ": {
+      "title": "CLI list, tree, gantt, status commands",
+      "status": "todo",
+      "complexity": 3
+    },
+    "DEP-ADD": {
+      "title": "Add dependency with cycle detection (DFS)",
+      "status": "todo",
+      "complexity": 5
+    },
+    "DEP-BLOCK": {
+      "title": "Blocked status auto-detection",
+      "status": "todo",
+      "complexity": 3
+    },
+    "DEP-CRIT": {
+      "title": "Critical path analysis (longest-path on weighted DAG)",
+      "status": "todo",
+      "complexity": 5
+    },
+    "DEP-GUARD": {
+      "title": "Prevent removal of tasks with dependents",
+      "status": "todo",
+      "complexity": 2
+    },
+    "DEP-REMOVE": {
+      "title": "Remove dependency",
+      "status": "todo",
+      "complexity": 2
+    },
+    "DEP-TOPO": {
+      "title": "Topological sort (Kahn's algorithm)",
+      "status": "todo",
+      "complexity": 3
+    },
+    "DOM-ADD": {
+      "title": "Add task to project (domain method + ID generation)",
+      "status": "done",
+      "complexity": 3
+    },
+    "DOM-ASSIGN": {
+      "title": "Assignee management (assign/unassign)",
+      "status": "todo",
+      "complexity": 2
+    },
+    "DOM-EFFORT": {
+      "title": "Effort, EffortEntry, Assignee value objects",
+      "status": "done",
+      "complexity": 2
+    },
+    "DOM-ERR": {
+      "title": "DomainError enum (thiserror)",
+      "status": "done",
+      "complexity": 2
+    },
+    "DOM-LOG": {
+      "title": "Effort logging (requires IN_PROGRESS status)",
+      "status": "todo",
+      "complexity": 3
+    },
+    "DOM-PROJ": {
+      "title": "Project aggregate and ProjectMetadata",
+      "status": "done",
+      "complexity": 3
+    },
+    "DOM-REMOVE": {
+      "title": "Remove task from project",
+      "status": "todo",
+      "complexity": 2
+    },
+    "DOM-STATUS": {
+      "title": "Status transitions with validation",
+      "status": "done",
+      "complexity": 3
+    },
+    "DOM-TASK": {
+      "title": "Task, TaskId, Status enum, Title",
+      "status": "done",
+      "complexity": 3
+    },
+    "DOM-UPDATE": {
+      "title": "Update task fields (title, description)",
+      "status": "todo",
+      "complexity": 2
+    },
+    "FILE-SCHEMA": {
+      "title": "Design project definition file format",
+      "status": "done",
+      "complexity": 5
+    },
+    "GIT-ATOMIC": {
+      "title": "Atomic commit and push with rollback",
+      "status": "todo",
+      "complexity": 8
+    },
+    "GIT-CONFLICT": {
+      "title": "Conflict resolution (pull --rebase)",
+      "status": "todo",
+      "complexity": 5
+    },
+    "GIT-CTX": {
+      "title": "Git context detection (current branch, is-main)",
+      "status": "todo",
+      "complexity": 3
+    },
+    "GIT-SWITCH": {
+      "title": "Stash + branch switch (RAII context manager)",
+      "status": "todo",
+      "complexity": 5
+    },
+    "GIT-WIRE": {
+      "title": "Wire git into mutating CLI commands",
+      "status": "todo",
+      "complexity": 3
+    },
+    "HTML-MERMAID": {
+      "title": "Static HTML export with Mermaid",
+      "status": "todo",
+      "complexity": 5
+    },
+    "HTML-PUML": {
+      "title": "Static HTML export with PlantUML",
+      "status": "todo",
+      "complexity": 5
+    },
+    "HTML-SITE": {
+      "title": "Multi-page static site export",
+      "status": "todo",
+      "complexity": 8
+    },
+    "PLG-ACTLOG": {
+      "title": "Built-in ActivityLogPlugin",
+      "status": "todo",
+      "complexity": 3
+    },
+    "PLG-CONFIG": {
+      "title": "Plugin configuration (per-plugin JSON)",
+      "status": "todo",
+      "complexity": 3
+    },
+    "PLG-EVENT": {
+      "title": "DomainEvent enum and HookPoint subscription",
+      "status": "todo",
+      "complexity": 3
+    },
+    "PLG-REG": {
+      "title": "PluginRegistry (register, unregister, dispatch)",
+      "status": "todo",
+      "complexity": 3
+    },
+    "PLG-TRAIT": {
+      "title": "Plugin trait (object-safe)",
+      "status": "todo",
+      "complexity": 3
+    },
+    "PLG-WIRE": {
+      "title": "Wire event dispatching into Project mutations",
+      "status": "todo",
+      "complexity": 5
+    },
+    "QRY-BOTTLE": {
+      "title": "Bottleneck detection",
+      "status": "todo",
+      "complexity": 3
+    },
+    "QRY-LIST": {
+      "title": "List tasks with filters (status, assignee, chain)",
+      "status": "todo",
+      "complexity": 3
+    },
+    "QRY-SUMMARY": {
+      "title": "Project status summary",
+      "status": "todo",
+      "complexity": 2
+    },
+    "RPT-BOTTLE": {
+      "title": "PM bottleneck report",
+      "status": "todo",
+      "complexity": 3
+    },
+    "RPT-COMPLETE": {
+      "title": "PM completion summary",
+      "status": "todo",
+      "complexity": 2
+    },
+    "RPT-DEV": {
+      "title": "Developer dashboard query",
+      "status": "todo",
+      "complexity": 3
+    },
+    "RPT-EFFORT": {
+      "title": "Effort per developer report",
+      "status": "todo",
+      "complexity": 2
+    },
+    "SER-JSON": {
+      "title": "JSON serialization round-trip",
+      "status": "done",
+      "complexity": 3
+    },
+    "STORE-FILE": {
+      "title": "File-based ProjectStore",
+      "status": "done",
+      "complexity": 3
+    },
+    "VIZ-GANTT": {
+      "title": "ASCII Gantt chart",
+      "status": "todo",
+      "complexity": 8
+    },
+    "VIZ-TREE": {
+      "title": "ASCII tree view of WBS",
+      "status": "todo",
+      "complexity": 5
+    }
+  },
+  "next_auto_id": 1
+}
