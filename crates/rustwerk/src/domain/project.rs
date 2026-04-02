@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::error::DomainError;
-use super::task::{Task, TaskId};
+use super::task::{Status, Task, TaskId};
 
 /// Project metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +91,65 @@ impl Project {
     pub fn task_count(&self) -> usize {
         self.tasks.len()
     }
+
+    /// Add a task with a user-supplied ID.
+    pub fn add_task(
+        &mut self,
+        id: TaskId,
+        task: Task,
+    ) -> Result<(), DomainError> {
+        if self.tasks.contains_key(&id) {
+            return Err(DomainError::DuplicateTaskId(
+                id.to_string(),
+            ));
+        }
+        self.tasks.insert(id, task);
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
+    /// Add a task with an auto-generated ID (T1, T2, ...).
+    /// Skips IDs that already exist. Returns the generated
+    /// `TaskId`.
+    pub fn add_task_auto(
+        &mut self,
+        task: Task,
+    ) -> TaskId {
+        loop {
+            let id = TaskId::auto(self.next_auto_id);
+            self.next_auto_id += 1;
+            if !self.tasks.contains_key(&id) {
+                self.tasks.insert(id.clone(), task);
+                self.metadata.modified_at = Utc::now();
+                return id;
+            }
+        }
+    }
+
+    /// Set the status of a task, enforcing valid
+    /// transitions.
+    pub fn set_status(
+        &mut self,
+        id: &TaskId,
+        new_status: Status,
+    ) -> Result<(), DomainError> {
+        let task = self.tasks.get_mut(id).ok_or_else(|| {
+            DomainError::TaskNotFound(id.to_string())
+        })?;
+        let old = task.status;
+        if old == new_status {
+            return Ok(());
+        }
+        if !old.can_transition_to(new_status) {
+            return Err(DomainError::InvalidTransition {
+                from: old.to_string(),
+                to: new_status.to_string(),
+            });
+        }
+        task.status = new_status;
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -134,5 +193,79 @@ mod tests {
     fn project_description_defaults_to_none() {
         let p = Project::new("Test").unwrap();
         assert!(p.metadata.description.is_none());
+    }
+
+    #[test]
+    fn add_task_with_id() {
+        let mut p = Project::new("Test").unwrap();
+        let task = Task::new("Login").unwrap();
+        let id = TaskId::new("AUTH").unwrap();
+        p.add_task(id.clone(), task).unwrap();
+        assert_eq!(p.task_count(), 1);
+        assert!(p.tasks.contains_key(&id));
+    }
+
+    #[test]
+    fn add_task_duplicate_id_rejected() {
+        let mut p = Project::new("Test").unwrap();
+        let id = TaskId::new("AUTH").unwrap();
+        p.add_task(id.clone(), Task::new("A").unwrap())
+            .unwrap();
+        let result =
+            p.add_task(id, Task::new("B").unwrap());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_task_auto_id() {
+        let mut p = Project::new("Test").unwrap();
+        let id1 =
+            p.add_task_auto(Task::new("A").unwrap());
+        let id2 =
+            p.add_task_auto(Task::new("B").unwrap());
+        assert_eq!(id1.as_str(), "T0001");
+        assert_eq!(id2.as_str(), "T0002");
+        assert_eq!(p.next_auto_id, 3);
+    }
+
+    #[test]
+    fn set_status_valid_transition() {
+        let mut p = Project::new("Test").unwrap();
+        let id = TaskId::new("T").unwrap();
+        p.add_task(id.clone(), Task::new("X").unwrap())
+            .unwrap();
+        p.set_status(&id, Status::InProgress).unwrap();
+        assert_eq!(
+            p.tasks.get(&id).unwrap().status,
+            Status::InProgress
+        );
+    }
+
+    #[test]
+    fn set_status_invalid_transition_rejected() {
+        let mut p = Project::new("Test").unwrap();
+        let id = TaskId::new("T").unwrap();
+        p.add_task(id.clone(), Task::new("X").unwrap())
+            .unwrap();
+        let result = p.set_status(&id, Status::Done);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn set_status_same_status_is_noop() {
+        let mut p = Project::new("Test").unwrap();
+        let id = TaskId::new("T").unwrap();
+        p.add_task(id.clone(), Task::new("X").unwrap())
+            .unwrap();
+        p.set_status(&id, Status::Todo).unwrap();
+    }
+
+    #[test]
+    fn set_status_nonexistent_task_errors() {
+        let mut p = Project::new("Test").unwrap();
+        let id = TaskId::new("NOPE").unwrap();
+        let result =
+            p.set_status(&id, Status::InProgress);
+        assert!(result.is_err());
     }
 }

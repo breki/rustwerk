@@ -7,6 +7,16 @@ reverse chronological order.
 
 ### 2026-04-02
 
+- Add task management CLI commands (v0.3.0)
+
+    `task add` creates tasks with optional mnemonic ID, description,
+    complexity, and effort estimate. Auto-generates sequential IDs
+    (T1, T2...) when no ID is provided. `task status` sets task status
+    with transition validation. `task list` displays all tasks with
+    status and complexity. Domain methods `add_task`, `add_task_auto`,
+    and `set_status` on `Project` aggregate. Enables dogfooding —
+    rustwerk can now track its own development tasks.
+
 - Implement Phase 1: core domain, persistence, CLI init/show (v0.2.0)
 
     Added DDD domain model: `Project` aggregate, `Task` with `Status`

@@ -51,8 +51,9 @@ impl TaskId {
     }
 
     /// Generate an auto-ID from a sequence number.
+    /// Zero-padded to 4 digits for correct sort order.
     pub fn auto(n: u32) -> Self {
-        Self(format!("T{n}"))
+        Self(format!("T{n:04}"))
     }
 }
 
@@ -188,9 +189,10 @@ impl Effort {
                 ))
             })?;
 
-        if value <= 0.0 {
+        if !value.is_finite() || value <= 0.0 {
             return Err(DomainError::InvalidEffort(
-                "effort must be positive".into(),
+                "effort must be a finite positive number"
+                    .into(),
             ));
         }
 
@@ -321,9 +323,9 @@ mod tests {
     #[test]
     fn task_id_auto_generation() {
         let id = TaskId::auto(1);
-        assert_eq!(id.as_str(), "T1");
+        assert_eq!(id.as_str(), "T0001");
         let id = TaskId::auto(42);
-        assert_eq!(id.as_str(), "T42");
+        assert_eq!(id.as_str(), "T0042");
     }
 
     #[test]
@@ -427,6 +429,16 @@ mod tests {
     #[test]
     fn effort_parse_unknown_unit_rejected() {
         assert!(Effort::parse("5X").is_err());
+    }
+
+    #[test]
+    fn effort_parse_infinity_rejected() {
+        assert!(Effort::parse("infH").is_err());
+    }
+
+    #[test]
+    fn effort_parse_nan_rejected() {
+        assert!(Effort::parse("NaNH").is_err());
     }
 
     #[test]

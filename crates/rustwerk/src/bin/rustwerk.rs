@@ -5,6 +5,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
 use rustwerk::domain::project::Project;
+use rustwerk::domain::task::{Effort, Status, Task, TaskId};
 use rustwerk::persistence::file_store;
 
 #[derive(Parser)]
@@ -27,6 +28,42 @@ enum Commands {
     },
     /// Show project summary.
     Show,
+    /// Task management.
+    Task {
+        #[command(subcommand)]
+        action: TaskAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum TaskAction {
+    /// Add a new task.
+    Add {
+        /// Task title.
+        title: String,
+        /// Optional mnemonic task ID (auto-generated if
+        /// omitted).
+        #[arg(long)]
+        id: Option<String>,
+        /// Optional description.
+        #[arg(long)]
+        desc: Option<String>,
+        /// Optional complexity (e.g. Fibonacci: 1,2,3,5,8).
+        #[arg(long)]
+        complexity: Option<u32>,
+        /// Optional effort estimate (e.g. "5H", "1D").
+        #[arg(long)]
+        effort: Option<String>,
+    },
+    /// Set task status.
+    Status {
+        /// Task ID.
+        id: String,
+        /// New status: todo, in-progress, blocked, done.
+        status: String,
+    },
+    /// List all tasks.
+    List,
 }
 
 /// Find the project root by looking for `.rustwerk/`
@@ -45,6 +82,23 @@ fn find_project_root() -> Result<PathBuf> {
             );
         }
     }
+}
+
+/// Load the project from the nearest root.
+fn load_project() -> Result<(PathBuf, Project)> {
+    let root = find_project_root()?;
+    let project = file_store::load(&root)
+        .context("failed to load project")?;
+    Ok((root, project))
+}
+
+/// Save the project back to disk.
+fn save_project(
+    root: &std::path::Path,
+    project: &Project,
+) -> Result<()> {
+    file_store::save(root, project)
+        .context("failed to save project")
 }
 
 fn cmd_init(name: &str) -> Result<()> {
@@ -67,10 +121,7 @@ fn cmd_init(name: &str) -> Result<()> {
 }
 
 fn cmd_show() -> Result<()> {
-    let root = find_project_root()?;
-    let project = file_store::load(&root)
-        .context("failed to load project")?;
-
+    let (_root, project) = load_project()?;
     println!("Project: {}", project.metadata.name);
     if let Some(desc) = &project.metadata.description {
         println!("  {desc}");
@@ -86,10 +137,114 @@ fn cmd_show() -> Result<()> {
     Ok(())
 }
 
+fn cmd_task_add(
+    title: &str,
+    id: Option<&str>,
+    desc: Option<&str>,
+    complexity: Option<u32>,
+    effort: Option<&str>,
+) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let mut task = Task::new(title)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    task.description = desc.map(String::from);
+    task.complexity = complexity;
+    if let Some(e) = effort {
+        task.effort_estimate = Some(
+            Effort::parse(e)
+                .map_err(|e| anyhow::anyhow!("{e}"))?,
+        );
+    }
+
+    let task_id = if let Some(id_str) = id {
+        let tid = TaskId::new(id_str)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        project
+            .add_task(tid.clone(), task)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        tid
+    } else {
+        project.add_task_auto(task)
+    };
+
+    save_project(&root, &project)?;
+    println!("Created task {task_id}");
+    Ok(())
+}
+
+fn parse_status(s: &str) -> Result<Status> {
+    match s.to_lowercase().as_str() {
+        "todo" => Ok(Status::Todo),
+        "in-progress" | "in_progress" | "inprogress" => {
+            Ok(Status::InProgress)
+        }
+        "blocked" => Ok(Status::Blocked),
+        "done" => Ok(Status::Done),
+        _ => bail!(
+            "unknown status: {s} (expected: todo, \
+             in-progress, blocked, done)"
+        ),
+    }
+}
+
+fn cmd_task_status(id: &str, status: &str) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let new_status = parse_status(status)?;
+    project
+        .set_status(&task_id, new_status)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    println!("{task_id}: {new_status}");
+    Ok(())
+}
+
+// NOTE: task titles are printed verbatim. A crafted
+// project.json could contain ANSI escape sequences that
+// affect terminal rendering. Sanitization should be added
+// before this is used in untrusted environments.
+fn cmd_task_list() -> Result<()> {
+    let (_root, project) = load_project()?;
+    if project.tasks.is_empty() {
+        println!("No tasks.");
+        return Ok(());
+    }
+    for (id, task) in &project.tasks {
+        let complexity = task
+            .complexity
+            .map_or(String::new(), |c| format!(" [{c}]"));
+        println!(
+            "  {id:<16} {:<14} {}{complexity}",
+            task.status, task.title,
+        );
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Init { name } => cmd_init(&name),
         Commands::Show => cmd_show(),
+        Commands::Task { action } => match action {
+            TaskAction::Add {
+                title,
+                id,
+                desc,
+                complexity,
+                effort,
+            } => cmd_task_add(
+                &title,
+                id.as_deref(),
+                desc.as_deref(),
+                complexity,
+                effort.as_deref(),
+            ),
+            TaskAction::Status { id, status } => {
+                cmd_task_status(&id, &status)
+            }
+            TaskAction::List => cmd_task_list(),
+        },
     }
 }
