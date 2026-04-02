@@ -1,0 +1,14 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+perf = { level = "deny", priority = -1 }
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }

@@ -1,0 +1,6 @@
+[workspace]
+members = ["crates/rustwerk", "xtask"]
+resolver = "2"
+
+[profile.test]
+opt-level = 1
