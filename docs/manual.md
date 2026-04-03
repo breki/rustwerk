@@ -46,6 +46,7 @@ critical path visibility, and a structured workflow.
 - [Developer Management](#developer-management)
 - [Dependencies](#dependencies)
 - [Effort Tracking](#effort-tracking)
+- [Dependency Tree](#dependency-tree)
 - [Gantt Chart](#gantt-chart)
   - [View Schedule](#view-schedule)
   - [Show Remaining Work Only](#show-remaining-work-only)
@@ -361,6 +362,44 @@ rustwerk effort log AUTH-LOGIN 1.5H --dev alice \
 ```
 
 The task must be IN_PROGRESS to log effort.
+
+## Dependency Tree
+
+### View Tree
+
+```
+rustwerk tree
+```
+
+Shows the full dependency DAG as an ASCII tree with
+status indicators:
+
+```
+RustWerk
+├── [✓] FILE-SCHEMA
+│   ├── [✓] DOM-PROJ
+│   │   └── [✓] SER-JSON
+│   └── [✓] DOM-TASK
+│       └── [✓] SER-JSON → (see above)
+└── [ ] GIT-CTX
+    └── [~] GIT-SWITCH
+```
+
+Status indicators: `✓`=Done, `>`=InProgress,
+`!`=Blocked, `~`=OnHold, ` `=Todo.
+
+Tasks with multiple parents appear expanded under the
+first parent and as a reference (`→ see above`) under
+subsequent parents.
+
+### Remaining Work
+
+```
+rustwerk tree --remaining
+```
+
+Excludes Done and OnHold tasks. Tasks whose
+dependencies are all complete become new roots.
 
 ## Gantt Chart
 

@@ -1,6 +1,7 @@
 mod batch;
 mod commands;
 mod gantt;
+mod tree;
 
 use std::env;
 use std::path::PathBuf;
@@ -75,6 +76,12 @@ enum Commands {
     /// Show ASCII Gantt chart of task schedule.
     Gantt {
         /// Show only tasks that are not done.
+        #[arg(long)]
+        remaining: bool,
+    },
+    /// Show ASCII dependency tree.
+    Tree {
+        /// Show only remaining (not done/on-hold) tasks.
         #[arg(long)]
         remaining: bool,
     },
@@ -380,6 +387,9 @@ fn main() -> Result<()> {
         }
         Commands::Gantt { remaining } => {
             cmd_gantt(remaining)
+        }
+        Commands::Tree { remaining } => {
+            tree::cmd_tree(remaining)
         }
         Commands::Effort { action } => match action {
             EffortAction::Log {

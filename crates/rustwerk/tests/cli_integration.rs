@@ -1188,3 +1188,44 @@ fn dev_remove_nonexistent_fails() {
     assert!(!ok, "removing nonexistent dev should fail");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- tree ---
+
+#[test]
+fn tree_basic() {
+    let dir = temp_dir("tree-basic");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "Root", "--id", "R"]);
+    run(&dir, &["task", "add", "Child", "--id", "C"]);
+    run(&dir, &["task", "depend", "C", "R"]);
+    let (stdout, _, ok) = run(&dir, &["tree"]);
+    assert!(ok);
+    assert!(stdout.contains("P"), "project name: {stdout}");
+    assert!(stdout.contains("R"), "root task: {stdout}");
+    assert!(stdout.contains("C"), "child task: {stdout}");
+    // Box-drawing chars present.
+    assert!(
+        stdout.contains('\u{2514}')
+            || stdout.contains('\u{251C}'),
+        "box-drawing: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn tree_remaining_excludes_done() {
+    let dir = temp_dir("tree-remaining");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "Root", "--id", "R"]);
+    run(&dir, &["task", "add", "Child", "--id", "C"]);
+    run(&dir, &["task", "depend", "C", "R"]);
+    run(&dir, &["task", "status", "R", "in-progress"]);
+    run(&dir, &["task", "status", "R", "done"]);
+    let (stdout, _, ok) =
+        run(&dir, &["tree", "--remaining"]);
+    assert!(ok);
+    // R is done, only C should appear.
+    assert!(!stdout.contains(" R "), "R gone: {stdout}");
+    assert!(stdout.contains("C"), "C present: {stdout}");
+    let _ = fs::remove_dir_all(&dir);
+}

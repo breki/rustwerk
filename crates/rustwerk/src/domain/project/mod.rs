@@ -1,10 +1,12 @@
 mod gantt_row;
 mod scheduling;
 mod summary;
+mod tree_node;
 
 pub use gantt_row::GanttRow;
 pub use scheduling::Bottleneck;
 pub use summary::ProjectSummary;
+pub use tree_node::TreeNode;
 
 use std::collections::BTreeMap;
 

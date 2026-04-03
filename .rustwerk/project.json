@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T16:57:20.906128Z"
+    "modified_at": "2026-04-03T20:15:24.233393700Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -392,7 +392,7 @@
     },
     "PLG-ACTLOG": {
       "title": "Built-in ActivityLogPlugin",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "PLG-WIRE"
       ],
@@ -400,7 +400,7 @@
     },
     "PLG-CONFIG": {
       "title": "Plugin configuration (per-plugin JSON)",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "PLG-REG",
         "SER-JSON"
@@ -409,7 +409,7 @@
     },
     "PLG-EVENT": {
       "title": "DomainEvent enum and HookPoint subscription",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "PLG-REG"
       ],
@@ -417,7 +417,7 @@
     },
     "PLG-REG": {
       "title": "PluginRegistry (register, unregister, dispatch)",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "PLG-TRAIT"
       ],
@@ -425,12 +425,12 @@
     },
     "PLG-TRAIT": {
       "title": "Plugin trait (object-safe)",
-      "status": "todo",
+      "status": "on_hold",
       "complexity": 3
     },
     "PLG-WIRE": {
       "title": "Wire event dispatching into Project mutations",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "PLG-EVENT",
         "DOM-ADD"
@@ -542,7 +542,7 @@
     },
     "VIZ-TREE": {
       "title": "ASCII tree view of WBS",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DEP-TOPO"
       ],

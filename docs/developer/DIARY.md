@@ -7,6 +7,17 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `tree` command for ASCII dependency tree (v0.30.0)
+
+    New `rustwerk tree` command renders the dependency DAG
+    as an ASCII tree with box-drawing characters and status
+    indicators (✓/>!/~/ ). Shared tasks appear expanded
+    under their first parent and as back-references under
+    subsequent parents. `--remaining` flag excludes Done
+    and OnHold tasks. Domain layer gains `task_tree()` and
+    `task_tree_remaining()` on `Project`, producing a
+    `TreeNode` enum (Task/Reference variants).
+
 - Add ON_HOLD task status (v0.29.0)
 
     New `Status::OnHold` variant for intentionally deferred
