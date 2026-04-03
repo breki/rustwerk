@@ -446,7 +446,7 @@ fn cmd_task_list(
         return Ok(());
     }
 
-    let crit = project.critical_path_set();
+    let crit = project.remaining_critical_path_set();
 
     if available_only {
         let avail = project.available_tasks();

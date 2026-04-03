@@ -565,11 +565,138 @@ impl Project {
         (path, max_dist)
     }
 
+    /// Compute the critical path considering only tasks
+    /// that are not done. This shows the longest remaining
+    /// chain of work.
+    pub fn remaining_critical_path(
+        &self,
+    ) -> (Vec<TaskId>, u32) {
+        use std::collections::HashMap;
+
+        // Filter to undone tasks only.
+        let undone: std::collections::BTreeMap<&TaskId, &Task> =
+            self.tasks
+                .iter()
+                .filter(|(_, t)| t.status != Status::Done)
+                .collect();
+
+        if undone.is_empty() {
+            return (Vec::new(), 0);
+        }
+
+        // Build in-degree for undone tasks (only count
+        // deps that are also undone).
+        let mut in_degree: HashMap<&TaskId, usize> =
+            undone.keys().map(|&id| (id, 0)).collect();
+        let mut dependents: HashMap<
+            &TaskId,
+            Vec<&TaskId>,
+        > = HashMap::new();
+
+        for (&id, task) in &undone {
+            for dep in &task.dependencies {
+                if undone.contains_key(dep) {
+                    *in_degree.entry(id).or_insert(0) += 1;
+                    dependents
+                        .entry(dep)
+                        .or_default()
+                        .push(id);
+                }
+            }
+        }
+
+        // Kahn's topological sort on undone tasks.
+        let mut queue: std::collections::VecDeque<&TaskId> =
+            in_degree
+                .iter()
+                .filter(|(_, &deg)| deg == 0)
+                .map(|(&id, _)| id)
+                .collect();
+        let mut sorted_queue: Vec<&TaskId> =
+            queue.drain(..).collect();
+        sorted_queue.sort();
+        queue.extend(sorted_queue);
+
+        let mut order = Vec::new();
+        while let Some(id) = queue.pop_front() {
+            order.push(id);
+            if let Some(deps) = dependents.get(id) {
+                let mut next = Vec::new();
+                for &dep_id in deps {
+                    let deg =
+                        in_degree.get_mut(dep_id).unwrap();
+                    *deg -= 1;
+                    if *deg == 0 {
+                        next.push(dep_id);
+                    }
+                }
+                next.sort();
+                queue.extend(next);
+            }
+        }
+
+        if order.is_empty() {
+            return (Vec::new(), 0);
+        }
+
+        // DP longest path on undone tasks.
+        let mut dist: HashMap<&TaskId, u32> =
+            HashMap::new();
+        let mut prev: HashMap<&TaskId, Option<&TaskId>> =
+            HashMap::new();
+
+        for &id in &order {
+            let weight =
+                undone[id].complexity.unwrap_or(1);
+            dist.insert(id, weight);
+            prev.insert(id, None);
+        }
+
+        for &id in &order {
+            let id_dist = dist[id];
+            if let Some(deps) = dependents.get(id) {
+                for &dep_id in deps {
+                    let dep_weight =
+                        undone[dep_id].complexity.unwrap_or(1);
+                    let candidate = id_dist + dep_weight;
+                    if candidate > dist[dep_id] {
+                        dist.insert(dep_id, candidate);
+                        prev.insert(dep_id, Some(id));
+                    }
+                }
+            }
+        }
+
+        let (&end, &max_dist) =
+            dist.iter().max_by_key(|(_, &d)| d).unwrap();
+
+        let mut path = vec![end.clone()];
+        let mut current = end;
+        while let Some(Some(p)) = prev.get(current) {
+            path.push((*p).clone());
+            current = p;
+        }
+        path.reverse();
+
+        (path, max_dist)
+    }
+
     /// Return the set of task IDs on the critical path.
+    /// Return the set of task IDs on the critical path
+    /// (all tasks, including done).
     pub fn critical_path_set(
         &self,
     ) -> std::collections::HashSet<TaskId> {
         let (path, _) = self.critical_path();
+        path.into_iter().collect()
+    }
+
+    /// Return the set of task IDs on the remaining
+    /// critical path (excluding done tasks).
+    pub fn remaining_critical_path_set(
+        &self,
+    ) -> std::collections::HashSet<TaskId> {
+        let (path, _) = self.remaining_critical_path();
         path.into_iter().collect()
     }
 
