@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T05:59:37.467985900Z"
+    "modified_at": "2026-04-03T06:30:29.945600200Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -76,6 +76,33 @@
         "STORE-FILE"
       ],
       "complexity": 3
+    },
+    "CLI-DEV-ADD": {
+      "title": "CLI dev add — add developer to project",
+      "status": "todo",
+      "dependencies": [
+        "DOM-DEV",
+        "STORE-FILE"
+      ],
+      "complexity": 2
+    },
+    "CLI-DEV-LIST": {
+      "title": "CLI dev list — list all developers",
+      "status": "todo",
+      "dependencies": [
+        "DOM-DEV",
+        "STORE-FILE"
+      ],
+      "complexity": 1
+    },
+    "CLI-DEV-REMOVE": {
+      "title": "CLI dev remove — remove developer",
+      "status": "todo",
+      "dependencies": [
+        "DOM-DEV",
+        "STORE-FILE"
+      ],
+      "complexity": 2
     },
     "CLI-EFFORT": {
       "title": "CLI effort log / effort estimate",
@@ -197,6 +224,15 @@
       ],
       "complexity": 3
     },
+    "DEV-ASSIGN": {
+      "title": "Link task assign to validated developer IDs",
+      "status": "todo",
+      "dependencies": [
+        "DOM-DEV",
+        "DOM-ASSIGN"
+      ],
+      "complexity": 3
+    },
     "DOM-ADD": {
       "title": "Add task to project (domain method + ID generation)",
       "status": "done",
@@ -214,6 +250,14 @@
         "DOM-ADD"
       ],
       "complexity": 2
+    },
+    "DOM-DEV": {
+      "title": "Developer struct (name, email?, role?, specialties?)",
+      "status": "todo",
+      "dependencies": [
+        "DOM-PROJ"
+      ],
+      "complexity": 3
     },
     "DOM-EFFORT": {
       "title": "Effort, EffortEntry, Assignee value objects",

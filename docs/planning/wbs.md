@@ -15,7 +15,7 @@ plugins.
 
 | Context | Aggregates | Introduced |
 |---|---|---|
-| **Project** | `Project`, `ProjectMetadata` | Phase 1 |
+| **Project** | `Project`, `ProjectMetadata`, `Developer` | Phase 1 |
 | **Task** | `Task`, `Status`, `Effort`, `Assignee` | Phase 1 |
 | **Dependency Graph** | `DependencyGraph`, `CriticalPath` | Phase 3 |
 | **Persistence** | `ProjectStore` | Phase 1 |
@@ -64,6 +64,11 @@ reads the project file, mutates, and saves back.
 | CLI-EFFORT | CLI `effort log` / `effort estimate` | 3 | DOM-LOG, STORE-FILE |
 | CLI-ASSIGN | CLI `task assign` / `task unassign` | 2 | DOM-ASSIGN, STORE-FILE |
 | CLI-JSON | Global `--json` output flag for all commands | 5 | CLI-TASK |
+| DOM-DEV | `Developer` struct (name, email?, role?, specialties?) in project definition | 3 | DOM-PROJ |
+| CLI-DEV-ADD | CLI `dev add` — add a developer to the project | 2 | DOM-DEV, STORE-FILE |
+| CLI-DEV-REMOVE | CLI `dev remove` — remove a developer | 2 | DOM-DEV, STORE-FILE |
+| CLI-DEV-LIST | CLI `dev list` — list all developers | 1 | DOM-DEV, STORE-FILE |
+| DEV-ASSIGN | Link `task assign` to validated developer IDs instead of free-text strings | 3 | DOM-DEV, DOM-ASSIGN |
 
 ---
 
@@ -193,11 +198,11 @@ Phase 1 (File Format + Init)
 | Phase | Tasks | Complexity | Deliverable |
 |-------|------:|-----------:|-------------|
 | 1 — File Format + Init | 8 | 23 | Project file schema, `init`, `show` |
-| 2 — Task CRUD CLI | 12 | 34 | Full task management via CLI |
+| 2 — Task CRUD CLI | 17 | 45 | Full task management via CLI + developer registry |
 | 3 — Dependency Graph | 7 | 23 | DAG, cycle detection, critical path |
 | 4 — Querying + Viz | 6 | 24 | Filters, ASCII tree/Gantt, status |
 | 5 — Git Operations | 5 | 24 | Dual-context, atomic commit+push |
 | 6 — Reporting | 8 | 31 | Dashboards, PM reports, HTML export |
 | 7 — Plugin Architecture | 6 | 20 | Plugin system + activity log |
 | 8 — AI Agent Integration | 6 | 27 | WBS ingestion, estimation, batch |
-| **Total** | **58** | **206** | |
+| **Total** | **63** | **217** | |
