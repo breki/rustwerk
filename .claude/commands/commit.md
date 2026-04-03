@@ -54,21 +54,31 @@ conventions.
    - Skip diary update for: docs, style, test, refactor, minor
      chores
 
-6. **Red team review** - Before staging, spawn an AI agent
-   to adversarially review the diff. Use the Agent tool with
-   this prompt structure:
+6. **Code review** — Before staging, spawn **two** AI
+   agents **in parallel** (in a single message with two
+   Agent tool calls). Both read the source files but do
+   not modify them.
 
-   > You are a red team reviewer. Analyze the following git
-   > diff for a Rust CLI project. Report any issues you find
-   > in two categories:
+   **IMPORTANT:** Always run both reviews when the diff
+   contains code changes (`.rs`, `.toml`, etc.). Never
+   skip them — even for "straightforward" CRUD or simple
+   changes. The only exception is commits that contain no
+   code at all (docs-only, config-only, project state
+   only).
+
+   **Agent A — Red Team** (security & correctness):
+
+   > You are a red team reviewer. Analyze the code changes
+   > for a Rust CLI project. Report issues in two
+   > categories:
    >
-   > **Code Quality**: logic bugs, unhandled edge cases,
+   > **Correctness**: logic bugs, unhandled edge cases,
    > missing error handling, off-by-one errors, incorrect
    > assumptions, dead code, unclear semantics.
    >
-   > **Security**: command injection, path traversal, unsafe
-   > deserialization, unvalidated input, TOCTOU races,
-   > information leaks, denial of service vectors.
+   > **Security**: command injection, path traversal,
+   > unsafe deserialization, unvalidated input, TOCTOU
+   > races, information leaks, denial of service vectors.
    >
    > Be adversarial — assume the code is wrong and try to
    > prove it. Only report real, actionable issues with
@@ -82,65 +92,107 @@ conventions.
    >    panic, wrong output, security hole, etc.)
    > 3. **Example trigger**: a specific input, state, or
    >    sequence that demonstrates the problem
-   > 4. **Suggested fix**: a brief description of how to
-   >    resolve it
+   > 4. **Suggested fix**: how to resolve it
 
-   Pass the full `git diff` output (staged + unstaged) to
-   the agent. The agent should only read code, not modify it.
+   **Agent B — Artisan** (code quality & craftsmanship):
 
-   **IMPORTANT:** Always run the red team review when the
-   diff contains code changes (`.rs`, `.toml`, etc.). Never
-   skip it — even for "straightforward" CRUD or simple
-   changes. The only exception is commits that contain no
-   code at all (docs-only, config-only, project state only).
+   > You are the Artisan — a code quality reviewer for a
+   > Rust CLI project. You focus on craftsmanship beyond
+   > what clippy catches. Analyze the code changes and
+   > report issues in these categories:
+   >
+   > **Error Handling & Messages**: error types missing
+   > Display, capitalized/punctuated error messages,
+   > error chains leaking library types, Debug shown to
+   > users instead of Display.
+   >
+   > **API Design**: functions accepting concrete types
+   > instead of trait bounds, inconsistent parameter
+   > patterns (some borrow, similar ones own), ownership
+   > semantics unclear, missing builder patterns for
+   > complex initialization.
+   >
+   > **Abstraction Boundaries**: public modules exposing
+   > internal types, dependency types leaked in public
+   > APIs, inconsistent abstraction levels within the
+   > same module, business logic in the binary instead
+   > of the library.
+   >
+   > **Type Safety**: missing Display/Debug on public
+   > types, stringly-typed APIs where enums/newtypes
+   > would be safer, unnecessary clones or allocations.
+   >
+   > Only report real, actionable issues with specific
+   > line references. Do NOT duplicate clippy warnings
+   > or red team security findings. Do NOT report
+   > missing doc comments (CLAUDE.md already requires
+   > them). If you find nothing, say "No issues found."
+   >
+   > For each finding, include:
+   > 1. **What**: the specific issue with file:line ref
+   > 2. **Why it matters**: concrete impact on
+   >    maintainability, usability, or correctness
+   > 3. **Better approach**: specific code change or
+   >    pattern to use instead
+   >
+   > Reference the Rust API Guidelines
+   > (rust-lang.github.io/api-guidelines/) where
+   > applicable.
 
-   **If the agent reports issues:**
-   - Present each finding to the user with the **same level
-     of detail** that goes into the red team log. For each
+   Pass the full `git diff` output to both agents and
+   tell them to read the relevant source files.
+
+   **Presenting findings to the user:**
+   - Present each finding with the **same level of
+     detail** that goes into the log files. For each
      finding show:
-     - **ID and title** (e.g. RT-019 — Description)
-     - **Category**: Code Quality or Security
-     - **Description**: what the issue is, in enough detail
-       to understand without reading the code
-     - **Why it matters**: concrete impact (data loss,
-       panic, wrong output, security hole, etc.)
-     - **Example trigger**: a specific input, state, or
-       sequence that demonstrates the problem
-     - **Suggested fix**: how to resolve it
-   - Do NOT summarize findings into a compact table with
-     one-liner descriptions — the user needs the full
-     context to decide
+     - **ID and title** (e.g. RT-023 or AQ-001)
+     - **Source**: Red Team or Artisan
+     - **Category**
+     - **Description**: enough detail to understand
+       without reading the code
+     - **Impact / Why it matters**
+     - **Example trigger** (red team) or **Better
+       approach** (artisan)
+     - **Suggested fix**
+   - Do NOT summarize findings into a compact table
+     with one-liner descriptions — the user needs the
+     full context to decide
    - Ask whether to fix them before committing, commit
      anyway, or abort
    - Wait for the user's answer before proceeding
 
-   **If no issues found:** continue to the next step.
+   **If no issues found by either agent:** continue.
 
-   **Findings log:** Two files track findings:
-   - `docs/developer/redteam-log.md` — open findings only
-   - `docs/developer/redteam-resolved.md` — fixed archive
+   **Findings logs:**
 
-   Both files are in **reverse chronological order**
+   Red team findings use two files:
+   - `docs/developer/redteam-log.md` — open (RT-NNN)
+   - `docs/developer/redteam-resolved.md` — fixed
+
+   Artisan findings use two files:
+   - `docs/developer/artisan-log.md` — open (AQ-NNN)
+   - `docs/developer/artisan-resolved.md` — fixed
+
+   Both pairs are in **reverse chronological order**
    (newest first). New entries go right after the `---`
    separator.
 
    After the review:
-   - Read `redteam-log.md` to get the next RT-ID (noted
-     in the "Next ID" field at the top)
-   - For each **new** finding, insert at the **top** of
-     `redteam-log.md` (right after the `---` separator)
+   - Read each log to get the next ID (noted in the
+     "Next ID" field at the top of each open log)
+   - For each **new** finding, insert at the **top**
+     of the relevant open log (right after `---`)
      with the next ID, date, commit context, full
-     description (what, why, trigger, suggested fix), and
-     category. Increment the "Next ID" field.
-   - For findings the user chose to **fix**, remove them
-     from `redteam-log.md` and insert at the **top** of
-     `redteam-resolved.md` (right after the `---`
-     separator) with the fix date and how it was resolved
-   - Include both files in staged files if changed
-   - **Threshold warning:** if 10 or more findings are in
-     `redteam-log.md`, tell the user that a comprehensive
-     full-codebase red team review is needed before
-     continuing feature work
+     description, and category. Increment "Next ID".
+   - For findings the user chose to **fix**, remove
+     from the open log and insert at the **top** of
+     the resolved log with the fix date and resolution
+   - Include all changed log files in staged files
+   - **Threshold warning:** if 10 or more findings
+     are open in either log, tell the user that a
+     comprehensive full-codebase review is needed
+     before continuing feature work
 
 7. **Fix line endings** - After staging, check for CRLF
    warnings. If `git add` produces any "LF will be replaced
