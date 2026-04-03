@@ -5,7 +5,9 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
 use rustwerk::domain::project::Project;
-use rustwerk::domain::task::{Effort, Status, Task, TaskId};
+use rustwerk::domain::task::{
+    Effort, EffortEntry, Status, Task, TaskId,
+};
 use rustwerk::persistence::file_store;
 
 #[derive(Parser)]
@@ -32,6 +34,35 @@ enum Commands {
     Task {
         #[command(subcommand)]
         action: TaskAction,
+    },
+    /// Effort tracking.
+    Effort {
+        #[command(subcommand)]
+        action: EffortAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum EffortAction {
+    /// Log effort on a task (must be IN_PROGRESS).
+    Log {
+        /// Task ID.
+        id: String,
+        /// Effort amount (e.g. "2.5H", "1D").
+        amount: String,
+        /// Developer name.
+        #[arg(long)]
+        dev: String,
+        /// Optional note.
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Set effort estimate for a task.
+    Estimate {
+        /// Task ID.
+        id: String,
+        /// Effort estimate (e.g. "8H", "2D").
+        amount: String,
     },
 }
 
@@ -246,6 +277,52 @@ fn cmd_task_unassign(id: &str) -> Result<()> {
     Ok(())
 }
 
+fn cmd_effort_log(
+    id: &str,
+    amount: &str,
+    dev: &str,
+    note: Option<&str>,
+) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let effort = Effort::parse(amount)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let entry = EffortEntry {
+        effort,
+        developer: dev.to_string(),
+        timestamp: chrono::Utc::now(),
+        note: note.map(String::from),
+    };
+    project
+        .log_effort(&task_id, entry)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    let task = &project.tasks[&task_id];
+    println!(
+        "{task_id}: logged {amount} (total: {:.1}H)",
+        task.total_actual_effort_hours()
+    );
+    Ok(())
+}
+
+fn cmd_effort_estimate(
+    id: &str,
+    amount: &str,
+) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let effort = Effort::parse(amount)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    project
+        .set_effort_estimate(&task_id, effort)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    save_project(&root, &project)?;
+    println!("{task_id}: estimate set to {amount}");
+    Ok(())
+}
+
 fn cmd_task_remove(id: &str) -> Result<()> {
     let (root, mut project) = load_project()?;
     let task_id = TaskId::new(id)
@@ -440,6 +517,22 @@ fn main() -> Result<()> {
             }
             TaskAction::Undepend { from, to } => {
                 cmd_undepend(&from, &to)
+            }
+        },
+        Commands::Effort { action } => match action {
+            EffortAction::Log {
+                id,
+                amount,
+                dev,
+                note,
+            } => cmd_effort_log(
+                &id,
+                &amount,
+                &dev,
+                note.as_deref(),
+            ),
+            EffortAction::Estimate { id, amount } => {
+                cmd_effort_estimate(&id, &amount)
             }
         },
     }

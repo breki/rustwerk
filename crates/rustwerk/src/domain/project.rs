@@ -4,7 +4,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::error::DomainError;
-use super::task::{Status, Task, TaskId};
+use super::task::{
+    Effort, EffortEntry, Status, Task, TaskId,
+};
 
 /// Project metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,6 +215,45 @@ impl Project {
                 DomainError::TaskNotFound(id.to_string())
             })?;
         task.assignee = None;
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
+    /// Log effort on a task. Task must be IN_PROGRESS.
+    pub fn log_effort(
+        &mut self,
+        id: &TaskId,
+        entry: EffortEntry,
+    ) -> Result<(), DomainError> {
+        let task =
+            self.tasks.get_mut(id).ok_or_else(|| {
+                DomainError::TaskNotFound(id.to_string())
+            })?;
+        if task.status != Status::InProgress {
+            return Err(DomainError::ValidationError(
+                format!(
+                    "can only log effort on IN_PROGRESS \
+                     tasks (current: {})",
+                    task.status
+                ),
+            ));
+        }
+        task.effort_entries.push(entry);
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
+    /// Set the effort estimate on a task.
+    pub fn set_effort_estimate(
+        &mut self,
+        id: &TaskId,
+        effort: Effort,
+    ) -> Result<(), DomainError> {
+        let task =
+            self.tasks.get_mut(id).ok_or_else(|| {
+                DomainError::TaskNotFound(id.to_string())
+            })?;
+        task.effort_estimate = Some(effort);
         self.metadata.modified_at = Utc::now();
         Ok(())
     }
@@ -717,6 +758,91 @@ mod tests {
         let (mut p, _) = project_with_tasks(&["A"]);
         let id = TaskId::new("NOPE").unwrap();
         assert!(p.unassign(&id).is_err());
+    }
+
+    #[test]
+    fn log_effort_on_in_progress_task() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        let entry = EffortEntry {
+            effort: Effort::parse("2.5H").unwrap(),
+            developer: "alice".into(),
+            timestamp: Utc::now(),
+            note: Some("initial work".into()),
+        };
+        p.log_effort(&ids[0], entry).unwrap();
+        let task = p.tasks.get(&ids[0]).unwrap();
+        assert_eq!(task.effort_entries.len(), 1);
+        assert!(
+            (task.total_actual_effort_hours() - 2.5).abs()
+                < f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn log_effort_requires_in_progress() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        let entry = EffortEntry {
+            effort: Effort::parse("1H").unwrap(),
+            developer: "alice".into(),
+            timestamp: Utc::now(),
+            note: None,
+        };
+        // Task is TODO — should fail.
+        assert!(p.log_effort(&ids[0], entry).is_err());
+    }
+
+    #[test]
+    fn log_effort_nonexistent_task_errors() {
+        let (mut p, _) = project_with_tasks(&["A"]);
+        let id = TaskId::new("NOPE").unwrap();
+        let entry = EffortEntry {
+            effort: Effort::parse("1H").unwrap(),
+            developer: "alice".into(),
+            timestamp: Utc::now(),
+            note: None,
+        };
+        assert!(p.log_effort(&id, entry).is_err());
+    }
+
+    #[test]
+    fn set_effort_estimate() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        let effort = Effort::parse("8H").unwrap();
+        p.set_effort_estimate(&ids[0], effort).unwrap();
+        assert_eq!(
+            p.tasks
+                .get(&ids[0])
+                .unwrap()
+                .effort_estimate
+                .as_ref()
+                .unwrap()
+                .to_string(),
+            "8H"
+        );
+    }
+
+    #[test]
+    fn total_effort_sums_entries() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        for hours in &["2H", "3.5H", "1D"] {
+            let entry = EffortEntry {
+                effort: Effort::parse(hours).unwrap(),
+                developer: "alice".into(),
+                timestamp: Utc::now(),
+                note: None,
+            };
+            p.log_effort(&ids[0], entry).unwrap();
+        }
+        let task = p.tasks.get(&ids[0]).unwrap();
+        // 2 + 3.5 + 8 (1D) = 13.5H
+        assert!(
+            (task.total_actual_effort_hours() - 13.5).abs()
+                < f64::EPSILON
+        );
     }
 
     #[test]

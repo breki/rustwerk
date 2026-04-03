@@ -5,6 +5,15 @@ reverse chronological order.
 
 ---
 
+### 2026-04-03
+
+- Add effort logging and estimation (v0.9.0)
+
+    `effort log ID AMOUNT --dev NAME` logs effort on IN_PROGRESS tasks.
+    `effort estimate ID AMOUNT` sets estimated effort. `Effort::to_hours()`
+    converts all units to hours (1D=8H, 1W=40H, 1M=160H).
+    `Task::total_actual_effort_hours()` sums logged entries. 5 new tests.
+
 ### 2026-04-02
 
 - Add assignee management and `/next-task` command (v0.8.0)

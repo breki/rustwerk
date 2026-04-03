@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-02T21:39:50.543940200Z"
+    "modified_at": "2026-04-03T04:25:17.524923Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -79,7 +79,7 @@
     },
     "CLI-EFFORT": {
       "title": "CLI effort log / effort estimate",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DOM-LOG",
         "STORE-FILE"
@@ -230,7 +230,7 @@
     },
     "DOM-LOG": {
       "title": "Effort logging (requires IN_PROGRESS status)",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DOM-EFFORT",
         "DOM-STATUS"

@@ -198,6 +198,17 @@ impl Effort {
 
         Ok(Self { value, unit })
     }
+
+    /// Convert to hours using standard conversions:
+    /// 1D = 8H, 1W = 40H, 1M = 160H.
+    pub fn to_hours(&self) -> f64 {
+        match self.unit {
+            EffortUnit::H => self.value,
+            EffortUnit::D => self.value * 8.0,
+            EffortUnit::W => self.value * 40.0,
+            EffortUnit::M => self.value * 160.0,
+        }
+    }
 }
 
 impl fmt::Display for Effort {
@@ -272,6 +283,14 @@ pub struct Task {
 }
 
 impl Task {
+    /// Total logged effort in hours across all entries.
+    pub fn total_actual_effort_hours(&self) -> f64 {
+        self.effort_entries
+            .iter()
+            .map(|e| e.effort.to_hours())
+            .sum()
+    }
+
     /// Create a new task with the given title.
     pub fn new(title: &str) -> Result<Self, DomainError> {
         let title = title.trim();
