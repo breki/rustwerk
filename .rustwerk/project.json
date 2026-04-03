@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T12:26:55.366122Z"
+    "modified_at": "2026-04-03T15:06:03.879308600Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -474,7 +474,7 @@
     },
     "RPT-COMPLETE": {
       "title": "PM completion summary",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "QRY-SUMMARY"
       ],

@@ -15,8 +15,9 @@ use rustwerk::persistence::file_store;
 use batch::cmd_batch;
 use commands::{
     cmd_depend, cmd_effort_estimate, cmd_effort_log,
-    cmd_init, cmd_show, cmd_task_add, cmd_task_assign,
-    cmd_task_list, cmd_task_remove, cmd_task_status,
+    cmd_init, cmd_report_complete, cmd_show,
+    cmd_task_add, cmd_task_assign, cmd_task_list,
+    cmd_task_remove, cmd_task_status,
     cmd_task_unassign, cmd_task_update, cmd_undepend,
 };
 use gantt::cmd_gantt;
@@ -59,12 +60,24 @@ enum Commands {
         #[arg(long)]
         file: Option<String>,
     },
+    /// Project reports.
+    Report {
+        #[command(subcommand)]
+        action: ReportAction,
+    },
     /// Show ASCII Gantt chart of task schedule.
     Gantt {
         /// Show only tasks that are not done.
         #[arg(long)]
         remaining: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum ReportAction {
+    /// PM completion summary (counts, %, estimated vs
+    /// actual effort, critical path).
+    Complete,
 }
 
 #[derive(Subcommand)]
@@ -272,6 +285,11 @@ fn main() -> Result<()> {
             }
             TaskAction::Undepend { from, to } => {
                 cmd_undepend(&from, &to)
+            }
+        },
+        Commands::Report { action } => match action {
+            ReportAction::Complete => {
+                cmd_report_complete()
             }
         },
         Commands::Batch { file } => {

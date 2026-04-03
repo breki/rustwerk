@@ -49,6 +49,7 @@ critical path visibility, and a structured workflow.
   - [View Schedule](#view-schedule)
   - [Show Remaining Work Only](#show-remaining-work-only)
   - [Color Behavior](#color-behavior)
+- [Reports](#reports)
 - [Batch Commands](#batch-commands)
 - [Project File](#project-file)
 
@@ -348,6 +349,44 @@ when the `NO_COLOR` environment variable is set:
 NO_COLOR=1 rustwerk gantt
 rustwerk gantt | less
 ```
+
+## Reports
+
+### Completion Summary
+
+```
+rustwerk report complete
+```
+
+Displays a PM-friendly completion summary:
+
+```
+Completion Report: WebApp
+========================================
+
+Status Breakdown
+  Done:          1
+  In Progress:   1
+  Blocked:       0
+  Todo:          3
+  Total:         5
+
+Completion: [======>                        ] 20%
+
+Effort
+  Estimated:   68.0H
+  Actual:      0.0H
+  Burn rate:   0%
+
+Complexity:    23 total
+
+Critical Path: 4 tasks, 18 complexity
+  DB-SCHEMA → API-BUILD → UI-BUILD → TEST-ALL
+```
+
+Includes status breakdown, a visual progress bar,
+estimated vs actual effort with burn rate, complexity
+totals, and the remaining critical path with task IDs.
 
 ## Batch Commands
 

@@ -367,6 +367,100 @@ pub(super) fn cmd_undepend(
     modify_dependency(from, to, false)
 }
 
+/// PM completion summary report.
+pub(super) fn cmd_report_complete() -> Result<()> {
+    let (_root, project) = load_project()?;
+    let s = project.summary();
+    let (crit_path, crit_len) =
+        project.remaining_critical_path();
+
+    println!(
+        "Completion Report: {}",
+        project.metadata.name
+    );
+    println!("{}", "=".repeat(40));
+
+    // Status breakdown.
+    println!();
+    println!("Status Breakdown");
+    println!("  Done:        {:>3}", s.done);
+    println!("  In Progress: {:>3}", s.in_progress);
+    println!("  Blocked:     {:>3}", s.blocked);
+    println!("  Todo:        {:>3}", s.todo);
+    println!("  Total:       {:>3}", s.total);
+
+    // Completion bar.
+    println!();
+    let bar_width = 30;
+    let filled = if s.total > 0 {
+        (f64::from(s.done) / f64::from(s.total)
+            * bar_width as f64)
+            .round() as usize
+    } else {
+        0
+    };
+    let empty = bar_width - filled;
+    println!(
+        "Completion: [{}>{}] {:.0}%",
+        "=".repeat(filled),
+        " ".repeat(empty),
+        s.pct_complete,
+    );
+
+    // Effort.
+    if s.total_estimated_hours > 0.0
+        || s.total_actual_hours > 0.0
+    {
+        println!();
+        println!("Effort");
+        println!(
+            "  Estimated:   {:.1}H",
+            s.total_estimated_hours
+        );
+        println!(
+            "  Actual:      {:.1}H",
+            s.total_actual_hours
+        );
+        if s.total_estimated_hours > 0.0 {
+            let pct = s.total_actual_hours
+                / s.total_estimated_hours
+                * 100.0;
+            println!("  Burn rate:   {pct:.0}%");
+        }
+    }
+
+    // Complexity.
+    if s.total_complexity > 0 {
+        println!();
+        println!(
+            "Complexity:    {} total",
+            s.total_complexity
+        );
+    }
+
+    // Critical path.
+    println!();
+    if crit_path.is_empty() {
+        println!("Critical Path: (none remaining)");
+    } else {
+        println!(
+            "Critical Path: {} tasks, {} complexity",
+            crit_path.len(),
+            crit_len
+        );
+        print!("  ");
+        for (i, id) in crit_path.iter().enumerate() {
+            if i > 0 {
+                print!(" → ");
+            }
+            print!("{id}");
+        }
+        println!();
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -766,3 +766,50 @@ fn gantt_remaining_recalculates_critical_path() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- report ---
+
+#[test]
+fn report_complete_shows_summary() {
+    let dir = temp_dir("report-complete");
+    let bin = rustwerk_bin();
+    let r = |args: &[&str]| {
+        Command::new(&bin)
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("failed to run rustwerk");
+    };
+    r(&["init", "P"]);
+    r(&["task", "add", "A", "--id", "A", "--complexity", "3",
+        "--effort", "8H"]);
+    r(&["task", "add", "B", "--id", "B", "--complexity", "5",
+        "--effort", "2D"]);
+    r(&["task", "depend", "B", "A"]);
+    r(&["task", "status", "A", "in-progress"]);
+    r(&["task", "status", "A", "done"]);
+
+    let (stdout, _, ok) =
+        run(&dir, &["report", "complete"]);
+    assert!(ok, "report complete should succeed");
+
+    // Should contain key summary fields.
+    assert!(
+        stdout.contains("Completion"),
+        "should show completion: {stdout}"
+    );
+    assert!(
+        stdout.contains("50%"),
+        "should show 50% complete (1/2): {stdout}"
+    );
+    assert!(
+        stdout.contains("Effort"),
+        "should show effort section: {stdout}"
+    );
+    assert!(
+        stdout.contains("Critical"),
+        "should show critical path info: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

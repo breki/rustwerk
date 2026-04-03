@@ -7,6 +7,13 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `report complete` command (v0.21.0)
+
+    New `rustwerk report complete` command shows a PM-friendly
+    completion summary: status breakdown, visual progress bar,
+    estimated vs actual effort with burn rate, complexity
+    totals, and remaining critical path with task IDs.
+
 - Upgrade Gantt time axis to box-drawing chars (v0.20.0)
 
     Axis line now uses `┬` for tick marks and `─` for the
