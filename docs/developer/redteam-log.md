@@ -301,3 +301,62 @@ red team review is required before continuing feature work.
 - **Fix:** Added `MAX_BATCH_COMMANDS = 1000` limit after
   deserialization.
 - **Resolved:** 2026-04-03
+
+### RT-019 — Partial state mutation on WBS import failure
+
+- **Date:** 2026-04-03
+- **Category:** Code Quality
+- **Commit context:** v0.12.0 WBS schema
+- **Description:** `import_into_project` created tasks in
+  pass one, then added dependencies in pass two. If pass
+  two failed (cycle, bad ID), the error was returned but
+  all tasks from pass one remained in the project —
+  leaving it in an inconsistent state with orphaned tasks.
+- **Trigger:** Import a WBS with a circular dependency.
+  Both tasks get created, then the cycle is detected and
+  the error returned — but the tasks remain.
+- **Fix:** Clone the project before mutation, restore on
+  error (snapshot/rollback pattern).
+- **Resolved:** 2026-04-03
+
+### RT-020 — False idempotency on dependency re-add
+
+- **Date:** 2026-04-03
+- **Category:** Code Quality
+- **Commit context:** v0.12.0 WBS schema
+- **Description:** When a task ID already existed during
+  import, pass one skipped it but pass two still processed
+  its dependencies. Re-importing a WBS with edited deps
+  could silently add new edges to existing tasks.
+- **Trigger:** Import WBS, manually remove dep A→B,
+  re-import same WBS — A→B silently re-added.
+- **Fix:** Changed to fail with an error if an existing
+  task's dependencies differ from those in the import.
+- **Resolved:** 2026-04-03
+
+### RT-021 — Unicode homoglyph spoofing in TaskId
+
+- **Date:** 2026-04-03
+- **Category:** Security
+- **Commit context:** v0.12.0 WBS schema
+- **Description:** `TaskId::new` used `c.is_alphanumeric()`
+  which accepts Unicode alphanumerics (Cyrillic, Greek,
+  etc.). Visually identical IDs using different codepoints
+  could coexist as distinct keys.
+- **Trigger:** Import two tasks with IDs "AUTH" (Latin)
+  and "АUTH" (Cyrillic А) — both created.
+- **Fix:** Changed to `c.is_ascii_alphanumeric()`.
+- **Resolved:** 2026-04-03
+
+### RT-022 — Unbounded WBS import array (DoS)
+
+- **Date:** 2026-04-03
+- **Category:** Security
+- **Commit context:** v0.12.0 WBS schema
+- **Description:** `parse_wbs` had no size limit on the
+  resulting array. Millions of entries would allocate
+  until OOM.
+- **Trigger:** A 100MB JSON file with 1M task entries.
+- **Fix:** Added `MAX_WBS_ENTRIES = 10_000` limit in
+  `import_into_project`.
+- **Resolved:** 2026-04-03

@@ -32,7 +32,7 @@ impl TaskId {
         }
         if !id
             .chars()
-            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
             return Err(DomainError::ValidationError(
                 format!(

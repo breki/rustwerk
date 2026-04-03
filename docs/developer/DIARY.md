@@ -7,6 +7,16 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add WBS import/export schema for AI agents (v0.12.0)
+
+    New `ai::wbs_schema` module with `WbsTaskEntry` struct for
+    bulk task creation. `parse_wbs`/`serialize_wbs` for JSON I/O.
+    `import_into_project` creates tasks then adds dependencies
+    (two-pass, idempotent — skips existing IDs). `export_from_project`
+    serializes current tasks back to WBS format. Rejects cycles
+    during import. 8 new tests including round-trip and cycle
+    detection.
+
 - Add code coverage enforcement and red team findings log
 
     `cargo xtask coverage` runs `cargo-llvm-cov` and enforces a 90%
