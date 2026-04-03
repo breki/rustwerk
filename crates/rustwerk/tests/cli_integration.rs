@@ -521,11 +521,11 @@ fn gantt_header_ticks_align_with_bars() {
     let tick_line = lines[1];
     let bar_b_line = lines[3]; // A=line 2, B=line 3
 
-    // Find column of the second `|` (time 5 tick).
-    let tick_positions = char_cols(tick_line, '|');
+    // Find column of the second `┬` (time 5 tick).
+    let tick_positions = char_cols(tick_line, '\u{252C}');
     assert!(
         tick_positions.len() >= 2,
-        "expected at least 2 tick marks, got {:?}",
+        "expected at least 2 tick marks (┬), got {:?}",
         tick_positions
     );
     let tick5_col = tick_positions[1];
@@ -539,6 +539,34 @@ fn gantt_header_ticks_align_with_bars() {
         "tick at time 5 (col {}) must align with B's \
          bar start (col {})",
         tick5_col, b_cap_col
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gantt_axis_uses_box_drawing_chars() {
+    let dir = gantt_project_abc("gantt-axis");
+    let (stdout, _, ok) = run(&dir, &["gantt"]);
+    assert!(ok);
+
+    let lines: Vec<&str> = stdout.lines().collect();
+    let axis_line = lines[1];
+
+    // Axis should contain ┬ (tick marks) and ─ (lines).
+    assert!(
+        axis_line.contains('\u{252C}'),
+        "axis should contain ┬: {axis_line}"
+    );
+    assert!(
+        axis_line.contains('\u{2500}'),
+        "axis should contain ─: {axis_line}"
+    );
+    // Should NOT contain plain | or spaces in the axis
+    // area (after the label prefix).
+    assert!(
+        !axis_line.contains('|'),
+        "axis should not use plain |: {axis_line}"
     );
 
     let _ = fs::remove_dir_all(&dir);
@@ -659,8 +687,8 @@ fn gantt_remaining_excludes_done_tasks() {
     // at 0 — its left cap should be at the same column
     // as the header's time-0 tick.
     let tick_line = lines[1];
-    let tick0_col = char_col(tick_line, '|')
-        .expect("header should have tick at 0");
+    let tick0_col = char_col(tick_line, '\u{252C}')
+        .expect("header should have tick ┬ at 0");
 
     let b_line = lines
         .iter()

@@ -7,6 +7,11 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Upgrade Gantt time axis to box-drawing chars (v0.20.0)
+
+    Axis line now uses `┬` for tick marks and `─` for the
+    horizontal rule, replacing plain `|` and spaces.
+
 - Add `--remaining` flag to `gantt` command (v0.19.0)
 
     `rustwerk gantt --remaining` filters out done tasks,

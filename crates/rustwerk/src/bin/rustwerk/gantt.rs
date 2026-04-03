@@ -156,9 +156,9 @@ fn render_gantt(
             .step_by(tick_interval as usize)
             .any(|t| scale_pos(t, scale_factor) == i);
         if is_tick {
-            print!("|");
+            print!("\u{252C}"); // ┬
         } else {
-            print!(" ");
+            print!("\u{2500}"); // ─
         }
     }
     println!("{rst}");
