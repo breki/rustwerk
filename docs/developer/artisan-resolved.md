@@ -6,6 +6,43 @@ findings.
 
 ---
 
+### AQ-015 — Module size: scheduling.rs over 1000 lines
+
+- **Date:** 2026-04-03
+- **Category:** Module Size
+- **Commit context:** v0.26.0 bottleneck detection
+- **Description:** `scheduling.rs` exceeded 500 lines with
+  `GanttRow` and `ProjectSummary` structs alongside scheduling
+  algorithms.
+- **Resolution:** Extracted `GanttRow` to `gantt_row.rs` and
+  `ProjectSummary` to `summary.rs`. Re-exported from
+  `mod.rs` to preserve public API.
+
+### AQ-014 — Tuple return type `(TaskId, usize)` in bottlenecks
+
+- **Date:** 2026-04-03
+- **Category:** Type Safety
+- **Commit context:** v0.26.0 bottleneck detection
+- **Description:** `bottlenecks()` returned `Vec<(TaskId,
+  usize)>` — callers would use `.1` for the count with no
+  semantic clarity.
+- **Resolution:** Introduced `Bottleneck` struct with `id` and
+  `downstream_count` fields.
+
+### AQ-013 — Repeated reverse-adjacency graph building
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.26.0 bottleneck detection
+- **Description:** The reverse adjacency map was built in three
+  places (`topological_sort`, `remaining_critical_path`,
+  `bottlenecks`) with slightly different filters, already
+  diverging on status semantics.
+- **Resolution:** Extracted `reverse_dependents()` private
+  helper with a filter predicate. Used in `bottlenecks()`;
+  the other two call sites retain their own logic for now
+  since they also build `in_degree` maps.
+
 ### AQ-012 — Duplicated status-color match in `bar_style`
 
 - **Date:** 2026-04-03

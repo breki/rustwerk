@@ -1,7 +1,19 @@
 use std::collections::HashMap;
 
+use super::gantt_row::GanttRow;
+use super::summary::ProjectSummary;
 use super::Project;
 use crate::domain::task::{Status, Task, TaskId};
+
+/// A task identified as a scheduling bottleneck.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bottleneck {
+    /// The bottleneck task ID.
+    pub id: TaskId,
+    /// Number of non-done tasks transitively blocked by
+    /// this task.
+    pub downstream_count: usize,
+}
 
 impl Project {
     /// Topological sort of all tasks (Kahn's algorithm).
@@ -311,6 +323,81 @@ impl Project {
             .collect()
     }
 
+    /// Build reverse adjacency: for each task, the list of
+    /// tasks that directly depend on it. Only includes
+    /// dependents matching the predicate.
+    fn reverse_dependents(
+        &self,
+        include: impl Fn(&Task) -> bool,
+    ) -> HashMap<&TaskId, Vec<&TaskId>> {
+        let mut map: HashMap<&TaskId, Vec<&TaskId>> =
+            HashMap::new();
+        for (id, task) in &self.tasks {
+            if !include(task) {
+                continue;
+            }
+            for dep in &task.dependencies {
+                if self.tasks.contains_key(dep) {
+                    map.entry(dep).or_default().push(id);
+                }
+            }
+        }
+        map
+    }
+
+    /// Detect bottleneck tasks — tasks with the most
+    /// transitive downstream dependents. Returns
+    /// [`Bottleneck`] entries sorted by count descending,
+    /// then by ID ascending. Only includes non-done tasks
+    /// with at least one non-done downstream dependent.
+    pub fn bottlenecks(&self) -> Vec<Bottleneck> {
+        use std::collections::HashSet;
+
+        let direct_dependents = self
+            .reverse_dependents(|t| t.status != Status::Done);
+
+        // For each non-done task, DFS to count all
+        // transitive downstream dependents.
+        let mut results: Vec<Bottleneck> = self
+            .tasks
+            .keys()
+            .filter(|id| {
+                self.tasks[*id].status != Status::Done
+            })
+            .filter_map(|id| {
+                let mut visited = HashSet::new();
+                let mut stack = vec![id];
+                while let Some(current) = stack.pop() {
+                    if let Some(deps) =
+                        direct_dependents.get(current)
+                    {
+                        for &dep in deps {
+                            if visited.insert(dep) {
+                                stack.push(dep);
+                            }
+                        }
+                    }
+                }
+                let count = visited.len();
+                if count > 0 {
+                    Some(Bottleneck {
+                        id: id.clone(),
+                        downstream_count: count,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        results.sort_by(|a, b| {
+            b.downstream_count
+                .cmp(&a.downstream_count)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        results
+    }
+
     /// Compute a project status summary.
     pub fn summary(&self) -> ProjectSummary {
         let mut todo = 0u32;
@@ -458,90 +545,6 @@ impl Project {
 
         rows
     }
-}
-
-/// A row in the Gantt chart.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GanttRow {
-    /// Task ID.
-    pub id: TaskId,
-    /// Start column (complexity units from time 0).
-    pub start: u32,
-    /// Bar width (complexity).
-    pub width: u32,
-    /// Task status.
-    pub status: Status,
-    /// Whether this task is on the critical path.
-    pub critical: bool,
-}
-
-impl GanttRow {
-    /// End column (start + width).
-    pub fn end(&self) -> u32 {
-        self.start + self.width
-    }
-
-    /// Bar fill characters: (filled_count, empty_count).
-    /// Done = all filled, Todo = all empty, InProgress =
-    /// half-filled, Blocked = all filled with `!`.
-    pub fn bar_fill(&self) -> (u32, u32) {
-        match self.status {
-            Status::Done => (self.width, 0),
-            Status::Blocked => (self.width, 0),
-            Status::InProgress if self.width > 1 => {
-                let done = self.width / 2;
-                (done, self.width - done)
-            }
-            Status::InProgress => (0, self.width),
-            Status::Todo => (0, self.width),
-        }
-    }
-
-    /// Left cap character for the bar.
-    pub const LEFT_CAP: char = '\u{2590}'; // ▐
-
-    /// Right cap character for the bar.
-    pub const RIGHT_CAP: char = '\u{258C}'; // ▌
-
-    /// Fill character for the completed portion of the bar.
-    pub fn fill_char(&self) -> char {
-        match self.status {
-            Status::Done => '\u{2588}',    // █
-            Status::Blocked => '\u{2592}', // ▒
-            Status::InProgress => '\u{2593}', // ▓
-            // bar_fill() returns filled=0 for Todo, so this
-            // is only reached if bar_fill logic changes.
-            Status::Todo => '\u{2591}', // ░
-        }
-    }
-
-    /// Fill character for the remaining portion of the bar.
-    pub fn empty_char(&self) -> char {
-        '\u{2591}' // ░
-    }
-}
-
-/// Summary of project status.
-#[derive(Debug)]
-pub struct ProjectSummary {
-    /// Total number of tasks.
-    pub total: u32,
-    /// Tasks in TODO status.
-    pub todo: u32,
-    /// Tasks in IN_PROGRESS status.
-    pub in_progress: u32,
-    /// Tasks in BLOCKED status.
-    pub blocked: u32,
-    /// Tasks in DONE status.
-    pub done: u32,
-    /// Percentage complete (done/total * 100).
-    pub pct_complete: f64,
-    /// Sum of all effort estimates in hours.
-    pub total_estimated_hours: f64,
-    /// Sum of all logged effort in hours.
-    pub total_actual_hours: f64,
-    /// Sum of all complexity scores.
-    pub total_complexity: u32,
 }
 
 #[cfg(test)]
@@ -1008,5 +1011,92 @@ mod tests {
     #[test]
     fn right_cap_is_left_half_block() {
         assert_eq!(GanttRow::RIGHT_CAP, '\u{258C}'); // ▌
+    }
+
+    // --- Bottleneck detection tests ---
+
+    #[test]
+    fn bottlenecks_empty_project() {
+        let p = Project::new("Empty").unwrap();
+        assert!(p.bottlenecks().is_empty());
+    }
+
+    #[test]
+    fn bottlenecks_no_deps() {
+        let (p, _) = project_with_tasks(&["A", "B", "C"]);
+        let bn = p.bottlenecks();
+        // No dependencies → all tasks have 0 downstream
+        // dependents → nothing returned.
+        assert!(bn.is_empty());
+    }
+
+    #[test]
+    fn bottlenecks_linear_chain() {
+        // C depends on B, B depends on A.
+        // A blocks B and C (2 downstream).
+        // B blocks C (1 downstream).
+        // C blocks nothing (0).
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
+        let bn = p.bottlenecks();
+        assert_eq!(bn.len(), 2);
+        assert_eq!(bn[0].id.as_str(), "A");
+        assert_eq!(bn[0].downstream_count, 2);
+        assert_eq!(bn[1].id.as_str(), "B");
+        assert_eq!(bn[1].downstream_count, 1);
+    }
+
+    #[test]
+    fn bottlenecks_fan_out() {
+        // B, C, D all depend on A.
+        // A blocks 3 downstream tasks.
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C", "D"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.add_dependency(&ids[2], &ids[0]).unwrap(); // C->A
+        p.add_dependency(&ids[3], &ids[0]).unwrap(); // D->A
+        let bn = p.bottlenecks();
+        assert_eq!(bn.len(), 1);
+        assert_eq!(bn[0].id.as_str(), "A");
+        assert_eq!(bn[0].downstream_count, 3);
+    }
+
+    #[test]
+    fn bottlenecks_diamond() {
+        // B and C depend on A. D depends on B and C.
+        // A blocks B, C, D = 3 downstream.
+        // B blocks D = 1 downstream.
+        // C blocks D = 1 downstream.
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C", "D"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.add_dependency(&ids[2], &ids[0]).unwrap(); // C->A
+        p.add_dependency(&ids[3], &ids[1]).unwrap(); // D->B
+        p.add_dependency(&ids[3], &ids[2]).unwrap(); // D->C
+        let bn = p.bottlenecks();
+        assert_eq!(bn.len(), 3);
+        assert_eq!(bn[0].id.as_str(), "A");
+        assert_eq!(bn[0].downstream_count, 3);
+        // B and C both have 1 downstream, sorted by ID.
+        assert_eq!(bn[1].id.as_str(), "B");
+        assert_eq!(bn[1].downstream_count, 1);
+        assert_eq!(bn[2].id.as_str(), "C");
+        assert_eq!(bn[2].downstream_count, 1);
+    }
+
+    #[test]
+    fn bottlenecks_excludes_done_tasks() {
+        // B depends on A. A is done → not a bottleneck.
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        p.set_status(&ids[0], Status::Done, false).unwrap();
+        let bn = p.bottlenecks();
+        // A is done, so excluded.
+        assert!(bn.is_empty());
     }
 }

@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add bottleneck detection query (v0.26.0)
+
+    New `Project::bottlenecks()` method finds tasks with the
+    most transitive downstream dependents. Uses DFS on a
+    reverse dependency graph to count all tasks transitively
+    blocked by each task. Returns results sorted by count
+    descending. Excludes done tasks.
+
 - Add blocked-by-deps auto-detection (v0.25.0)
 
     New `Project::dep_blocked_tasks()` method returns tasks

@@ -5,6 +5,21 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-034 — Done tasks counted as downstream dependents
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.26.0 bottleneck detection
+- **Description:** `bottlenecks()` built the reverse adjacency
+  map from all tasks without filtering by status. Done tasks
+  appeared as dependents, inflating bottleneck scores. A task
+  blocking only finished tasks would show a high count despite
+  blocking no remaining work.
+- **Resolution:** Filter done tasks when building the reverse
+  adjacency map. Extracted `reverse_dependents()` helper with
+  a status predicate to make the intent explicit and prevent
+  future divergence.
+
 ### RT-033 — BOLD+DIM conflict on critical Todo bars
 
 - **Date:** 2026-04-03
