@@ -72,9 +72,13 @@ fn bar_style(
 }
 
 /// Entry point for the `gantt` command.
-pub(super) fn cmd_gantt() -> Result<()> {
+pub(super) fn cmd_gantt(remaining: bool) -> Result<()> {
     let (_root, project) = load_project()?;
-    let rows = project.gantt_schedule();
+    let rows = if remaining {
+        project.gantt_schedule_remaining()
+    } else {
+        project.gantt_schedule()
+    };
     let width = term_width();
     render_gantt(&rows, width, use_color());
     Ok(())

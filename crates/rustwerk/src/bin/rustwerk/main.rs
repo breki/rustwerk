@@ -60,7 +60,11 @@ enum Commands {
         file: Option<String>,
     },
     /// Show ASCII Gantt chart of task schedule.
-    Gantt,
+    Gantt {
+        /// Show only tasks that are not done.
+        #[arg(long)]
+        remaining: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -273,7 +277,9 @@ fn main() -> Result<()> {
         Commands::Batch { file } => {
             cmd_batch(file.as_deref())
         }
-        Commands::Gantt => cmd_gantt(),
+        Commands::Gantt { remaining } => {
+            cmd_gantt(remaining)
+        }
         Commands::Effort { action } => match action {
             EffortAction::Log {
                 id,

@@ -1,6 +1,5 @@
 # TODO
 
-- Gantt chart command should offer an option to only show tasks that are not done.
 - Can we use a proper TUI for walking the Gantt chart, so it would look
   something like Superfile or lazygit?
 - Investigate whether JSON is really the best format for the project file - 
@@ -8,6 +7,7 @@
 
 ## Done
 
+- Add --remaining flag to gantt command (2026-04-03)
 - Red Gantt bars for critical path tasks (2026-04-03)
 - Save TUI rendering lessons as /tui-expert skill (2026-04-03)
 - Add module size check (>500 LOC) to Artisan reviewer (2026-04-03)

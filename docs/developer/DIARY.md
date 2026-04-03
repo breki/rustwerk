@@ -7,6 +7,12 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `--remaining` flag to `gantt` command (v0.19.0)
+
+    `rustwerk gantt --remaining` filters out done tasks,
+    showing only the remaining work. Filtering happens after
+    scheduling so bar positions reflect the full timeline.
+
 - Red Gantt bars for critical path tasks (v0.18.0)
 
     Critical path tasks now render the entire line (marker,

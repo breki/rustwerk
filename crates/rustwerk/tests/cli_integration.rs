@@ -639,3 +639,102 @@ fn gantt_id_column_aligned() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn gantt_remaining_excludes_done_tasks() {
+    let dir = gantt_project_abc("gantt-remaining");
+    // A is done, B and C are not.
+    let (stdout, _, ok) =
+        run(&dir, &["gantt", "--remaining"]);
+    assert!(ok, "gantt --remaining should succeed");
+
+    // A should not appear (it's done).
+    assert!(
+        !stdout.contains(" A "),
+        "done task A should be excluded: {stdout}"
+    );
+
+    let lines: Vec<&str> = stdout.lines().collect();
+    // B's done dependency (A) is satisfied, so B starts
+    // at 0 — its left cap should be at the same column
+    // as the header's time-0 tick.
+    let tick_line = lines[1];
+    let tick0_col = char_col(tick_line, '|')
+        .expect("header should have tick at 0");
+
+    let b_line = lines
+        .iter()
+        .find(|l| l.contains("B"))
+        .expect("B should appear");
+    let b_cap = char_col(b_line, '\u{2590}')
+        .expect("B should have left cap");
+    assert_eq!(
+        tick0_col, b_cap,
+        "B should start at time 0 (done deps don't \
+         block): tick0={tick0_col}, B cap={b_cap}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gantt_remaining_recalculates_critical_path() {
+    // Setup: A(done,10)->D(todo,1) is the full critical
+    // path. B(todo,3)->C(todo,5) is a separate chain.
+    // Full crit path: A->D (11). Remaining crit path:
+    // B->C (8), not D (1).
+    let dir = temp_dir("gantt-remaining-crit");
+    let bin = rustwerk_bin();
+    let r = |args: &[&str]| {
+        Command::new(&bin)
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("failed to run rustwerk");
+    };
+    r(&["init", "P"]);
+    r(&["task", "add", "X", "--id", "A", "--complexity", "10"]);
+    r(&["task", "add", "X", "--id", "B", "--complexity", "3"]);
+    r(&["task", "add", "X", "--id", "C", "--complexity", "5"]);
+    r(&["task", "add", "X", "--id", "D", "--complexity", "1"]);
+    r(&["task", "depend", "D", "A"]);
+    r(&["task", "depend", "C", "B"]);
+    r(&["task", "status", "A", "in-progress"]);
+    r(&["task", "status", "A", "done"]);
+
+    let (stdout, _, ok) =
+        run(&dir, &["gantt", "--remaining"]);
+    assert!(ok);
+
+    let lines: Vec<&str> = stdout.lines().collect();
+    // B and C should be on remaining critical path (*).
+    let b_line = lines
+        .iter()
+        .find(|l| l.contains("B"))
+        .expect("B should appear");
+    let c_line = lines
+        .iter()
+        .find(|l| l.contains("C"))
+        .expect("C should appear");
+    assert!(
+        b_line.starts_with('*'),
+        "B should be on remaining critical path: {b_line}"
+    );
+    assert!(
+        c_line.starts_with('*'),
+        "C should be on remaining critical path: {c_line}"
+    );
+
+    // D should NOT be on remaining critical path.
+    let d_line = lines
+        .iter()
+        .find(|l| l.contains("D"))
+        .expect("D should appear");
+    assert!(
+        d_line.starts_with(' '),
+        "D should NOT be on remaining critical path: \
+         {d_line}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

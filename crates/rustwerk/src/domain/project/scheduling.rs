@@ -379,6 +379,64 @@ impl Project {
 
         rows
     }
+
+    /// Compute Gantt schedule for remaining (undone) tasks
+    /// only. Done dependencies are treated as satisfied
+    /// (start at 0), and the critical path is recalculated
+    /// for remaining work.
+    pub fn gantt_schedule_remaining(
+        &self,
+    ) -> Vec<GanttRow> {
+        let order = self.topological_sort();
+        let crit = self.remaining_critical_path_set();
+        let mut end_at: HashMap<&TaskId, u32> =
+            HashMap::new();
+        let mut rows = Vec::new();
+
+        for id in &order {
+            let task = &self.tasks[id];
+            if task.status == Status::Done {
+                continue;
+            }
+            let width = task.complexity.unwrap_or(1);
+
+            // Start after undone dependencies finish.
+            // Done dependencies are ignored (already
+            // satisfied).
+            let start = task
+                .dependencies
+                .iter()
+                .filter(|dep| {
+                    self.tasks
+                        .get(*dep)
+                        .is_some_and(|t| {
+                            t.status != Status::Done
+                        })
+                })
+                .filter_map(|dep| end_at.get(dep))
+                .copied()
+                .max()
+                .unwrap_or(0);
+            let end = start + width;
+            end_at.insert(id, end);
+
+            rows.push(GanttRow {
+                id: id.clone(),
+                start,
+                width,
+                status: task.status,
+                critical: crit.contains(id),
+            });
+        }
+
+        rows.sort_by(|a, b| {
+            a.start
+                .cmp(&b.start)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+
+        rows
+    }
 }
 
 /// A row in the Gantt chart.
