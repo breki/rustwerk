@@ -270,6 +270,27 @@ Note: the developer must be registered in the project
 
 ## Developer Management
 
+### Add a Developer
+
+```
+rustwerk dev add alice "Alice Smith" \
+  --email alice@example.com --role lead
+```
+
+Options:
+- `--email <EMAIL>` — Email address.
+- `--role <ROLE>` — Role on the project (e.g. "lead",
+  "developer").
+
+### Remove a Developer
+
+```
+rustwerk dev remove alice
+```
+
+Fails if any task is assigned to this developer. Unassign
+them first.
+
 ### List Developers
 
 ```

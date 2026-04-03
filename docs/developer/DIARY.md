@@ -7,6 +7,12 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `dev add` and `dev remove` commands (v0.24.0)
+
+    New `rustwerk dev add` registers a developer with name,
+    optional email and role. `rustwerk dev remove` unregisters
+    a developer (blocked if any task is assigned to them).
+
 - Add `report effort` command (v0.23.0)
 
     New `rustwerk report effort` command shows effort

@@ -932,3 +932,66 @@ fn report_effort_empty() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- dev add / dev remove ---
+
+#[test]
+fn dev_add_and_list() {
+    let dir = temp_dir("dev-add");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) = run(
+        &dir,
+        &["dev", "add", "alice", "Alice Smith",
+          "--email", "alice@example.com", "--role", "lead"],
+    );
+    assert!(ok, "dev add should succeed: {stdout}");
+    assert!(stdout.contains("alice"));
+
+    // Should appear in dev list.
+    let (stdout, _, _) = run(&dir, &["dev", "list"]);
+    assert!(stdout.contains("alice"));
+    assert!(stdout.contains("Alice Smith"));
+    assert!(stdout.contains("alice@example.com"));
+    assert!(stdout.contains("lead"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dev_add_duplicate_rejected() {
+    let dir = temp_dir("dev-add-dup");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["dev", "add", "alice", "Alice"]);
+    let (_, _, ok) =
+        run(&dir, &["dev", "add", "alice", "Alice 2"]);
+    assert!(!ok, "duplicate dev add should fail");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dev_remove() {
+    let dir = temp_dir("dev-remove");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["dev", "add", "alice", "Alice"]);
+    let (stdout, _, ok) =
+        run(&dir, &["dev", "remove", "alice"]);
+    assert!(ok, "dev remove should succeed: {stdout}");
+
+    // Should no longer appear in dev list.
+    let (stdout, _, _) = run(&dir, &["dev", "list"]);
+    assert!(
+        stdout.contains("No developers"),
+        "should be empty: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dev_remove_nonexistent_fails() {
+    let dir = temp_dir("dev-remove-nope");
+    run(&dir, &["init", "P"]);
+    let (_, _, ok) =
+        run(&dir, &["dev", "remove", "ghost"]);
+    assert!(!ok, "removing nonexistent dev should fail");
+    let _ = fs::remove_dir_all(&dir);
+}

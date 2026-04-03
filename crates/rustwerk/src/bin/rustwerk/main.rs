@@ -15,8 +15,8 @@ use rustwerk::persistence::file_store;
 use batch::cmd_batch;
 use commands::{
     cmd_depend, cmd_dev_list, cmd_effort_estimate,
-    cmd_effort_log, cmd_init, cmd_report_complete,
-    cmd_report_effort,
+    cmd_dev_add, cmd_dev_remove, cmd_effort_log,
+    cmd_init, cmd_report_complete, cmd_report_effort,
     cmd_show, cmd_task_add, cmd_task_assign,
     cmd_task_list, cmd_task_remove, cmd_task_status,
     cmd_task_unassign, cmd_task_update, cmd_undepend,
@@ -81,6 +81,24 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum DevAction {
+    /// Add a developer to the project.
+    Add {
+        /// Developer ID (short username, lowercase).
+        id: String,
+        /// Full name.
+        name: String,
+        /// Email address.
+        #[arg(long)]
+        email: Option<String>,
+        /// Role (e.g. "lead", "developer").
+        #[arg(long)]
+        role: Option<String>,
+    },
+    /// Remove a developer from the project.
+    Remove {
+        /// Developer ID to remove.
+        id: String,
+    },
     /// List all developers in the project.
     List,
 }
@@ -302,6 +320,20 @@ fn main() -> Result<()> {
             }
         },
         Commands::Dev { action } => match action {
+            DevAction::Add {
+                id,
+                name,
+                email,
+                role,
+            } => cmd_dev_add(
+                &id,
+                &name,
+                email.as_deref(),
+                role.as_deref(),
+            ),
+            DevAction::Remove { id } => {
+                cmd_dev_remove(&id)
+            }
             DevAction::List => cmd_dev_list(),
         },
         Commands::Report { action } => match action {
