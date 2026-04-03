@@ -7,6 +7,15 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `report bottlenecks` CLI command (v0.27.0)
+
+    New `rustwerk report bottlenecks` command shows a PM-facing
+    bottleneck report: tasks blocking the most downstream work,
+    enriched with status, ready indicator, and assignee. The
+    `Bottleneck` struct now carries `status`, `assignee`, and
+    `ready` fields directly from the domain layer. Dynamic
+    column widths adapt to task ID length.
+
 - Add bottleneck detection query (v0.26.0)
 
     New `Project::bottlenecks()` method finds tasks with the

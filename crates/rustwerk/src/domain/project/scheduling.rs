@@ -13,6 +13,13 @@ pub struct Bottleneck {
     /// Number of non-done tasks transitively blocked by
     /// this task.
     pub downstream_count: usize,
+    /// Current status of the bottleneck task.
+    pub status: Status,
+    /// Assignee, if any.
+    pub assignee: Option<String>,
+    /// Whether this task is ready for implementation
+    /// (all dependencies are done).
+    pub ready: bool,
 }
 
 impl Project {
@@ -380,9 +387,25 @@ impl Project {
                 }
                 let count = visited.len();
                 if count > 0 {
+                    let task = &self.tasks[id];
+                    let ready = task
+                        .dependencies
+                        .iter()
+                        .all(|dep| {
+                            self.tasks
+                                .get(dep)
+                                .is_some_and(|t| {
+                                    t.status == Status::Done
+                                })
+                        });
                     Some(Bottleneck {
                         id: id.clone(),
                         downstream_count: count,
+                        status: task.status,
+                        assignee: task
+                            .assignee
+                            .clone(),
+                        ready,
                     })
                 } else {
                     None
@@ -1044,8 +1067,10 @@ mod tests {
         assert_eq!(bn.len(), 2);
         assert_eq!(bn[0].id.as_str(), "A");
         assert_eq!(bn[0].downstream_count, 2);
+        assert!(bn[0].ready); // A has no deps → ready
         assert_eq!(bn[1].id.as_str(), "B");
         assert_eq!(bn[1].downstream_count, 1);
+        assert!(!bn[1].ready); // B depends on A (todo)
     }
 
     #[test]
@@ -1084,6 +1109,38 @@ mod tests {
         assert_eq!(bn[1].downstream_count, 1);
         assert_eq!(bn[2].id.as_str(), "C");
         assert_eq!(bn[2].downstream_count, 1);
+    }
+
+    #[test]
+    fn bottlenecks_ready_after_dep_done() {
+        // C depends on B, B depends on A.
+        // Complete A → B becomes ready.
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        p.set_status(&ids[0], Status::Done, false).unwrap();
+        let bn = p.bottlenecks();
+        // Only B is a bottleneck (A is done).
+        assert_eq!(bn.len(), 1);
+        assert_eq!(bn[0].id.as_str(), "B");
+        assert!(bn[0].ready); // A is done → B ready
+    }
+
+    #[test]
+    fn bottlenecks_includes_status_and_assignee() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        let bn = p.bottlenecks();
+        assert_eq!(bn.len(), 1);
+        assert_eq!(bn[0].id.as_str(), "A");
+        assert_eq!(bn[0].status, Status::InProgress);
+        assert_eq!(bn[0].assignee, None);
     }
 
     #[test]

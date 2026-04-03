@@ -6,6 +6,29 @@ findings.
 
 ---
 
+### AQ-017 — Presentation layer reaches into domain internals
+
+- **Date:** 2026-04-03
+- **Category:** Abstraction Boundaries
+- **Commit context:** v0.27.0 report bottlenecks command
+- **Description:** `cmd_report_bottlenecks` accessed
+  `project.tasks[&bn.id]` directly to enrich the `Bottleneck`
+  with assignee and status, punching through the abstraction.
+- **Resolution:** Enriched `Bottleneck` struct with `status`,
+  `assignee`, and `ready` fields populated in
+  `bottlenecks()`. CLI no longer touches `project.tasks`.
+
+### AQ-016 — Redundant status match duplicates Display impl
+
+- **Date:** 2026-04-03
+- **Category:** Type Safety
+- **Commit context:** v0.27.0 report bottlenecks command
+- **Description:** `cmd_report_bottlenecks` hand-rolled a
+  `match` on `Status` to produce display strings, duplicating
+  the existing `Display` impl.
+- **Resolution:** Now uses `bn.status` directly in the format
+  string, which calls `Display` automatically.
+
 ### AQ-015 — Module size: scheduling.rs over 1000 lines
 
 - **Date:** 2026-04-03

@@ -555,6 +555,52 @@ pub(super) fn cmd_report_effort() -> Result<()> {
     Ok(())
 }
 
+/// PM bottleneck report — tasks blocking the most
+/// downstream work, enriched with assignee and status.
+pub(super) fn cmd_report_bottlenecks() -> Result<()> {
+    let (_root, project) = load_project()?;
+    let bottlenecks = project.bottlenecks();
+
+    if bottlenecks.is_empty() {
+        println!("No bottlenecks detected.");
+        return Ok(());
+    }
+
+    let iw = bottlenecks
+        .iter()
+        .map(|bn| bn.id.as_str().len())
+        .max()
+        .unwrap_or(2)
+        .max(2);
+
+    println!("Bottleneck Report");
+    println!(
+        "  {:<iw$}  {:>6}  {:<13} Assignee",
+        "ID", "Blocks", "State",
+    );
+    println!("{}", "-".repeat(iw + 36));
+
+    for bn in &bottlenecks {
+        let assignee =
+            bn.assignee.as_deref().unwrap_or("-");
+        let state = if bn.status
+            == rustwerk::domain::task::Status::InProgress
+        {
+            "in progress"
+        } else if bn.ready {
+            "ready"
+        } else {
+            "blocked"
+        };
+        println!(
+            "  {:<iw$}  {:>6}  {:<13} {}",
+            bn.id, bn.downstream_count, state, assignee,
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

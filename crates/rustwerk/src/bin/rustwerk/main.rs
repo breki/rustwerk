@@ -16,7 +16,8 @@ use batch::cmd_batch;
 use commands::{
     cmd_depend, cmd_dev_list, cmd_effort_estimate,
     cmd_dev_add, cmd_dev_remove, cmd_effort_log,
-    cmd_init, cmd_report_complete, cmd_report_effort,
+    cmd_init, cmd_report_bottlenecks, cmd_report_complete,
+    cmd_report_effort,
     cmd_show, cmd_task_add, cmd_task_assign,
     cmd_task_list, cmd_task_remove, cmd_task_status,
     cmd_task_unassign, cmd_task_update, cmd_undepend,
@@ -110,6 +111,8 @@ enum ReportAction {
     Complete,
     /// Effort breakdown per developer.
     Effort,
+    /// Bottleneck tasks (most downstream dependents).
+    Bottlenecks,
 }
 
 #[derive(Subcommand)]
@@ -342,6 +345,9 @@ fn main() -> Result<()> {
             }
             ReportAction::Effort => {
                 cmd_report_effort()
+            }
+            ReportAction::Bottlenecks => {
+                cmd_report_bottlenecks()
             }
         },
         Commands::Batch { file } => {

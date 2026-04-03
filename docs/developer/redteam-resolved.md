@@ -5,6 +5,29 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-036 — Hardcoded column width breaks for long IDs
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.27.0 report bottlenecks command
+- **Description:** `cmd_report_bottlenecks` used `{:<12}` for
+  the ID column. Task IDs longer than 12 chars would misalign
+  all subsequent columns.
+- **Resolution:** Compute `iw` dynamically from the actual
+  bottleneck list, consistent with `cmd_task_list`.
+
+### RT-035 — Panicking index on `project.tasks[&bn.id]`
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.27.0 report bottlenecks command
+- **Description:** The CLI command used the panicking `[]`
+  operator on `project.tasks` to look up bottleneck details.
+  A domain bug could cause a panic instead of a clean error.
+- **Resolution:** Enriched `Bottleneck` struct with `status`,
+  `assignee`, and `ready` fields populated in the domain layer.
+  The CLI no longer accesses `project.tasks` directly.
+
 ### RT-034 — Done tasks counted as downstream dependents
 
 - **Date:** 2026-04-03

@@ -444,6 +444,33 @@ Effort by Developer
   Total                  6.5H
 ```
 
+### Bottleneck Report
+
+```
+rustwerk report bottlenecks
+```
+
+Shows tasks that block the most downstream work, sorted
+by impact. Each entry includes the task ID, number of
+transitively blocked tasks, state, and assignee:
+
+```
+Bottleneck Report
+  ID      Blocks  State         Assignee
+------------------------------------------
+  CORE         5  ready         alice
+  AUTH         2  in progress   bob
+  DB           1  blocked       (unassigned)
+```
+
+The "State" column combines status and readiness:
+- **ready** — all dependencies done, can be started
+- **in progress** — already being worked on
+- **blocked** — waiting on upstream dependencies
+
+Only non-done tasks are included. Tasks with no
+downstream dependents are omitted.
+
 ## Batch Commands
 
 Execute multiple commands atomically from a JSON file

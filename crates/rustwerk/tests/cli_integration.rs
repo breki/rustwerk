@@ -933,6 +933,69 @@ fn report_effort_empty() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// --- report bottlenecks ---
+
+#[test]
+fn report_bottlenecks_shows_blocking_tasks() {
+    let dir = temp_dir("report-bottlenecks");
+    let bin = rustwerk_bin();
+    let r = |args: &[&str]| {
+        Command::new(&bin)
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("failed to run rustwerk");
+    };
+    r(&["init", "P"]);
+    r(&["task", "add", "Foundation", "--id", "A"]);
+    r(&["task", "add", "Middle", "--id", "B"]);
+    r(&["task", "add", "Leaf", "--id", "C"]);
+    r(&["dev", "add", "alice", "Alice Smith"]);
+    r(&["task", "assign", "A", "alice"]);
+    r(&["task", "depend", "B", "A"]); // B depends on A
+    r(&["task", "depend", "C", "B"]); // C depends on B
+
+    let (stdout, _, ok) =
+        run(&dir, &["report", "bottlenecks"]);
+    assert!(ok, "report bottlenecks should succeed");
+
+    // A blocks B and C (2 downstream).
+    assert!(
+        stdout.contains("A"),
+        "should list task A: {stdout}"
+    );
+    assert!(
+        stdout.contains("alice"),
+        "should show assignee alice: {stdout}"
+    );
+    assert!(
+        stdout.contains("2"),
+        "A should block 2 tasks: {stdout}"
+    );
+    // A has no deps → ready.
+    assert!(
+        stdout.contains("ready"),
+        "A should be ready: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn report_bottlenecks_empty() {
+    let dir = temp_dir("report-bottlenecks-empty");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "Solo", "--id", "A"]);
+    let (stdout, _, ok) =
+        run(&dir, &["report", "bottlenecks"]);
+    assert!(ok);
+    assert!(
+        stdout.contains("No bottlenecks"),
+        "should say no bottlenecks: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // --- dev add / dev remove ---
 
 #[test]
