@@ -178,6 +178,17 @@ enum TaskAction {
         /// Show only tasks currently in progress.
         #[arg(long, conflicts_with = "available")]
         active: bool,
+        /// Filter by status (todo, in-progress, blocked,
+        /// done).
+        #[arg(long, conflicts_with_all = ["available", "active"])]
+        status: Option<String>,
+        /// Filter by assignee developer ID.
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Show dependency chain for a task (the task
+        /// and all its transitive dependencies).
+        #[arg(long)]
+        chain: Option<String>,
     },
     /// Remove a task.
     Remove {
@@ -312,9 +323,19 @@ fn main() -> Result<()> {
                     desc.as_deref(),
                 )
             }
-            TaskAction::List { available, active } => {
-                cmd_task_list(available, active)
-            }
+            TaskAction::List {
+                available,
+                active,
+                status,
+                assignee,
+                chain,
+            } => cmd_task_list(
+                available,
+                active,
+                status.as_deref(),
+                assignee.as_deref(),
+                chain.as_deref(),
+            ),
             TaskAction::Depend { from, to } => {
                 cmd_depend(&from, &to)
             }

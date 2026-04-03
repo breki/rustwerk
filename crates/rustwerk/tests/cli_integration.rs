@@ -290,6 +290,91 @@ fn task_list_available() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn task_list_filter_by_status() {
+    let dir = temp_dir("list-status");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "Alpha", "--id", "A"]);
+    run(&dir, &["task", "add", "Beta", "--id", "B"]);
+    run(&dir, &["task", "status", "A", "in-progress"]);
+    // Filter for in-progress only.
+    let (stdout, _, ok) =
+        run(&dir, &["task", "list", "--status", "in-progress"]);
+    assert!(ok);
+    assert!(stdout.contains("A"));
+    assert!(!stdout.contains("B"));
+    // Filter for todo only.
+    let (stdout, _, ok) =
+        run(&dir, &["task", "list", "--status", "todo"]);
+    assert!(ok);
+    assert!(!stdout.contains(" A "));
+    assert!(stdout.contains("B"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_list_filter_by_assignee() {
+    let dir = temp_dir("list-assignee");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["dev", "add", "alice", "Alice"]);
+    run(&dir, &["dev", "add", "bob", "Bob"]);
+    run(&dir, &["task", "add", "Alpha", "--id", "A"]);
+    run(&dir, &["task", "add", "Beta", "--id", "B"]);
+    run(&dir, &["task", "assign", "A", "alice"]);
+    run(&dir, &["task", "assign", "B", "bob"]);
+    let (stdout, _, ok) =
+        run(&dir, &["task", "list", "--assignee", "alice"]);
+    assert!(ok);
+    assert!(stdout.contains("Alpha"));
+    assert!(!stdout.contains("Beta"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_list_filter_by_chain() {
+    let dir = temp_dir("list-chain");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "Root", "--id", "R"]);
+    run(&dir, &["task", "add", "Mid", "--id", "M"]);
+    run(&dir, &["task", "add", "Leaf", "--id", "L"]);
+    run(&dir, &["task", "add", "Xtra", "--id", "X"]);
+    run(&dir, &["task", "depend", "M", "R"]);
+    run(&dir, &["task", "depend", "L", "M"]);
+    // Chain of L should include R, M, L (transitive deps + self).
+    let (stdout, _, ok) =
+        run(&dir, &["task", "list", "--chain", "L"]);
+    assert!(ok);
+    assert!(stdout.contains("Root"), "stdout: {stdout}");
+    assert!(stdout.contains("Mid"), "stdout: {stdout}");
+    assert!(stdout.contains("Leaf"), "stdout: {stdout}");
+    assert!(!stdout.contains("Xtra"), "stdout: {stdout}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_list_combined_filters() {
+    let dir = temp_dir("list-combined");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["dev", "add", "alice", "Alice"]);
+    run(&dir, &["task", "add", "A1", "--id", "A1"]);
+    run(&dir, &["task", "add", "A2", "--id", "A2"]);
+    run(&dir, &["task", "assign", "A1", "alice"]);
+    run(&dir, &["task", "assign", "A2", "alice"]);
+    run(&dir, &["task", "status", "A1", "in-progress"]);
+    // Filter: assignee=alice AND status=in-progress.
+    let (stdout, _, ok) = run(
+        &dir,
+        &[
+            "task", "list", "--assignee", "alice",
+            "--status", "in-progress",
+        ],
+    );
+    assert!(ok);
+    assert!(stdout.contains("A1"));
+    assert!(!stdout.contains("A2"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // --- depend / undepend ---
 
 #[test]

@@ -6,6 +6,40 @@ findings.
 
 ---
 
+### AQ-021 — O(V+E) full-graph sort in dependency_chain
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.28.0 task list filters
+- **Description:** `dependency_chain()` originally called
+  `topological_sort()` on the entire graph to order a
+  small subgraph result.
+- **Resolution:** Replaced with iterative DFS post-order
+  traversal that only visits the reachable subgraph,
+  giving O(|subgraph|) instead of O(V+E).
+
+### AQ-019 — Dead guard duplicating domain logic in binary
+
+- **Date:** 2026-04-03
+- **Category:** Abstraction Boundaries
+- **Commit context:** v0.28.0 task list filters
+- **Description:** `cmd_task_list` had an explicit
+  `contains_key` check before calling `dependency_chain`,
+  duplicating the domain's responsibility for validating
+  task existence.
+- **Resolution:** Changed `dependency_chain` to return
+  `Result<Vec<&TaskId>, DomainError>` with a
+  `TaskNotFound` error. Removed the duplicate guard.
+
+### AQ-018 — --status not conflicting with --available/--active
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.28.0 task list filters
+- **Description:** Duplicate of RT-037.
+- **Resolution:** Fixed under RT-037 (added
+  `conflicts_with_all`).
+
 ### AQ-017 — Presentation layer reaches into domain internals
 
 - **Date:** 2026-04-03

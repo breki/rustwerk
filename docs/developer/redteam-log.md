@@ -4,10 +4,36 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-037
+**Next ID:** RT-041
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
+
+---
+
+### RT-040 — Cyclic deps silently vanish from --chain output
+
+- **Date:** 2026-04-03
+- **Category:** Correctness (Low)
+- **Commit context:** v0.28.0 task list filters
+- **Description:** If a dependency cycle somehow exists,
+  `dependency_chain()` uses DFS post-order which may
+  revisit or skip cycle participants. The `add_dependency`
+  method already validates against cycles, so this is
+  unreachable in normal operation.
+- **Impact:** Low — defense-in-depth only.
+
+### RT-038 — Dangling dependency refs truncate --chain
+
+- **Date:** 2026-04-03
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.28.0 task list filters
+- **Description:** `dependency_chain()` silently skips
+  dependency IDs that don't exist in `self.tasks`. If a
+  task was removed without cleaning dependents (mitigated
+  by DEP-GUARD which prevents this), the chain output
+  would be incomplete with no warning.
+- **Impact:** Medium — mitigated by existing DEP-GUARD.
 
 ---
 

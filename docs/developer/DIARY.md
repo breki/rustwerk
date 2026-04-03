@@ -7,6 +7,16 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add task list filters: status, assignee, chain (v0.28.0)
+
+    New `--status`, `--assignee`, and `--chain` flags on
+    `task list`. Filters compose with each other and with
+    existing `--available`/`--active` flags. Domain layer
+    gains `tasks_by_status()`, `tasks_by_assignee()`, and
+    `dependency_chain()` methods on `Project`. The chain
+    filter walks transitive dependencies and returns results
+    in topological order.
+
 - Add `report bottlenecks` CLI command (v0.27.0)
 
     New `rustwerk report bottlenecks` command shows a PM-facing

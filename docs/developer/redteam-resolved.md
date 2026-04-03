@@ -5,6 +5,29 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-039 — --assignee case-sensitive with no normalization
+
+- **Date:** 2026-04-03
+- **Category:** Usability
+- **Commit context:** v0.28.0 task list filters
+- **Description:** `--assignee` did an exact string match
+  without lowercasing. `DeveloperId::new()` lowercases IDs,
+  so `--assignee Alice` would miss tasks assigned to
+  `alice`.
+- **Resolution:** Added `.to_lowercase()` on the assignee
+  filter input before comparison.
+
+### RT-037 — --status not declared conflicting with --available/--active
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.28.0 task list filters
+- **Description:** `--status` had no `conflicts_with`
+  against `--available` or `--active`, allowing nonsensical
+  combinations that silently produced empty output.
+- **Resolution:** Added `conflicts_with_all` to the
+  `--status` clap arg definition.
+
 ### RT-036 — Hardcoded column width breaks for long IDs
 
 - **Date:** 2026-04-03

@@ -202,10 +202,21 @@ Filters:
 - `--available` — Show only tasks ready to start (all
   dependencies done, task is TODO).
 - `--active` — Show only tasks currently in progress.
+- `--status <STATUS>` — Filter by status (todo,
+  in-progress, blocked, done).
+- `--assignee <ID>` — Filter by assigned developer.
+- `--chain <TASK>` — Show a task and all its transitive
+  dependencies.
+
+Filters can be combined:
 
 ```
 rustwerk task list --available
 rustwerk task list --active
+rustwerk task list --status todo
+rustwerk task list --assignee alice
+rustwerk task list --chain DEPLOY
+rustwerk task list --assignee alice --status in-progress
 ```
 
 ### Update Task Status
