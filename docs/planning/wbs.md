@@ -102,6 +102,11 @@ status summary.
 | VIZ-GANTT | ASCII Gantt chart (sequential/parallel lanes, critical path highlight) | 8 | DEP-CRIT |
 | QRY-SUMMARY | Project status summary (counts, %, effort totals) | 2 | DOM-ADD, DOM-LOG |
 | CLI-VIZ | CLI `list`, `tree`, `gantt`, `status` commands | 3 | QRY-LIST, QRY-BOTTLE, VIZ-TREE, VIZ-GANTT, QRY-SUMMARY |
+| VIZ-UNICODE | Upgrade Gantt bars to Unicode blocks (█▓░) with bar caps (▐▌) | 3 | VIZ-GANTT |
+| VIZ-AXIS | Upgrade Gantt time axis to box-drawing chars (─│┬┴) | 2 | VIZ-GANTT |
+| VIZ-SCALE | Terminal-width-aware Gantt scaling (detect width, scale bars) | 5 | VIZ-GANTT |
+| VIZ-MILESTONE | Milestone markers (◆) for zero-complexity tasks | 2 | VIZ-GANTT |
+| VIZ-TUI | Optional --interactive Gantt mode with ratatui (scrollable, zoomable) | 13 | VIZ-GANTT, VIZ-UNICODE, VIZ-AXIS, VIZ-SCALE |
 
 ---
 
@@ -200,9 +205,9 @@ Phase 1 (File Format + Init)
 | 1 — File Format + Init | 8 | 23 | Project file schema, `init`, `show` |
 | 2 — Task CRUD CLI | 17 | 45 | Full task management via CLI + developer registry |
 | 3 — Dependency Graph | 7 | 23 | DAG, cycle detection, critical path |
-| 4 — Querying + Viz | 6 | 24 | Filters, ASCII tree/Gantt, status |
+| 4 — Querying + Viz | 11 | 49 | Filters, tree/Gantt, Unicode bars, TUI |
 | 5 — Git Operations | 5 | 24 | Dual-context, atomic commit+push |
 | 6 — Reporting | 8 | 31 | Dashboards, PM reports, HTML export |
 | 7 — Plugin Architecture | 6 | 20 | Plugin system + activity log |
 | 8 — AI Agent Integration | 6 | 27 | WBS ingestion, estimation, batch |
-| **Total** | **63** | **217** | |
+| **Total** | **68** | **242** | |
