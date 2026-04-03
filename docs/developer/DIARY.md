@@ -7,6 +7,13 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add blocked-by-deps auto-detection (v0.25.0)
+
+    New `Project::dep_blocked_tasks()` method returns tasks
+    that are TODO but have at least one incomplete dependency.
+    Complements `available_tasks()` (all deps done) and
+    `active_tasks()` (in-progress).
+
 - Add `dev add` and `dev remove` commands (v0.24.0)
 
     New `rustwerk dev add` registers a developer with name,

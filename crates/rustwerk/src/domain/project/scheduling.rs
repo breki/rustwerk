@@ -260,6 +260,27 @@ impl Project {
         path.into_iter().collect()
     }
 
+    /// Return task IDs that are blocked by incomplete
+    /// dependencies: status is TODO and at least one
+    /// dependency is not done.
+    pub fn dep_blocked_tasks(&self) -> Vec<&TaskId> {
+        self.tasks
+            .iter()
+            .filter(|(_, task)| {
+                task.status == Status::Todo
+                    && !task.dependencies.is_empty()
+                    && task.dependencies.iter().any(|dep| {
+                        self.tasks
+                            .get(dep)
+                            .is_none_or(|t| {
+                                t.status != Status::Done
+                            })
+                    })
+            })
+            .map(|(id, _)| id)
+            .collect()
+    }
+
     /// Return task IDs that are ready to start: status is
     /// TODO and all dependencies are done.
     pub fn available_tasks(&self) -> Vec<&TaskId> {
@@ -617,6 +638,56 @@ mod tests {
     fn active_tasks_empty_when_none_in_progress() {
         let (p, _) = project_with_tasks(&["A", "B"]);
         assert!(p.active_tasks().is_empty());
+    }
+
+    #[test]
+    fn dep_blocked_with_incomplete_deps() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
+        // A has no deps → not blocked.
+        // B depends on A (todo) → blocked.
+        // C depends on B (todo) → blocked.
+        let blocked = p.dep_blocked_tasks();
+        assert_eq!(blocked.len(), 2);
+        assert!(blocked.contains(&&ids[1]));
+        assert!(blocked.contains(&&ids[2]));
+    }
+
+    #[test]
+    fn dep_blocked_clears_when_dep_done() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        assert_eq!(p.dep_blocked_tasks().len(), 1);
+
+        // Complete A.
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        p.set_status(&ids[0], Status::Done, false)
+            .unwrap();
+        // B is no longer blocked.
+        assert!(p.dep_blocked_tasks().is_empty());
+    }
+
+    #[test]
+    fn dep_blocked_excludes_done_and_in_progress() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        // Move B to in-progress (force, bypassing
+        // normal transitions for test).
+        p.set_status(&ids[1], Status::InProgress, true)
+            .unwrap();
+        // B is in-progress, not blocked by deps.
+        assert!(p.dep_blocked_tasks().is_empty());
+    }
+
+    #[test]
+    fn dep_blocked_no_deps_returns_empty() {
+        let (p, _) = project_with_tasks(&["A", "B"]);
+        assert!(p.dep_blocked_tasks().is_empty());
     }
 
     #[test]
