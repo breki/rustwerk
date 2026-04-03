@@ -726,6 +726,9 @@ fn execute_one(
 /// Maximum batch input size (10 MB).
 const MAX_BATCH_BYTES: u64 = 10 * 1024 * 1024;
 
+/// Maximum number of commands in a single batch.
+const MAX_BATCH_COMMANDS: usize = 1000;
+
 fn cmd_batch(file: Option<&str>) -> Result<()> {
     let json = if let Some(path) = file {
         std::fs::read_to_string(path)
@@ -742,6 +745,14 @@ fn cmd_batch(file: Option<&str>) -> Result<()> {
     let commands: Vec<BatchCommand> =
         serde_json::from_str(&json)
             .context("failed to parse batch JSON")?;
+
+    if commands.len() > MAX_BATCH_COMMANDS {
+        bail!(
+            "batch contains {} commands (max {})",
+            commands.len(),
+            MAX_BATCH_COMMANDS
+        );
+    }
 
     // Always load the project to validate it exists,
     // even for empty batches.
@@ -778,13 +789,16 @@ fn cmd_batch(file: Option<&str>) -> Result<()> {
                     ),
                     "applied": i
                 });
-                println!(
+                eprintln!(
                     "{}",
                     serde_json::to_string_pretty(
                         &error_output
                     )?
                 );
-                std::process::exit(1);
+                bail!(
+                    "batch failed at command {i} ({})",
+                    safe_cmd
+                );
             }
         }
     }
@@ -861,5 +875,379 @@ fn main() -> Result<()> {
                 cmd_effort_estimate(&id, &amount)
             }
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustwerk::domain::project::Project;
+
+    fn test_project() -> Project {
+        Project::new("Test").unwrap()
+    }
+
+    // --- parse_status ---
+
+    #[test]
+    fn parse_status_all_variants() {
+        assert!(matches!(
+            parse_status("todo").unwrap(),
+            Status::Todo
+        ));
+        assert!(matches!(
+            parse_status("in-progress").unwrap(),
+            Status::InProgress
+        ));
+        assert!(matches!(
+            parse_status("in_progress").unwrap(),
+            Status::InProgress
+        ));
+        assert!(matches!(
+            parse_status("inprogress").unwrap(),
+            Status::InProgress
+        ));
+        assert!(matches!(
+            parse_status("blocked").unwrap(),
+            Status::Blocked
+        ));
+        assert!(matches!(
+            parse_status("done").unwrap(),
+            Status::Done
+        ));
+        assert!(matches!(
+            parse_status("TODO").unwrap(),
+            Status::Todo
+        ));
+    }
+
+    #[test]
+    fn parse_status_unknown() {
+        assert!(parse_status("invalid").is_err());
+    }
+
+    // --- execute_one: task.add ---
+
+    #[test]
+    fn batch_task_add_with_id() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "task.add".into(),
+            args: serde_json::json!({
+                "title": "My task",
+                "id": "MT",
+                "complexity": 5,
+                "effort": "8H",
+                "desc": "A description"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("MT"));
+        assert_eq!(p.task_count(), 1);
+        let task = &p.tasks[&TaskId::new("MT").unwrap()];
+        assert_eq!(task.title, "My task");
+        assert_eq!(task.complexity, Some(5));
+        assert_eq!(
+            task.description.as_deref(),
+            Some("A description")
+        );
+    }
+
+    #[test]
+    fn batch_task_add_auto_id() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "task.add".into(),
+            args: serde_json::json!({"title": "Auto"}),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("T0001"));
+    }
+
+    #[test]
+    fn batch_task_add_missing_title() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "task.add".into(),
+            args: serde_json::json!({}),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
+    }
+
+    #[test]
+    fn batch_task_add_large_complexity_rejected() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "task.add".into(),
+            args: serde_json::json!({
+                "title": "X",
+                "complexity": 5_000_000_000_u64
+            }),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
+    }
+
+    // --- execute_one: task.remove ---
+
+    #[test]
+    fn batch_task_remove() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("A").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.remove".into(),
+            args: serde_json::json!({"id": "A"}),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("Removed"));
+        assert_eq!(p.task_count(), 0);
+    }
+
+    // --- execute_one: task.update ---
+
+    #[test]
+    fn batch_task_update_title() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("Old").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.update".into(),
+            args: serde_json::json!({
+                "id": "A",
+                "title": "New"
+            }),
+        };
+        execute_one(&mut p, &cmd).unwrap();
+        assert_eq!(
+            p.tasks[&TaskId::new("A").unwrap()].title,
+            "New"
+        );
+    }
+
+    #[test]
+    fn batch_task_update_no_fields_rejected() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.update".into(),
+            args: serde_json::json!({"id": "A"}),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
+    }
+
+    // --- execute_one: task.status ---
+
+    #[test]
+    fn batch_task_status() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.status".into(),
+            args: serde_json::json!({
+                "id": "A",
+                "status": "in-progress"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("IN_PROGRESS"));
+    }
+
+    #[test]
+    fn batch_task_status_force() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        p.set_status(
+            &TaskId::new("A").unwrap(),
+            Status::InProgress,
+            false,
+        )
+        .unwrap();
+        p.set_status(
+            &TaskId::new("A").unwrap(),
+            Status::Done,
+            false,
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.status".into(),
+            args: serde_json::json!({
+                "id": "A",
+                "status": "todo",
+                "force": true
+            }),
+        };
+        execute_one(&mut p, &cmd).unwrap();
+    }
+
+    // --- execute_one: task.assign/unassign ---
+
+    #[test]
+    fn batch_task_assign() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.assign".into(),
+            args: serde_json::json!({
+                "id": "A",
+                "to": "alice"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("alice"));
+    }
+
+    #[test]
+    fn batch_task_unassign() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        p.assign(&TaskId::new("A").unwrap(), "bob")
+            .unwrap();
+        let cmd = BatchCommand {
+            command: "task.unassign".into(),
+            args: serde_json::json!({"id": "A"}),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("unassigned"));
+    }
+
+    // --- execute_one: task.depend/undepend ---
+
+    #[test]
+    fn batch_task_depend() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        p.add_task(
+            TaskId::new("B").unwrap(),
+            Task::new("Y").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.depend".into(),
+            args: serde_json::json!({
+                "from": "B",
+                "to": "A"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("depends on"));
+    }
+
+    #[test]
+    fn batch_task_undepend() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        p.add_task(
+            TaskId::new("B").unwrap(),
+            Task::new("Y").unwrap(),
+        )
+        .unwrap();
+        p.add_dependency(
+            &TaskId::new("B").unwrap(),
+            &TaskId::new("A").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "task.undepend".into(),
+            args: serde_json::json!({
+                "from": "B",
+                "to": "A"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("Removed"));
+    }
+
+    // --- execute_one: effort.log/estimate ---
+
+    #[test]
+    fn batch_effort_log() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        p.set_status(
+            &TaskId::new("A").unwrap(),
+            Status::InProgress,
+            false,
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "effort.log".into(),
+            args: serde_json::json!({
+                "id": "A",
+                "amount": "2H",
+                "dev": "alice",
+                "note": "some work"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("2H"));
+    }
+
+    #[test]
+    fn batch_effort_estimate() {
+        let mut p = test_project();
+        p.add_task(
+            TaskId::new("A").unwrap(),
+            Task::new("X").unwrap(),
+        )
+        .unwrap();
+        let cmd = BatchCommand {
+            command: "effort.estimate".into(),
+            args: serde_json::json!({
+                "id": "A",
+                "amount": "5H"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("5H"));
+    }
+
+    // --- execute_one: unknown command ---
+
+    #[test]
+    fn batch_unknown_command() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "nope".into(),
+            args: serde_json::json!({}),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
     }
 }

@@ -12,3 +12,4 @@ perf = { level = "deny", priority = -1 }
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+serde_json = "1"

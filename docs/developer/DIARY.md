@@ -7,6 +7,17 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add code coverage enforcement and red team findings log
+
+    `cargo xtask coverage` runs `cargo-llvm-cov` and enforces a 90%
+    line coverage threshold. `cargo xtask validate` now includes
+    coverage as the final step (clippy → tests → coverage). Added
+    22 CLI integration tests (`crates/rustwerk/tests/cli_integration.rs`)
+    and 18 in-process batch command tests. Coverage went from 68% to
+    94.9%. Added `docs/developer/redteam-log.md` with all 12 historical
+    findings backfilled. Updated `/commit` to maintain the log and warn
+    when 10+ findings are open.
+
 - Add atomic batch command execution (v0.11.0)
 
     `rustwerk batch [--file path]` executes a JSON array of commands

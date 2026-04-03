@@ -14,9 +14,10 @@ Git-native, AI-agent-friendly project orchestration CLI.
 
 ```bash
 # Build (never use raw cargo test/clippy)
-cargo xtask validate             # clippy + tests
+cargo xtask validate             # clippy + tests + coverage
 cargo xtask test [filter]        # tests only
 cargo xtask clippy               # lint only
+cargo xtask coverage             # coverage only (≥90%)
 cargo xtask fmt                  # format code
 ```
 

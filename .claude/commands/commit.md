@@ -95,13 +95,32 @@ conventions.
    code at all (docs-only, config-only, project state only).
 
    **If the agent reports issues:**
-   - Present the findings to the user in a table with
-     columns: #, Category, Issue, Impact, Suggested Fix
+   - Present the findings to the user with enough detail
+     to make an informed decision — not just a one-liner.
+     Include: what the issue is, why it matters (concrete
+     impact), how to trigger it, and how to fix it.
    - Ask whether to fix them before committing, commit
      anyway, or abort
    - Wait for the user's answer before proceeding
 
    **If no issues found:** continue to the next step.
+
+   **Findings log:** After the review (whether issues were
+   found or not), update `docs/developer/redteam-log.md`:
+
+   - Read the existing file (create if it doesn't exist)
+   - For each **new** finding, append to the "Open" section
+     with a unique ID (RT-001, RT-002, etc.), date, commit
+     context, full description (not a one-liner — include
+     what, why, trigger, and suggested fix), and category
+   - For findings the user chose to **fix**, move them from
+     "Open" to "Resolved" with the fix date and how it was
+     resolved
+   - Include `docs/developer/redteam-log.md` in staged files
+   - **Threshold warning:** if 10 or more findings are in
+     the "Open" section, tell the user that a comprehensive
+     full-codebase red team review is needed before
+     continuing feature work
 
 7. **Fix line endings** - After staging, check for CRLF
    warnings. If `git add` produces any "LF will be replaced
