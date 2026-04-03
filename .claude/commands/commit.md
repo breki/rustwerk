@@ -95,10 +95,21 @@ conventions.
    code at all (docs-only, config-only, project state only).
 
    **If the agent reports issues:**
-   - Present the findings to the user with enough detail
-     to make an informed decision — not just a one-liner.
-     Include: what the issue is, why it matters (concrete
-     impact), how to trigger it, and how to fix it.
+   - Present each finding to the user with the **same level
+     of detail** that goes into the red team log. For each
+     finding show:
+     - **ID and title** (e.g. RT-019 — Description)
+     - **Category**: Code Quality or Security
+     - **Description**: what the issue is, in enough detail
+       to understand without reading the code
+     - **Why it matters**: concrete impact (data loss,
+       panic, wrong output, security hole, etc.)
+     - **Example trigger**: a specific input, state, or
+       sequence that demonstrates the problem
+     - **Suggested fix**: how to resolve it
+   - Do NOT summarize findings into a compact table with
+     one-liner descriptions — the user needs the full
+     context to decide
    - Ask whether to fix them before committing, commit
      anyway, or abort
    - Wait for the user's answer before proceeding
