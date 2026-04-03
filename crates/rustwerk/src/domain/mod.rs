@@ -1,3 +1,5 @@
+/// Developer aggregate.
+pub mod developer;
 /// Domain error types.
 pub mod error;
 /// Project aggregate.

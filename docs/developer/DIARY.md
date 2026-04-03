@@ -7,6 +7,16 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add Developer domain type and project registry (v0.15.0)
+
+    New `Developer` struct with name, optional email, role, and
+    specialties. `DeveloperId` newtype (lowercase ASCII alphanumeric).
+    `Project` gains `developers` map with `add_developer` and
+    `remove_developer` methods. Removal blocked if any task is
+    assigned to the developer. JSON serialization round-trips.
+    15 new tests (8 for DeveloperId/Developer, 7 for Project
+    integration).
+
 - Add ANSI colors to Gantt chart (v0.14.0)
 
     `rustwerk gantt` now renders with ANSI colors: green for done,

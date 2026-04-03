@@ -30,6 +30,14 @@ pub enum DomainError {
     #[error("project already exists: {0}")]
     ProjectAlreadyExists(String),
 
+    /// The referenced developer ID does not exist.
+    #[error("developer not found: {0}")]
+    DeveloperNotFound(String),
+
+    /// A developer with this ID already exists.
+    #[error("developer already exists: {0}")]
+    DeveloperAlreadyExists(String),
+
     /// The input value failed validation.
     #[error("validation error: {0}")]
     ValidationError(String),
@@ -98,6 +106,27 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "validation error: title must not be empty"
+        );
+    }
+
+    #[test]
+    fn error_display_developer_not_found() {
+        let err =
+            DomainError::DeveloperNotFound("igor".into());
+        assert_eq!(
+            err.to_string(),
+            "developer not found: igor"
+        );
+    }
+
+    #[test]
+    fn error_display_developer_already_exists() {
+        let err = DomainError::DeveloperAlreadyExists(
+            "igor".into(),
+        );
+        assert_eq!(
+            err.to_string(),
+            "developer already exists: igor"
         );
     }
 }

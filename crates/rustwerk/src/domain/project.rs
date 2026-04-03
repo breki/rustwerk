@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use super::developer::{Developer, DeveloperId};
 use super::error::DomainError;
 use super::task::{
     Effort, EffortEntry, Status, Task, TaskId,
@@ -60,6 +61,12 @@ pub struct Project {
     /// Counter for auto-generated task IDs.
     #[serde(default = "default_auto_id")]
     pub next_auto_id: u32,
+    /// Developers on the project.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub developers: BTreeMap<DeveloperId, Developer>,
 }
 
 /// Default starting value for auto-generated IDs.
@@ -86,6 +93,7 @@ impl Project {
             },
             tasks: BTreeMap::new(),
             next_auto_id: default_auto_id(),
+            developers: BTreeMap::new(),
         })
     }
 
@@ -219,7 +227,54 @@ impl Project {
         Ok(())
     }
 
-    /// Log effort on a task. Task must be IN_PROGRESS.
+    /// Add a developer to the project.
+    pub fn add_developer(
+        &mut self,
+        id: DeveloperId,
+        developer: Developer,
+    ) -> Result<(), DomainError> {
+        if self.developers.contains_key(&id) {
+            return Err(
+                DomainError::DeveloperAlreadyExists(
+                    id.to_string(),
+                ),
+            );
+        }
+        self.developers.insert(id, developer);
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
+    /// Remove a developer from the project.
+    pub fn remove_developer(
+        &mut self,
+        id: &DeveloperId,
+    ) -> Result<Developer, DomainError> {
+        // Check if any task is assigned to this developer.
+        for (task_id, task) in &self.tasks {
+            if task.assignee.as_deref()
+                == Some(id.as_str())
+            {
+                return Err(
+                    DomainError::ValidationError(
+                        format!(
+                            "cannot remove developer \
+                             {id}: task {task_id} is \
+                             assigned to them"
+                        ),
+                    ),
+                );
+            }
+        }
+        let dev = self.developers.remove(id).ok_or(
+            DomainError::DeveloperNotFound(
+                id.to_string(),
+            ),
+        )?;
+        self.metadata.modified_at = Utc::now();
+        Ok(dev)
+    }
+
     pub fn log_effort(
         &mut self,
         id: &TaskId,
@@ -1539,5 +1594,99 @@ mod tests {
         let p = Project::new("Empty").unwrap();
         let rows = p.gantt_schedule();
         assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn add_developer() {
+        let mut p = Project::new("Test").unwrap();
+        let id = DeveloperId::new("igor").unwrap();
+        let dev = Developer::new("Igor").unwrap();
+        p.add_developer(id.clone(), dev).unwrap();
+        assert_eq!(p.developers.len(), 1);
+        assert_eq!(
+            p.developers[&id].name,
+            "Igor"
+        );
+    }
+
+    #[test]
+    fn add_developer_duplicate_rejected() {
+        let mut p = Project::new("Test").unwrap();
+        let id = DeveloperId::new("igor").unwrap();
+        p.add_developer(
+            id.clone(),
+            Developer::new("Igor").unwrap(),
+        )
+        .unwrap();
+        let result = p.add_developer(
+            id,
+            Developer::new("Igor 2").unwrap(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_developer() {
+        let mut p = Project::new("Test").unwrap();
+        let id = DeveloperId::new("igor").unwrap();
+        p.add_developer(
+            id.clone(),
+            Developer::new("Igor").unwrap(),
+        )
+        .unwrap();
+        let removed =
+            p.remove_developer(&id).unwrap();
+        assert_eq!(removed.name, "Igor");
+        assert!(p.developers.is_empty());
+    }
+
+    #[test]
+    fn remove_developer_not_found() {
+        let mut p = Project::new("Test").unwrap();
+        let id = DeveloperId::new("nope").unwrap();
+        assert!(p.remove_developer(&id).is_err());
+    }
+
+    #[test]
+    fn remove_developer_with_assigned_task_fails() {
+        let (mut p, ids) =
+            project_with_tasks(&["A"]);
+        let dev_id =
+            DeveloperId::new("igor").unwrap();
+        p.add_developer(
+            dev_id.clone(),
+            Developer::new("Igor").unwrap(),
+        )
+        .unwrap();
+        p.assign(&ids[0], "igor").unwrap();
+        let result = p.remove_developer(&dev_id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn developer_serialization_round_trip() {
+        let mut p = Project::new("Test").unwrap();
+        let id = DeveloperId::new("igor").unwrap();
+        let mut dev = Developer::new("Igor").unwrap();
+        dev.role = Some("project-lead".into());
+        dev.specialties =
+            vec!["rust".into(), "cli".into()];
+        p.add_developer(id.clone(), dev).unwrap();
+
+        let json =
+            serde_json::to_string_pretty(&p).unwrap();
+        let loaded: Project =
+            serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded.developers.len(), 1);
+        let d = &loaded.developers[&id];
+        assert_eq!(d.name, "Igor");
+        assert_eq!(
+            d.role.as_deref(),
+            Some("project-lead")
+        );
+        assert_eq!(
+            d.specialties,
+            vec!["rust", "cli"]
+        );
     }
 }

@@ -5,6 +5,29 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-029 — Stale doc comment above `add_developer`
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.15.0 Developer domain type
+- **Description:** Doc comment above `add_developer` read
+  "Log effort on a task" — a stale paste from the adjacent
+  method. Rustdoc showed the wrong description.
+- **Fix:** Corrected the doc comment.
+- **Resolved:** 2026-04-03
+
+### RT-028 — `remove_developer` doesn't update `modified_at`
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.15.0 Developer domain type
+- **Description:** Every other mutation method advances
+  `modified_at`, but `remove_developer` skipped it.
+  Timestamp-based change detection would miss this.
+- **Fix:** Added `self.metadata.modified_at = Utc::now()`
+  before returning the removed developer.
+- **Resolved:** 2026-04-03
+
 ### RT-027 — ANSI state leaks across Gantt row fields
 
 - **Date:** 2026-04-03

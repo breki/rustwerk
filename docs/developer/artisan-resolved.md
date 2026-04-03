@@ -6,6 +6,21 @@ findings.
 
 ---
 
+### AQ-008 — Developer errors reuse `ValidationError`
+
+- **Date:** 2026-04-03
+- **Category:** Error Handling
+- **Commit context:** v0.15.0 Developer domain type
+- **Description:** Developer-related errors used the
+  generic `ValidationError(String)` while tasks had
+  dedicated `TaskNotFound`/`DuplicateTaskId` variants.
+  Callers couldn't match precisely without parsing
+  strings.
+- **Fix:** Added `DeveloperNotFound(String)` and
+  `DeveloperAlreadyExists(String)` variants to
+  `DomainError`.
+- **Resolved:** 2026-04-03
+
 ### AQ-006 — `ansi` module uses `pub` in binary crate
 
 - **Date:** 2026-04-03
