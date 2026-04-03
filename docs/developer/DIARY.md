@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add project status summary to `show` command (v0.10.0)
+
+    `Project::summary()` returns `ProjectSummary` with task counts
+    by status, % complete, total estimated/actual effort hours, and
+    total complexity. `show` command now displays a full project
+    dashboard. Updated `/next-task` to use direct binary, `/commit`
+    to always run red team on code changes. 3 new tests.
+
 - Add effort logging and estimation (v0.9.0)
 
     `effort log ID AMOUNT --dev NAME` logs effort on IN_PROGRESS tasks.

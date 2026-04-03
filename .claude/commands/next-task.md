@@ -1,15 +1,26 @@
 ---
 description: Pick and implement the next available WBS task
-allowed-tools: Bash(cargo run -p rustwerk*), Bash(cargo xtask*), Bash(mkdir*), Bash(wc*), Read, Edit, Write, Glob, Grep, Agent, AskUserQuestion, EnterPlanMode, ExitPlanMode
+allowed-tools: Bash(target/debug/rustwerk*), Bash(cargo xtask*), Bash(cargo build*), Bash(mkdir*), Bash(wc*), Read, Edit, Write, Glob, Grep, Agent, AskUserQuestion, EnterPlanMode, ExitPlanMode
 ---
 
 Pick the next task from the WBS, plan it, and implement it.
+
+## CLI invocation
+
+Use the pre-built binary directly:
+```
+target/debug/rustwerk <args>
+```
+If the binary is stale or missing, rebuild first:
+```
+cargo build -p rustwerk
+```
 
 ## Instructions
 
 1. **List available tasks** — Run:
    ```
-   cargo run -p rustwerk --quiet -- task list --available
+   target/debug/rustwerk task list --available
    ```
 
 2. **Let the user choose** — Use AskUserQuestion to present
@@ -19,7 +30,7 @@ Pick the next task from the WBS, plan it, and implement it.
 
 3. **Mark in-progress** — Run:
    ```
-   cargo run -p rustwerk --quiet -- task status <ID> in-progress
+   target/debug/rustwerk task status <ID> in-progress
    ```
 
 4. **Read the WBS** — Read `docs/planning/wbs.md` to
@@ -38,10 +49,11 @@ Pick the next task from the WBS, plan it, and implement it.
    - Implement until tests pass (green)
    - Refactor if needed
    - Run `cargo xtask validate` to confirm
+   - Rebuild the binary: `cargo build -p rustwerk`
 
 7. **Mark done** — Run:
    ```
-   cargo run -p rustwerk --quiet -- task status <ID> done
+   target/debug/rustwerk task status <ID> done
    ```
 
 8. **Commit** — Use `/commit` to commit the changes.
@@ -51,6 +63,8 @@ Pick the next task from the WBS, plan it, and implement it.
 - One task per invocation. Don't chain multiple tasks.
 - Always validate with `cargo xtask validate` before
   marking done.
+- Rebuild with `cargo build -p rustwerk` after code
+  changes before using the CLI for task management.
 - If the task depends on other tasks, verify those
   dependencies are actually done before starting.
 - If implementation reveals the task should be split,

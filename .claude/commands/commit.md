@@ -79,6 +79,12 @@ conventions.
    Pass the full `git diff` output (staged + unstaged) to
    the agent. The agent should only read code, not modify it.
 
+   **IMPORTANT:** Always run the red team review when the
+   diff contains code changes (`.rs`, `.toml`, etc.). Never
+   skip it — even for "straightforward" CRUD or simple
+   changes. The only exception is commits that contain no
+   code at all (docs-only, config-only, project state only).
+
    **If the agent reports issues:**
    - Present the findings to the user
    - Ask whether to fix them before committing, commit

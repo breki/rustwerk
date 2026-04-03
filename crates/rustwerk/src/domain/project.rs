@@ -533,6 +533,75 @@ impl Project {
             .map(|(id, _)| id)
             .collect()
     }
+    /// Compute a project status summary.
+    pub fn summary(&self) -> ProjectSummary {
+        let mut todo = 0u32;
+        let mut in_progress = 0u32;
+        let mut blocked = 0u32;
+        let mut done = 0u32;
+        let mut total_estimated_hours = 0.0_f64;
+        let mut total_actual_hours = 0.0_f64;
+        let mut total_complexity = 0u32;
+
+        for task in self.tasks.values() {
+            match task.status {
+                Status::Todo => todo += 1,
+                Status::InProgress => in_progress += 1,
+                Status::Blocked => blocked += 1,
+                Status::Done => done += 1,
+            }
+            if let Some(est) = &task.effort_estimate {
+                total_estimated_hours += est.to_hours();
+            }
+            total_actual_hours +=
+                task.total_actual_effort_hours();
+            if let Some(c) = task.complexity {
+                total_complexity += c;
+            }
+        }
+
+        let total = self.tasks.len() as u32;
+        let pct_complete = if total == 0 {
+            0.0
+        } else {
+            f64::from(done) / f64::from(total) * 100.0
+        };
+
+        ProjectSummary {
+            total,
+            todo,
+            in_progress,
+            blocked,
+            done,
+            pct_complete,
+            total_estimated_hours,
+            total_actual_hours,
+            total_complexity,
+        }
+    }
+}
+
+/// Summary of project status.
+#[derive(Debug)]
+pub struct ProjectSummary {
+    /// Total number of tasks.
+    pub total: u32,
+    /// Tasks in TODO status.
+    pub todo: u32,
+    /// Tasks in IN_PROGRESS status.
+    pub in_progress: u32,
+    /// Tasks in BLOCKED status.
+    pub blocked: u32,
+    /// Tasks in DONE status.
+    pub done: u32,
+    /// Percentage complete (done/total * 100).
+    pub pct_complete: f64,
+    /// Sum of all effort estimates in hours.
+    pub total_estimated_hours: f64,
+    /// Sum of all logged effort in hours.
+    pub total_actual_hours: f64,
+    /// Sum of all complexity scores.
+    pub total_complexity: u32,
 }
 
 #[cfg(test)]
@@ -1188,5 +1257,68 @@ mod tests {
         assert!(crit.contains(&ids[0]));
         assert!(crit.contains(&ids[1]));
         assert!(crit.contains(&ids[2]));
+    }
+
+    #[test]
+    fn summary_empty_project() {
+        let p = Project::new("Test").unwrap();
+        let s = p.summary();
+        assert_eq!(s.total, 0);
+        assert_eq!(s.done, 0);
+        assert!((s.pct_complete - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn summary_counts_by_status() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C", "D"]);
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        p.set_status(&ids[0], Status::Done, false)
+            .unwrap();
+        p.set_status(&ids[1], Status::InProgress, false)
+            .unwrap();
+        // C stays TODO, D stays TODO.
+        let s = p.summary();
+        assert_eq!(s.total, 4);
+        assert_eq!(s.done, 1);
+        assert_eq!(s.in_progress, 1);
+        assert_eq!(s.todo, 2);
+        assert_eq!(s.blocked, 0);
+        assert!((s.pct_complete - 25.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn summary_effort_totals() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity =
+            Some(5);
+        p.set_effort_estimate(
+            &ids[0],
+            Effort::parse("8H").unwrap(),
+        )
+        .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        p.log_effort(
+            &ids[0],
+            EffortEntry {
+                effort: Effort::parse("3H").unwrap(),
+                developer: "alice".into(),
+                timestamp: Utc::now(),
+                note: None,
+            },
+        )
+        .unwrap();
+        let s = p.summary();
+        assert!(
+            (s.total_estimated_hours - 8.0).abs()
+                < f64::EPSILON
+        );
+        assert!(
+            (s.total_actual_hours - 3.0).abs()
+                < f64::EPSILON
+        );
+        assert_eq!(s.total_complexity, 5);
     }
 }

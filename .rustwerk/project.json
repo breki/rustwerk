@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T04:25:17.524923Z"
+    "modified_at": "2026-04-03T04:33:04.994828Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -407,7 +407,7 @@
     },
     "QRY-SUMMARY": {
       "title": "Project status summary",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "DOM-ADD",
         "DOM-LOG"

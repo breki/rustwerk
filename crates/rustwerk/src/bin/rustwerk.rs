@@ -207,9 +207,28 @@ fn cmd_show() -> Result<()> {
     if let Some(desc) = &project.metadata.description {
         println!("  {desc}");
     }
-    println!("Tasks:   {}", project.task_count());
+
+    let s = project.summary();
+    println!();
     println!(
-        "Created: {}",
+        "Tasks:    {} total  ({} done, {} in-progress, \
+         {} todo, {} blocked)",
+        s.total, s.done, s.in_progress, s.todo, s.blocked
+    );
+    println!("Complete: {:.0}%", s.pct_complete);
+    if s.total_complexity > 0 {
+        println!("Complexity: {} total", s.total_complexity);
+    }
+    if s.total_estimated_hours > 0.0
+        || s.total_actual_hours > 0.0
+    {
+        println!(
+            "Effort:   {:.1}H estimated, {:.1}H actual",
+            s.total_estimated_hours, s.total_actual_hours
+        );
+    }
+    println!(
+        "Created:  {}",
         project
             .metadata
             .created_at
