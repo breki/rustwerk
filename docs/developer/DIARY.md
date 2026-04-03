@@ -7,6 +7,11 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `dev list` command (v0.22.0)
+
+    New `rustwerk dev list` command shows all registered
+    developers with name, email, and role.
+
 - Add `report complete` command (v0.21.0)
 
     New `rustwerk report complete` command shows a PM-friendly

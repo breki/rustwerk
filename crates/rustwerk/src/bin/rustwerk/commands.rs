@@ -367,6 +367,27 @@ pub(super) fn cmd_undepend(
     modify_dependency(from, to, false)
 }
 
+/// List all developers in the project.
+pub(super) fn cmd_dev_list() -> Result<()> {
+    let (_root, project) = load_project()?;
+    if project.developers.is_empty() {
+        println!("No developers.");
+        return Ok(());
+    }
+    for (id, dev) in &project.developers {
+        let role = dev
+            .role
+            .as_deref()
+            .map_or(String::new(), |r| format!(" ({r})"));
+        let email = dev
+            .email
+            .as_deref()
+            .map_or(String::new(), |e| format!(" <{e}>"));
+        println!("  {id}  {}{email}{role}", dev.name);
+    }
+    Ok(())
+}
+
 /// PM completion summary report.
 pub(super) fn cmd_report_complete() -> Result<()> {
     let (_root, project) = load_project()?;

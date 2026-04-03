@@ -43,6 +43,7 @@ critical path visibility, and a structured workflow.
   - [Update a Task](#update-a-task)
   - [Remove a Task](#remove-a-task)
   - [Assign a Task](#assign-a-task)
+- [Developer Management](#developer-management)
 - [Dependencies](#dependencies)
 - [Effort Tracking](#effort-tracking)
 - [Gantt Chart](#gantt-chart)
@@ -266,6 +267,22 @@ rustwerk task unassign AUTH-LOGIN
 
 Note: the developer must be registered in the project
 (developer management is a planned feature).
+
+## Developer Management
+
+### List Developers
+
+```
+rustwerk dev list
+```
+
+Shows all registered developers with their name, email,
+and role:
+
+```
+  alice  Alice Smith <alice@example.com> (lead)
+  bob    Bob Jones
+```
 
 ## Dependencies
 

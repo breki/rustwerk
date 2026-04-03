@@ -14,10 +14,10 @@ use rustwerk::persistence::file_store;
 
 use batch::cmd_batch;
 use commands::{
-    cmd_depend, cmd_effort_estimate, cmd_effort_log,
-    cmd_init, cmd_report_complete, cmd_show,
-    cmd_task_add, cmd_task_assign, cmd_task_list,
-    cmd_task_remove, cmd_task_status,
+    cmd_depend, cmd_dev_list, cmd_effort_estimate,
+    cmd_effort_log, cmd_init, cmd_report_complete,
+    cmd_show, cmd_task_add, cmd_task_assign,
+    cmd_task_list, cmd_task_remove, cmd_task_status,
     cmd_task_unassign, cmd_task_update, cmd_undepend,
 };
 use gantt::cmd_gantt;
@@ -60,6 +60,11 @@ enum Commands {
         #[arg(long)]
         file: Option<String>,
     },
+    /// Developer management.
+    Dev {
+        #[command(subcommand)]
+        action: DevAction,
+    },
     /// Project reports.
     Report {
         #[command(subcommand)]
@@ -71,6 +76,12 @@ enum Commands {
         #[arg(long)]
         remaining: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum DevAction {
+    /// List all developers in the project.
+    List,
 }
 
 #[derive(Subcommand)]
@@ -286,6 +297,9 @@ fn main() -> Result<()> {
             TaskAction::Undepend { from, to } => {
                 cmd_undepend(&from, &to)
             }
+        },
+        Commands::Dev { action } => match action {
+            DevAction::List => cmd_dev_list(),
         },
         Commands::Report { action } => match action {
             ReportAction::Complete => {

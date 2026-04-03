@@ -813,3 +813,61 @@ fn report_complete_shows_summary() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- dev list ---
+
+#[test]
+fn dev_list_empty() {
+    let dir = temp_dir("dev-list-empty");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) = run(&dir, &["dev", "list"]);
+    assert!(ok, "dev list should succeed");
+    assert!(
+        stdout.contains("No developers"),
+        "should say no developers: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dev_list_shows_developers() {
+    let dir = temp_dir("dev-list-show");
+    run(&dir, &["init", "P"]);
+    // Inject developers directly into the project JSON.
+    let path = dir.join(".rustwerk/project.json");
+    let json = fs::read_to_string(&path).unwrap();
+    let mut project: serde_json::Value =
+        serde_json::from_str(&json).unwrap();
+    project["developers"] = serde_json::json!({
+        "alice": {
+            "name": "Alice Smith",
+            "email": "alice@example.com",
+            "role": "lead"
+        },
+        "bob": {
+            "name": "Bob Jones"
+        }
+    });
+    fs::write(
+        &path,
+        serde_json::to_string_pretty(&project).unwrap(),
+    )
+    .unwrap();
+
+    let (stdout, _, ok) = run(&dir, &["dev", "list"]);
+    assert!(ok, "dev list should succeed");
+    assert!(
+        stdout.contains("alice"),
+        "should list alice: {stdout}"
+    );
+    assert!(
+        stdout.contains("bob"),
+        "should list bob: {stdout}"
+    );
+    assert!(
+        stdout.contains("Alice Smith"),
+        "should show name: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
