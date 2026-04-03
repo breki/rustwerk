@@ -6,6 +6,20 @@ findings.
 
 ---
 
+### AQ-009 — Gantt rendering not testable; coupled to terminal
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.16.0 VIZ-SCALE
+- **Description:** `cmd_gantt` mixed I/O (terminal width
+  detection, color detection) with rendering logic,
+  making the scaling arithmetic untestable.
+- **Fix:** Extracted `render_gantt(rows, width, color)`
+  as a separate function. `cmd_gantt` is now a thin
+  wrapper that loads data and calls `render_gantt`.
+  Named constant `FALLBACK_WIDTH` replaces magic 80.
+- **Resolved:** 2026-04-03
+
 ### AQ-007 — Task::assignee stringly-typed, no referential integrity
 
 - **Date:** 2026-04-03

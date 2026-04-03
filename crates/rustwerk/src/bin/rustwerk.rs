@@ -767,18 +767,51 @@ const MAX_BATCH_BYTES: u64 = 10 * 1024 * 1024;
 /// Maximum number of commands in a single batch.
 const MAX_BATCH_COMMANDS: usize = 1000;
 
-fn cmd_gantt() -> Result<()> {
-    use rustwerk::domain::task::Status;
+/// Get terminal width. Uses `terminal_size` crate,
+/// falls back to 80.
+fn term_width() -> usize {
+    terminal_size::terminal_size()
+        .map(|(w, _)| w.0 as usize)
+        .unwrap_or(FALLBACK_WIDTH)
+}
 
+/// Scale a value by a factor, with minimum 1 (for bar
+/// widths that must be visible).
+fn scale_min1(value: u32, factor: f64) -> usize {
+    (f64::from(value) * factor).round().max(1.0) as usize
+}
+
+/// Scale a value by a factor (no minimum — used for
+/// positions where 0 is valid).
+fn scale_pos(value: u32, factor: f64) -> usize {
+    (f64::from(value) * factor).round() as usize
+}
+
+fn cmd_gantt() -> Result<()> {
     let (_root, project) = load_project()?;
     let rows = project.gantt_schedule();
+    let width = term_width();
+    render_gantt(&rows, width, use_color());
+    Ok(())
+}
+
+/// Default terminal width when detection fails.
+const FALLBACK_WIDTH: usize = 80;
+
+/// Render a Gantt chart to stdout. Separated from
+/// `cmd_gantt` for testability.
+fn render_gantt(
+    rows: &[rustwerk::domain::project::GanttRow],
+    terminal_width: usize,
+    color: bool,
+) {
+    use rustwerk::domain::task::Status;
 
     if rows.is_empty() {
         println!("No tasks.");
-        return Ok(());
+        return;
     }
 
-    let color = use_color();
     let max_end = rows
         .iter()
         .map(|r| r.end())
@@ -793,18 +826,55 @@ fn cmd_gantt() -> Result<()> {
         .unwrap_or(8)
         .max(8);
 
+    // Compute scale factor for terminal width.
+    let label_width = id_width + 2; // marker + id + space
+    let bracket_width = 2; // [ and ]
+    let tw = terminal_width;
+    let bar_area = tw
+        .saturating_sub(label_width)
+        .saturating_sub(bracket_width)
+        .saturating_sub(1); // trailing newline margin
+    let scale_factor = if max_end == 0 {
+        1.0
+    } else {
+        let f = bar_area as f64 / f64::from(max_end);
+        f.min(1.0) // never stretch beyond 1:1
+    };
+
+    let scaled_max = scale_pos(max_end, scale_factor);
+
     // Header with scale.
-    let label_width = id_width + 2;
     let dim = if color { ansi::DIM } else { "" };
     let rst = if color { ansi::RESET } else { "" };
+
+    // Tick interval: every 5 unscaled units, but widen
+    // if they'd overlap when scaled.
+    let tick_interval = if scale_factor < 0.5 {
+        10
+    } else {
+        5
+    };
+
     print!("{dim}{:width$}", "", width = label_width);
-    for i in (0..max_end).step_by(5) {
-        print!("{i:<5}");
+    for i in (0..max_end).step_by(tick_interval as usize) {
+        let col = scale_pos(i, scale_factor);
+        let next_col = scale_pos(
+            (i + tick_interval).min(max_end),
+            scale_factor,
+        );
+        let gap = next_col.saturating_sub(col);
+        if gap > 0 {
+            print!("{i:<gap$}");
+        }
     }
     println!("{rst}");
     print!("{dim}{:width$}", "", width = label_width);
-    for i in 0..max_end {
-        if i % 5 == 0 {
+    for i in 0..scaled_max {
+        // Find if this column corresponds to a tick.
+        let is_tick = (0..max_end)
+            .step_by(tick_interval as usize)
+            .any(|t| scale_pos(t, scale_factor) == i);
+        if is_tick {
             print!("|");
         } else {
             print!(" ");
@@ -813,12 +883,32 @@ fn cmd_gantt() -> Result<()> {
     println!("{rst}");
 
     // Rows — bar rendering uses domain methods.
-    for row in &rows {
+    for row in rows {
         let marker =
             if row.critical { "*" } else { " " };
         let (filled, empty) = row.bar_fill();
         let fill_ch = row.fill_char();
         let empty_ch = row.empty_char();
+
+        // Scale positions.
+        let s_start = scale_pos(row.start, scale_factor);
+        let s_filled = if filled > 0 {
+            scale_min1(filled, scale_factor)
+        } else {
+            0
+        };
+        let s_empty = if empty > 0 {
+            scale_min1(empty, scale_factor)
+        } else {
+            0
+        };
+        // Ensure total bar width is at least 1.
+        let (s_filled, s_empty) =
+            if s_filled + s_empty == 0 {
+                (1, 0)
+            } else {
+                (s_filled, s_empty)
+            };
 
         // Color the bar based on status.
         let (bar_color, id_style) = if color {
@@ -841,14 +931,13 @@ fn cmd_gantt() -> Result<()> {
         };
 
         let filled_str: String =
-            std::iter::repeat_n(fill_ch, filled as usize)
+            std::iter::repeat_n(fill_ch, s_filled)
                 .collect();
         let empty_str: String =
-            std::iter::repeat_n(empty_ch, empty as usize)
+            std::iter::repeat_n(empty_ch, s_empty)
                 .collect();
 
-        let padding =
-            " ".repeat(row.start as usize);
+        let padding = " ".repeat(s_start);
         print!(
             "{crit_style}{marker}{rst}\
              {id_style}{:<width$}{rst} \
@@ -859,8 +948,6 @@ fn cmd_gantt() -> Result<()> {
         );
         println!();
     }
-
-    Ok(())
 }
 
 fn cmd_batch(file: Option<&str>) -> Result<()> {

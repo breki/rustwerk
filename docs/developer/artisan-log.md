@@ -4,7 +4,7 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-009
+**Next ID:** AQ-010
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.

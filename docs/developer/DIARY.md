@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add terminal-width-aware Gantt scaling (v0.16.0)
+
+    `rustwerk gantt` now detects terminal width via the `terminal_size`
+    crate and scales bars proportionally when the chart would overflow.
+    Scale factor capped at 1.0 (never stretches beyond 1:1). Tick
+    interval widens at small scales. Minimum bar width of 1 character
+    ensures no task disappears.
+
 - Add Developer domain type and project registry (v0.15.0)
 
     New `Developer` struct with name, optional email, role, and

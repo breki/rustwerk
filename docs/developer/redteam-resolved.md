@@ -5,6 +5,19 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-030 — `scale(start=0)` returns 1, misaligning root tasks
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.16.0 VIZ-SCALE
+- **Description:** `scale()` clamped all results to
+  minimum 1, but `start = 0` should map to 0 (no
+  padding). Every root task got a spurious 1-space
+  indent, misaligning bars from tick marks.
+- **Fix:** Split into `scale_min1()` (for bar widths)
+  and `scale_pos()` (for positions, no clamp).
+- **Resolved:** 2026-04-03
+
 ### RT-029 — Stale doc comment above `add_developer`
 
 - **Date:** 2026-04-03

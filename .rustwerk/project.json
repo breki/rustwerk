@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T07:30:00.530302900Z"
+    "modified_at": "2026-04-03T07:33:57.932199700Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -529,7 +529,7 @@
     },
     "VIZ-SCALE": {
       "title": "Terminal-width-aware Gantt scaling",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "VIZ-GANTT"
       ],
