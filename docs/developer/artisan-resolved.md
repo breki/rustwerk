@@ -6,6 +6,18 @@ findings.
 
 ---
 
+### AQ-012 — Duplicated status-color match in `bar_style`
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.18.0 critical path highlight
+- **Description:** `bar_style()` matched on `status`
+  twice — once for `base` and again for `critical`. The
+  `base` result was discarded in the critical branch.
+- **Resolution:** Simplified to `if critical { RED }
+  else { match status }` — critical path overrides all
+  status colors to RED, eliminating the second match.
+
 ### AQ-011 — Module size: `project.rs` and `rustwerk.rs`
 
 - **Date:** 2026-04-03

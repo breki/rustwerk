@@ -5,6 +5,18 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-033 — BOLD+DIM conflict on critical Todo bars
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.18.0 critical path highlight
+- **Description:** `\x1b[1m\x1b[2m` (BOLD then DIM)
+  results in DIM only on most terminals, making critical
+  Todo bars indistinguishable from non-critical ones.
+- **Resolution:** Switched to rendering the entire
+  critical path line in RED, bypassing per-status colors
+  entirely. No ANSI attribute conflicts possible.
+
 ### RT-032 — `fill_char` for Todo is unreachable dead code
 
 - **Date:** 2026-04-03

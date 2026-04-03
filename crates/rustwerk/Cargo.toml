@@ -1,6 +1,6 @@
 [package]
 name = "rustwerk"
-version = "0.17.1"
+version = "0.18.0"
 edition = "2021"
 description = "Git-native, AI-agent-friendly project orchestration CLI"
 license = "MIT"

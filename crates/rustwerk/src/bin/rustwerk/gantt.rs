@@ -4,6 +4,7 @@ use std::io::IsTerminal;
 use anyhow::Result;
 
 use rustwerk::domain::project::GanttRow;
+use rustwerk::domain::task::Status;
 
 use crate::load_project;
 
@@ -46,7 +47,28 @@ mod ansi {
     pub(super) const GREEN: &str = "\x1b[32m";
     pub(super) const YELLOW: &str = "\x1b[33m";
     pub(super) const RED: &str = "\x1b[31m";
-    pub(super) const CYAN: &str = "\x1b[36m";
+}
+
+/// Select bar and ID ANSI styles based on task status
+/// and whether the task is on the critical path.
+/// Critical path tasks render the entire line in red.
+/// Returns `(bar_color, id_style)`.
+fn bar_style(
+    status: Status,
+    critical: bool,
+) -> (&'static str, &'static str) {
+    if critical {
+        (ansi::RED, ansi::RED)
+    } else {
+        match status {
+            Status::Done => (ansi::GREEN, ""),
+            Status::InProgress => {
+                (ansi::YELLOW, ansi::BOLD)
+            }
+            Status::Blocked => (ansi::RED, ansi::RED),
+            Status::Todo => (ansi::DIM, ""),
+        }
+    }
 }
 
 /// Entry point for the `gantt` command.
@@ -65,8 +87,6 @@ fn render_gantt(
     terminal_width: usize,
     color: bool,
 ) {
-    use rustwerk::domain::task::Status;
-
     if rows.is_empty() {
         println!("No tasks.");
         return;
@@ -169,22 +189,15 @@ fn render_gantt(
             (sf, s_body - sf)
         };
 
-        // Color the bar based on status.
+        // Color the bar based on status and critical path.
         let (bar_color, id_style) = if color {
-            match row.status {
-                Status::Done => (ansi::GREEN, ""),
-                Status::InProgress => {
-                    (ansi::YELLOW, ansi::BOLD)
-                }
-                Status::Blocked => (ansi::RED, ansi::RED),
-                Status::Todo => (ansi::DIM, ""),
-            }
+            bar_style(row.status, row.critical)
         } else {
             ("", "")
         };
 
         let crit_style = if color && row.critical {
-            ansi::CYAN
+            ansi::RED
         } else {
             ""
         };
@@ -209,5 +222,36 @@ fn render_gantt(
             width = id_width,
         );
         println!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn critical_bar_is_red() {
+        let (bar, id) = bar_style(Status::Done, true);
+        assert_eq!(bar, ansi::RED);
+        assert_eq!(id, ansi::RED);
+    }
+
+    #[test]
+    fn critical_todo_bar_is_red() {
+        let (bar, id) = bar_style(Status::Todo, true);
+        assert_eq!(bar, ansi::RED);
+        assert_eq!(id, ansi::RED);
+    }
+
+    #[test]
+    fn non_critical_done_uses_green() {
+        let (bar, _) = bar_style(Status::Done, false);
+        assert_eq!(bar, ansi::GREEN);
+    }
+
+    #[test]
+    fn non_critical_todo_uses_dim() {
+        let (bar, _) = bar_style(Status::Todo, false);
+        assert_eq!(bar, ansi::DIM);
     }
 }

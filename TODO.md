@@ -1,7 +1,5 @@
 # TODO
 
-- Gantt chart command should render tasks on the critical path in a different 
-  color (e.g. red) to highlight bottlenecks.
 - Gantt chart command should offer an option to only show tasks that are not done.
 - Can we use a proper TUI for walking the Gantt chart, so it would look
   something like Superfile or lazygit?
@@ -10,6 +8,7 @@
 
 ## Done
 
+- Red Gantt bars for critical path tasks (2026-04-03)
 - Save TUI rendering lessons as /tui-expert skill (2026-04-03)
 - Add module size check (>500 LOC) to Artisan reviewer (2026-04-03)
 - Investigate Gantt rendering: surveyed 6 tools (andrew-ls/gantt, gantt-cli/ratatui, taskdog, Taskwarrior, TaskFalcon, Pla). Key findings: Unicode blocks (█▓▒░) for status, dual-char bars for uncertainty, terminal-width-aware scaling, ratatui for optional interactive mode. Full report in docs/research/gantt-rendering.md (2026-04-03)

@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Red Gantt bars for critical path tasks (v0.18.0)
+
+    Critical path tasks now render the entire line (marker,
+    ID, and bar) in red, overriding the status-based color.
+    Extracted `bar_style()` function for testability with 4
+    new unit tests. Red chosen over bold/underline because
+    those are not visible enough on most terminal themes.
+
 - Fix Gantt chart alignment and bar overlap (v0.17.1)
 
     Three bugs fixed: (1) `TaskId::Display` didn't forward
