@@ -54,6 +54,15 @@ automatically based on commit type:
 | `fix`, `perf` | **patch** (0.1.x) |
 | `docs`, `test`, `refactor`, `chore`, `style` | no bump |
 
+## End-User Manual
+
+The file `docs/manual.md` is the end-user manual. When
+a `feat` or `fix` commit changes CLI behavior (new
+commands, new flags, changed output), update the manual
+to reflect the change. Keep examples current. Skip
+manual updates for internal refactors, test changes,
+or non-user-facing work.
+
 ## Development Diary
 
 Track significant changes in `docs/developer/DIARY.md`. Add

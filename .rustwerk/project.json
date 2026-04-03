@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T12:06:30.209829800Z"
+    "modified_at": "2026-04-03T12:19:32.498222Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -232,6 +232,15 @@
         "DOM-ASSIGN"
       ],
       "complexity": 3
+    },
+    "DOC-MANUAL": {
+      "title": "End-user manual (docs/manual.md)",
+      "status": "todo",
+      "dependencies": [
+        "CLI-TASK",
+        "CLI-VIZ"
+      ],
+      "complexity": 8
     },
     "DOM-ADD": {
       "title": "Add task to project (domain method + ID generation)",

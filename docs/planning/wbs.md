@@ -176,6 +176,17 @@ ingestion, effort estimation hooks, batch commands.
 
 ---
 
+## Phase 9 — Documentation
+
+**Goal:** comprehensive end-user manual covering all
+commands, workflows, and examples.
+
+| ID | Task | Complexity | Depends on |
+|----|------|-----------|------------|
+| DOC-MANUAL | End-user manual (`docs/manual.md`) — all commands with examples, workflows, troubleshooting | 8 | CLI-TASK, CLI-VIZ |
+
+---
+
 ## Phase Dependency Graph
 
 ```
