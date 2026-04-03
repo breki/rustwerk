@@ -7,6 +7,17 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add atomic batch command execution (v0.11.0)
+
+    `rustwerk batch [--file path]` executes a JSON array of commands
+    atomically — loads project once, runs all commands in-memory, saves
+    only if all succeed. On any failure, nothing is persisted and the
+    error is reported as JSON with the failing command index. Reads from
+    file or stdin. Supports all 10 command types (`task.add`,
+    `task.status`, `task.depend`, `effort.log`, etc.). Designed for AI
+    agent integration — agents can pipe structured JSON to execute
+    complex multi-step operations in a single atomic call.
+
 - Add project status summary to `show` command (v0.10.0)
 
     `Project::summary()` returns `ProjectSummary` with task counts

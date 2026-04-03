@@ -75,6 +75,15 @@ conventions.
    > specific line references. Do NOT report style nits,
    > missing docs, or hypothetical concerns. If you find
    > nothing, say "No issues found."
+   >
+   > For each finding, include:
+   > 1. **What**: the specific issue with file:line ref
+   > 2. **Why it matters**: concrete impact (data loss,
+   >    panic, wrong output, security hole, etc.)
+   > 3. **Example trigger**: a specific input, state, or
+   >    sequence that demonstrates the problem
+   > 4. **Suggested fix**: a brief description of how to
+   >    resolve it
 
    Pass the full `git diff` output (staged + unstaged) to
    the agent. The agent should only read code, not modify it.
@@ -86,7 +95,8 @@ conventions.
    code at all (docs-only, config-only, project state only).
 
    **If the agent reports issues:**
-   - Present the findings to the user
+   - Present the findings to the user in a table with
+     columns: #, Category, Issue, Impact, Suggested Fix
    - Ask whether to fix them before committing, commit
      anyway, or abort
    - Wait for the user's answer before proceeding

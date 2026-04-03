@@ -2,12 +2,12 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T04:33:04.994828Z"
+    "modified_at": "2026-04-03T04:43:44.250362300Z"
   },
   "tasks": {
     "AI-BATCH": {
       "title": "Batch command execution (atomic rollback)",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "CLI-TASK"
       ],
