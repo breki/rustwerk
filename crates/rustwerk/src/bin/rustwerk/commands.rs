@@ -482,6 +482,40 @@ pub(super) fn cmd_report_complete() -> Result<()> {
     Ok(())
 }
 
+/// Effort breakdown per developer.
+pub(super) fn cmd_report_effort() -> Result<()> {
+    use std::collections::BTreeMap;
+
+    let (_root, project) = load_project()?;
+
+    // Aggregate effort by developer across all tasks.
+    let mut by_dev: BTreeMap<&str, f64> = BTreeMap::new();
+    for task in project.tasks.values() {
+        for entry in &task.effort_entries {
+            *by_dev
+                .entry(&entry.developer)
+                .or_insert(0.0) += entry.effort.to_hours();
+        }
+    }
+
+    if by_dev.is_empty() {
+        println!("No effort logged.");
+        return Ok(());
+    }
+
+    let total: f64 = by_dev.values().sum();
+    println!("Effort by Developer");
+    println!("{}", "=".repeat(40));
+    for (dev, hours) in &by_dev {
+        let pct = hours / total * 100.0;
+        println!("  {dev:<20} {hours:>7.1}H ({pct:.0}%)");
+    }
+    println!("{}", "-".repeat(40));
+    println!("  {:<20} {:>7.1}H", "Total", total);
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

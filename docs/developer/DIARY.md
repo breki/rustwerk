@@ -7,6 +7,11 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `report effort` command (v0.23.0)
+
+    New `rustwerk report effort` command shows effort
+    breakdown per developer with hours and percentage.
+
 - Add `dev list` command (v0.22.0)
 
     New `rustwerk dev list` command shows all registered

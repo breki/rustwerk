@@ -405,6 +405,24 @@ Includes status breakdown, a visual progress bar,
 estimated vs actual effort with burn rate, complexity
 totals, and the remaining critical path with task IDs.
 
+### Effort by Developer
+
+```
+rustwerk report effort
+```
+
+Shows effort breakdown per developer with hours and
+percentage:
+
+```
+Effort by Developer
+========================================
+  alice                  4.5H (69%)
+  bob                    2.0H (31%)
+----------------------------------------
+  Total                  6.5H
+```
+
 ## Batch Commands
 
 Execute multiple commands atomically from a JSON file

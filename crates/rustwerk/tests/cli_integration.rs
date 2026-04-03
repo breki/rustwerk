@@ -871,3 +871,64 @@ fn dev_list_shows_developers() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- report effort ---
+
+#[test]
+fn report_effort_shows_per_developer() {
+    let dir = temp_dir("report-effort");
+    let bin = rustwerk_bin();
+    let r = |args: &[&str]| {
+        Command::new(&bin)
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("failed to run rustwerk");
+    };
+    r(&["init", "P"]);
+    r(&["task", "add", "A", "--id", "A"]);
+    r(&["task", "status", "A", "in-progress"]);
+    r(&["effort", "log", "A", "3H", "--dev", "alice"]);
+    r(&["effort", "log", "A", "2H", "--dev", "bob"]);
+    r(&["effort", "log", "A", "1.5H", "--dev", "alice"]);
+
+    let (stdout, _, ok) =
+        run(&dir, &["report", "effort"]);
+    assert!(ok, "report effort should succeed");
+
+    // Should show per-developer totals.
+    assert!(
+        stdout.contains("alice"),
+        "should list alice: {stdout}"
+    );
+    assert!(
+        stdout.contains("bob"),
+        "should list bob: {stdout}"
+    );
+    // alice: 3 + 1.5 = 4.5H
+    assert!(
+        stdout.contains("4.5"),
+        "alice should have 4.5H: {stdout}"
+    );
+    // bob: 2H
+    assert!(
+        stdout.contains("2.0"),
+        "bob should have 2.0H: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn report_effort_empty() {
+    let dir = temp_dir("report-effort-empty");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) =
+        run(&dir, &["report", "effort"]);
+    assert!(ok);
+    assert!(
+        stdout.contains("No effort"),
+        "should say no effort logged: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

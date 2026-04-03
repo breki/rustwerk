@@ -16,6 +16,7 @@ use batch::cmd_batch;
 use commands::{
     cmd_depend, cmd_dev_list, cmd_effort_estimate,
     cmd_effort_log, cmd_init, cmd_report_complete,
+    cmd_report_effort,
     cmd_show, cmd_task_add, cmd_task_assign,
     cmd_task_list, cmd_task_remove, cmd_task_status,
     cmd_task_unassign, cmd_task_update, cmd_undepend,
@@ -89,6 +90,8 @@ enum ReportAction {
     /// PM completion summary (counts, %, estimated vs
     /// actual effort, critical path).
     Complete,
+    /// Effort breakdown per developer.
+    Effort,
 }
 
 #[derive(Subcommand)]
@@ -304,6 +307,9 @@ fn main() -> Result<()> {
         Commands::Report { action } => match action {
             ReportAction::Complete => {
                 cmd_report_complete()
+            }
+            ReportAction::Effort => {
+                cmd_report_effort()
             }
         },
         Commands::Batch { file } => {
