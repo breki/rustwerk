@@ -19,7 +19,7 @@ use commands::{
     cmd_dev_add, cmd_dev_remove, cmd_effort_log,
     cmd_init, cmd_report_bottlenecks, cmd_report_complete,
     cmd_report_effort,
-    cmd_show, cmd_task_add, cmd_task_assign,
+    cmd_show, cmd_status, cmd_task_add, cmd_task_assign,
     cmd_task_list, cmd_task_remove, cmd_task_status,
     cmd_task_unassign, cmd_task_update, cmd_undepend,
 };
@@ -79,6 +79,8 @@ enum Commands {
         #[arg(long)]
         remaining: bool,
     },
+    /// Show compact project status dashboard.
+    Status,
     /// Show ASCII dependency tree.
     Tree {
         /// Show only remaining (not done/on-hold) tasks.
@@ -388,6 +390,7 @@ fn main() -> Result<()> {
         Commands::Gantt { remaining } => {
             cmd_gantt(remaining)
         }
+        Commands::Status => cmd_status(),
         Commands::Tree { remaining } => {
             tree::cmd_tree(remaining)
         }

@@ -46,6 +46,7 @@ critical path visibility, and a structured workflow.
 - [Developer Management](#developer-management)
 - [Dependencies](#dependencies)
 - [Effort Tracking](#effort-tracking)
+- [Project Status Dashboard](#project-status-dashboard)
 - [Dependency Tree](#dependency-tree)
 - [Gantt Chart](#gantt-chart)
   - [View Schedule](#view-schedule)
@@ -362,6 +363,35 @@ rustwerk effort log AUTH-LOGIN 1.5H --dev alice \
 ```
 
 The task must be IN_PROGRESS to log effort.
+
+## Project Status Dashboard
+
+```
+rustwerk status
+```
+
+Shows a compact project status overview:
+
+```
+MyProject
+[█████████████░░░░░░░] 65%
+
+  done            45
+  in-progress      1
+  todo            12
+  on-hold         11
+  total           69
+
+Active:
+  AUTH-LOGIN  (alice)
+
+3 bottlenecks
+Critical path: 5 tasks, 21 complexity
+```
+
+Includes completion bar, task counts by status, active
+tasks with assignees, bottleneck count, and remaining
+critical path length.
 
 ## Dependency Tree
 

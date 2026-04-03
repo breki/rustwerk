@@ -5,6 +5,24 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-046 — project.tasks[*id] panics on absent key
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.31.0 status command
+- **Resolution:** Changed to `.get(*id).and_then()` with
+  fallback for missing keys.
+
+### RT-045 — usize underflow if filled > bar_width
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.31.0 status command
+- **Description:** Floating-point rounding could make
+  `filled` exceed `bar_width`, causing usize underflow
+  in `bar_width - filled`.
+- **Resolution:** Added `.min(bar_width)` clamp.
+
 ### RT-044 — --status filter help text missing on-hold
 
 - **Date:** 2026-04-03

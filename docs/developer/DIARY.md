@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add `status` command for compact project dashboard (v0.31.0)
+
+    New `rustwerk status` top-level command shows a compact
+    project dashboard: completion bar, task counts by status,
+    active tasks with assignees, bottleneck count, and
+    remaining critical path length. Completes the CLI-VIZ
+    WBS task.
+
 - Add `tree` command for ASCII dependency tree (v0.30.0)
 
     New `rustwerk tree` command renders the dependency DAG

@@ -66,6 +66,99 @@ pub(super) fn cmd_show() -> Result<()> {
     Ok(())
 }
 
+/// Compact project status dashboard.
+pub(super) fn cmd_status() -> Result<()> {
+    let (_root, project) = load_project()?;
+    let s = project.summary();
+
+    // Completion bar.
+    let bar_width = 20;
+    let filled = if s.total > 0 {
+        (f64::from(s.done) / f64::from(s.total)
+            * bar_width as f64)
+            .round() as usize
+    } else {
+        0
+    }
+    .min(bar_width);
+    let empty = bar_width - filled;
+    let bar = format!(
+        "[{}{}] {:.0}%",
+        "\u{2588}".repeat(filled),
+        "\u{2591}".repeat(empty),
+        s.pct_complete,
+    );
+
+    println!("{}", project.metadata.name);
+    println!("{bar}");
+    println!();
+    println!(
+        "  {:<14} {:>3}",
+        "done", s.done
+    );
+    println!(
+        "  {:<14} {:>3}",
+        "in-progress", s.in_progress
+    );
+    println!(
+        "  {:<14} {:>3}",
+        "todo", s.todo
+    );
+    println!(
+        "  {:<14} {:>3}",
+        "blocked", s.blocked
+    );
+    if s.on_hold > 0 {
+        println!(
+            "  {:<14} {:>3}",
+            "on-hold", s.on_hold
+        );
+    }
+    println!(
+        "  {:<14} {:>3}",
+        "total", s.total
+    );
+
+    // Active tasks.
+    let active = project.active_tasks();
+    if !active.is_empty() {
+        println!();
+        println!("Active:");
+        for id in &active {
+            let assignee = project
+                .tasks
+                .get(*id)
+                .and_then(|t| t.assignee.as_deref())
+                .unwrap_or("-");
+            println!("  {id}  ({assignee})");
+        }
+    }
+
+    // Bottleneck count.
+    let bottlenecks = project.bottlenecks();
+    if !bottlenecks.is_empty() {
+        println!();
+        println!(
+            "{} bottleneck{}",
+            bottlenecks.len(),
+            if bottlenecks.len() == 1 { "" } else { "s" }
+        );
+    }
+
+    // Remaining critical path.
+    let (crit, crit_len) =
+        project.remaining_critical_path();
+    if !crit.is_empty() {
+        println!(
+            "Critical path: {} tasks, {} complexity",
+            crit.len(),
+            crit_len
+        );
+    }
+
+    Ok(())
+}
+
 pub(super) fn cmd_task_add(
     title: &str,
     id: Option<&str>,

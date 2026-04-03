@@ -1229,3 +1229,44 @@ fn tree_remaining_excludes_done() {
     assert!(stdout.contains("C"), "C present: {stdout}");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- status ---
+
+#[test]
+fn status_shows_dashboard() {
+    let dir = temp_dir("status-dashboard");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "A", "--id", "A"]);
+    run(&dir, &["task", "add", "B", "--id", "B"]);
+    run(&dir, &["task", "add", "C", "--id", "C"]);
+    run(&dir, &["task", "depend", "B", "A"]);
+    run(&dir, &["task", "status", "A", "in-progress"]);
+    let (stdout, _, ok) = run(&dir, &["status"]);
+    assert!(ok, "status should succeed");
+    // Should contain completion percentage.
+    assert!(stdout.contains('%'), "pct: {stdout}");
+    // Should contain task counts.
+    assert!(stdout.contains("done"), "done: {stdout}");
+    assert!(
+        stdout.contains("in-progress"),
+        "in-progress: {stdout}"
+    );
+    // Should mention active tasks.
+    assert!(stdout.contains("A"), "active task: {stdout}");
+    // Should mention bottleneck count.
+    assert!(
+        stdout.contains("bottleneck"),
+        "bottleneck: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn status_empty_project() {
+    let dir = temp_dir("status-empty");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) = run(&dir, &["status"]);
+    assert!(ok);
+    assert!(stdout.contains("0%"), "zero pct: {stdout}");
+    let _ = fs::remove_dir_all(&dir);
+}
