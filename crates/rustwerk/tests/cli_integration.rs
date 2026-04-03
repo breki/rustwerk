@@ -444,3 +444,198 @@ fn task_add_without_project_fails() {
     assert!(!ok);
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- gantt visual alignment ---
+
+/// Find the character (display) column of the first
+/// occurrence of `needle` in `s`. Returns `None` if not
+/// found.
+fn char_col(s: &str, needle: char) -> Option<usize> {
+    s.chars()
+        .enumerate()
+        .find(|(_, c)| *c == needle)
+        .map(|(i, _)| i)
+}
+
+/// Find all character columns where `needle` appears.
+fn char_cols(s: &str, needle: char) -> Vec<usize> {
+    s.chars()
+        .enumerate()
+        .filter(|(_, c)| *c == needle)
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// Find the last character column of `needle` in `s`.
+fn last_char_col(s: &str, needle: char) -> Option<usize> {
+    s.chars()
+        .enumerate()
+        .filter(|(_, c)| *c == needle)
+        .map(|(i, _)| i)
+        .last()
+}
+
+/// Set up a project with sequential tasks A(5) -> B(5)
+/// -> C(5), mark A done. Returns the temp dir.
+fn gantt_project_abc(name: &str) -> PathBuf {
+    let dir = temp_dir(name);
+    let bin = rustwerk_bin();
+    let r = |args: &[&str]| {
+        Command::new(&bin)
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("failed to run rustwerk");
+    };
+    r(&["init", "P"]);
+    r(&["task", "add", "A", "--id", "A", "--complexity", "5"]);
+    r(&["task", "add", "B", "--id", "B", "--complexity", "5"]);
+    r(&["task", "add", "C", "--id", "C", "--complexity", "5"]);
+    r(&["task", "depend", "B", "A"]);
+    r(&["task", "depend", "C", "B"]);
+    r(&["task", "status", "A", "in-progress"]);
+    r(&["task", "status", "A", "done"]);
+    dir
+}
+
+#[test]
+fn gantt_header_ticks_align_with_bars() {
+    let dir = gantt_project_abc("gantt-align");
+    let (stdout, _, ok) = run(&dir, &["gantt"]);
+    assert!(ok, "gantt should succeed");
+
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines.len() >= 5,
+        "expected header + 3 task rows, got {} lines",
+        lines.len()
+    );
+
+    // The header has tick numbers (line 0) and tick marks
+    // (line 1). Task bars follow. Tick positions in the
+    // header must align with the bar start positions.
+    //
+    // Task A starts at time 0, B at time 5, C at time 10.
+    // The tick mark `|` at time 5 must be in the same
+    // column as the left cap `▐` of task B's bar.
+    let tick_line = lines[1];
+    let bar_b_line = lines[3]; // A=line 2, B=line 3
+
+    // Find column of the second `|` (time 5 tick).
+    let tick_positions = char_cols(tick_line, '|');
+    assert!(
+        tick_positions.len() >= 2,
+        "expected at least 2 tick marks, got {:?}",
+        tick_positions
+    );
+    let tick5_col = tick_positions[1];
+
+    // Find column of B's left cap.
+    let b_cap_col = char_col(bar_b_line, '\u{2590}')
+        .expect("B's bar should have a left cap ▐");
+
+    assert_eq!(
+        tick5_col, b_cap_col,
+        "tick at time 5 (col {}) must align with B's \
+         bar start (col {})",
+        tick5_col, b_cap_col
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gantt_bars_use_unicode_blocks() {
+    let dir = gantt_project_abc("gantt-unicode");
+    let (stdout, _, ok) = run(&dir, &["gantt"]);
+    assert!(ok);
+
+    let lines: Vec<&str> = stdout.lines().collect();
+    let bar_a = lines[2]; // A is done
+    let bar_b = lines[3]; // B is todo
+
+    // Done bars use full block █.
+    assert!(
+        bar_a.contains('\u{2588}'),
+        "done bar should contain █, got: {bar_a}"
+    );
+    // Todo bars use light shade ░.
+    assert!(
+        bar_b.contains('\u{2591}'),
+        "todo bar should contain ░, got: {bar_b}"
+    );
+    // All bars have left cap ▐ and right cap ▌.
+    assert!(
+        bar_a.contains('\u{2590}') && bar_a.contains('\u{258C}'),
+        "bar should have caps ▐▌, got: {bar_a}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gantt_consecutive_bars_dont_overlap() {
+    let dir = gantt_project_abc("gantt-no-overlap");
+    let (stdout, _, ok) = run(&dir, &["gantt"]);
+    assert!(ok);
+
+    let lines: Vec<&str> = stdout.lines().collect();
+    let bar_a = lines[2];
+    let bar_b = lines[3];
+
+    // A's right cap ▌ must be at a column strictly before
+    // B's left cap ▐ (bars must not overlap or touch with
+    // no gap).
+    let a_end_col = last_char_col(bar_a, '\u{258C}')
+        .expect("A should have right cap ▌");
+
+    let b_start_col = char_col(bar_b, '\u{2590}')
+        .expect("B should have left cap ▐");
+
+    assert!(
+        a_end_col < b_start_col,
+        "A's right cap (col {a_end_col}) must be before \
+         B's left cap (col {b_start_col})"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gantt_id_column_aligned() {
+    let dir = temp_dir("gantt-id-align");
+    let bin = rustwerk_bin();
+    let r = |args: &[&str]| {
+        Command::new(&bin)
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("failed to run rustwerk");
+    };
+    r(&["init", "P"]);
+    r(&["task", "add", "Short", "--id", "AB", "--complexity", "3"]);
+    r(&["task", "add", "Longer name", "--id", "ABCDEFGHIJ", "--complexity", "3"]);
+    let (stdout, _, ok) = run(&dir, &["gantt"]);
+    assert!(ok);
+
+    let lines: Vec<&str> = stdout.lines().collect();
+    // Skip header (2 lines), check task rows.
+    let row1 = lines[2];
+    let row2 = lines[3];
+
+    // Both bars' left caps should be in the same column
+    // (IDs are padded to the same width).
+    let cap1_col = char_col(row1, '\u{2590}')
+        .expect("row1 should have left cap");
+    let cap2_col = char_col(row2, '\u{2590}')
+        .expect("row2 should have left cap");
+
+    assert_eq!(
+        cap1_col, cap2_col,
+        "bars should start at the same column regardless \
+         of ID length (got {} vs {})",
+        cap1_col, cap2_col
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

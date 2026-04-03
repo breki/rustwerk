@@ -845,11 +845,9 @@ fn render_gantt(
 
     // Compute scale factor for terminal width.
     let label_width = id_width + 2; // marker + id + space
-    let bracket_width = 2; // [ and ]
     let tw = terminal_width;
     let bar_area = tw
         .saturating_sub(label_width)
-        .saturating_sub(bracket_width)
         .saturating_sub(1); // trailing newline margin
     let scale_factor = if max_end == 0 {
         1.0
@@ -906,25 +904,27 @@ fn render_gantt(
         let fill_ch = row.fill_char();
         let empty_ch = row.empty_char();
 
-        // Scale positions.
+        // Scale positions. The total bar width includes
+        // left and right caps (2 chars), so the body is
+        // the remainder.
         let s_start = scale_pos(row.start, scale_factor);
-        let s_filled = if filled > 0 {
-            scale_min1(filled, scale_factor)
+        let s_total =
+            scale_min1(row.width, scale_factor).max(2);
+        let s_body = s_total - 2; // room for caps
+        let (s_filled, s_empty) = if s_body == 0 {
+            (0, 0)
+        } else if filled == 0 {
+            (0, s_body)
+        } else if empty == 0 {
+            (s_body, 0)
         } else {
-            0
+            let sf = (f64::from(filled)
+                / f64::from(filled + empty)
+                * s_body as f64)
+                .round() as usize;
+            let sf = sf.clamp(1, s_body - 1);
+            (sf, s_body - sf)
         };
-        let s_empty = if empty > 0 {
-            scale_min1(empty, scale_factor)
-        } else {
-            0
-        };
-        // Ensure total bar width is at least 1.
-        let (s_filled, s_empty) =
-            if s_filled + s_empty == 0 {
-                (1, 0)
-            } else {
-                (s_filled, s_empty)
-            };
 
         // Color the bar based on status.
         let (bar_color, id_style) = if color {

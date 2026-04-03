@@ -7,6 +7,15 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Fix Gantt chart alignment and bar overlap (v0.17.1)
+
+    Three bugs fixed: (1) `TaskId::Display` didn't forward
+    format specifiers, causing ID column padding to be ignored
+    and bars to start at wrong columns. (2) Bar caps were added
+    outside the scaled width, causing consecutive bars to overlap
+    by 1 column. (3) Header tick marks were misaligned with bar
+    positions. Added 4 visual integration tests for Gantt layout.
+
 - Upgrade Gantt bars to Unicode blocks with caps (v0.17.0)
 
     Gantt bars now use Unicode block characters instead of ASCII:
