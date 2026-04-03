@@ -6,6 +6,17 @@ findings.
 
 ---
 
+### AQ-010 — `left_cap` and `right_cap` are constants disguised as methods
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.17.0 VIZ-UNICODE
+- **Description:** `left_cap()` and `right_cap()` took
+  `&self` but returned the same character regardless of
+  status, implying per-row variation that didn't exist.
+- **Resolution:** Converted to associated constants
+  `GanttRow::LEFT_CAP` and `GanttRow::RIGHT_CAP`.
+
 ### AQ-009 — Gantt rendering not testable; coupled to terminal
 
 - **Date:** 2026-04-03

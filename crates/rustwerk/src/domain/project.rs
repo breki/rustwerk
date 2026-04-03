@@ -859,18 +859,27 @@ impl GanttRow {
         }
     }
 
-    /// Fill character for the "done" portion of the bar.
+    /// Left cap character for the bar.
+    pub const LEFT_CAP: char = '\u{2590}'; // ▐
+
+    /// Right cap character for the bar.
+    pub const RIGHT_CAP: char = '\u{258C}'; // ▌
+
+    /// Fill character for the completed portion of the bar.
     pub fn fill_char(&self) -> char {
         match self.status {
-            Status::Done | Status::InProgress => '#',
-            Status::Blocked => '!',
-            Status::Todo => '.',
+            Status::Done => '\u{2588}',    // █
+            Status::Blocked => '\u{2592}', // ▒
+            Status::InProgress => '\u{2593}', // ▓
+            // bar_fill() returns filled=0 for Todo, so this
+            // is only reached if bar_fill logic changes.
+            Status::Todo => '\u{2591}', // ░
         }
     }
 
-    /// Fill character for the "remaining" portion.
+    /// Fill character for the remaining portion of the bar.
     pub fn empty_char(&self) -> char {
-        '.'
+        '\u{2591}' // ░
     }
 }
 
@@ -1824,5 +1833,60 @@ mod tests {
             d.specialties,
             vec!["rust", "cli"]
         );
+    }
+
+    // --- GanttRow Unicode rendering tests ---
+
+    fn gantt_row(
+        status: Status,
+        width: u32,
+    ) -> GanttRow {
+        GanttRow {
+            id: TaskId::new("T").unwrap(),
+            start: 0,
+            width,
+            status,
+            critical: false,
+        }
+    }
+
+    #[test]
+    fn fill_char_done_is_full_block() {
+        let row = gantt_row(Status::Done, 5);
+        assert_eq!(row.fill_char(), '\u{2588}'); // █
+    }
+
+    #[test]
+    fn fill_char_in_progress_is_dark_shade() {
+        let row = gantt_row(Status::InProgress, 5);
+        assert_eq!(row.fill_char(), '\u{2593}'); // ▓
+    }
+
+    #[test]
+    fn fill_char_blocked_is_medium_shade() {
+        let row = gantt_row(Status::Blocked, 5);
+        assert_eq!(row.fill_char(), '\u{2592}'); // ▒
+    }
+
+    #[test]
+    fn fill_char_todo_is_light_shade() {
+        let row = gantt_row(Status::Todo, 5);
+        assert_eq!(row.fill_char(), '\u{2591}'); // ░
+    }
+
+    #[test]
+    fn empty_char_is_light_shade() {
+        let row = gantt_row(Status::Todo, 5);
+        assert_eq!(row.empty_char(), '\u{2591}'); // ░
+    }
+
+    #[test]
+    fn left_cap_is_right_half_block() {
+        assert_eq!(GanttRow::LEFT_CAP, '\u{2590}'); // ▐
+    }
+
+    #[test]
+    fn right_cap_is_left_half_block() {
+        assert_eq!(GanttRow::RIGHT_CAP, '\u{258C}'); // ▌
     }
 }

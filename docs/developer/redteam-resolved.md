@@ -5,6 +5,30 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-032 — `fill_char` for Todo is unreachable dead code
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.17.0 VIZ-UNICODE
+- **Description:** For `Status::Todo`, `bar_fill()` always
+  returns `(0, width)` — zero filled chars. So the
+  `Status::Todo` arm in `fill_char()` is never used in
+  practice.
+- **Resolution:** Added defensive comment explaining the arm
+  is only reached if `bar_fill` logic changes.
+
+### RT-031 — Blocked and Done bars indistinguishable without color
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.17.0 VIZ-UNICODE
+- **Description:** `fill_char()` returned `█` (U+2588)
+  for both `Done` and `Blocked`. In non-color mode (piped
+  output, `NO_COLOR`), blocked and done tasks were visually
+  identical.
+- **Resolution:** Changed `Blocked` fill to `▒` (U+2592,
+  medium shade), restoring visual distinction without color.
+
 ### RT-030 — `scale(start=0)` returns 1, misaligning root tasks
 
 - **Date:** 2026-04-03

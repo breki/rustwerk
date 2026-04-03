@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
-use rustwerk::domain::project::Project;
+use rustwerk::domain::project::{GanttRow, Project};
 use rustwerk::domain::task::{
     Effort, EffortEntry, Status, Task, TaskId,
 };
@@ -818,7 +818,7 @@ const FALLBACK_WIDTH: usize = 80;
 /// Render a Gantt chart to stdout. Separated from
 /// `cmd_gantt` for testability.
 fn render_gantt(
-    rows: &[rustwerk::domain::project::GanttRow],
+    rows: &[GanttRow],
     terminal_width: usize,
     color: bool,
 ) {
@@ -952,12 +952,15 @@ fn render_gantt(
         let empty_str: String =
             std::iter::repeat_n(empty_ch, s_empty)
                 .collect();
+        let left_cap = GanttRow::LEFT_CAP;
+        let right_cap = GanttRow::RIGHT_CAP;
 
         let padding = " ".repeat(s_start);
         print!(
             "{crit_style}{marker}{rst}\
              {id_style}{:<width$}{rst} \
-             {padding}{bar_color}[{filled_str}{empty_str}]\
+             {padding}{bar_color}\
+             {left_cap}{filled_str}{empty_str}{right_cap}\
              {rst}",
             row.id,
             width = id_width,

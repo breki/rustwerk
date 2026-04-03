@@ -7,6 +7,15 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Upgrade Gantt bars to Unicode blocks with caps (v0.17.0)
+
+    Gantt bars now use Unicode block characters instead of ASCII:
+    `█` (full block) for done/blocked, `▓` (dark shade) for
+    in-progress filled portion, `░` (light shade) for remaining/todo.
+    Bar brackets `[]` replaced with half-block caps `▐` `▌` for a
+    polished look. New `left_cap()` and `right_cap()` methods on
+    `GanttRow`. 7 new tests for character selection.
+
 - Add terminal-width-aware Gantt scaling (v0.16.0)
 
     `rustwerk gantt` now detects terminal width via the `terminal_size`
