@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T12:22:59.290744900Z"
+    "modified_at": "2026-04-03T12:26:55.366122Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -235,7 +235,7 @@
     },
     "DOC-MANUAL": {
       "title": "End-user manual (docs/manual.md)",
-      "status": "todo",
+      "status": "done",
       "complexity": 8
     },
     "DOM-ADD": {
