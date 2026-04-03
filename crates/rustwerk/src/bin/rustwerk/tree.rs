@@ -1,5 +1,5 @@
 use std::env;
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal, Write};
 
 use anyhow::Result;
 
@@ -20,7 +20,7 @@ mod ansi {
 
 /// Check whether color output is enabled.
 fn use_color() -> bool {
-    std::io::stdout().is_terminal()
+    io::stdout().is_terminal()
         && env::var_os("NO_COLOR").is_none()
 }
 
@@ -53,53 +53,65 @@ pub(super) fn cmd_tree(remaining: bool) -> Result<()> {
     } else {
         project.task_tree()
     };
-    render_tree(&project.metadata.name, &nodes, use_color());
+    let mut out = io::stdout().lock();
+    render_tree(
+        &mut out,
+        &project.metadata.name,
+        &nodes,
+        use_color(),
+    );
     Ok(())
 }
 
-/// Render the dependency tree to stdout.
+/// Render the dependency tree to a writer.
 fn render_tree(
+    w: &mut dyn Write,
     name: &str,
     nodes: &[TreeNode],
     color: bool,
 ) {
     let bold = if color { ansi::BOLD } else { "" };
     let rst = if color { ansi::RESET } else { "" };
-    println!("{bold}{name}{rst}");
+    let _ = writeln!(w, "{bold}{name}{rst}");
 
     if nodes.is_empty() {
-        println!("  (no tasks)");
+        let _ = writeln!(w, "  (no tasks)");
         return;
     }
 
     for (i, node) in nodes.iter().enumerate() {
         let is_last = i == nodes.len() - 1;
-        render_node(node, "", is_last, color);
+        render_node(w, node, "", is_last, color);
     }
 }
 
 /// Render a single tree node and its children.
 fn render_node(
+    w: &mut dyn Write,
     node: &TreeNode,
     prefix: &str,
     is_last: bool,
     color: bool,
 ) {
-    let connector =
-        if is_last { "\u{2514}\u{2500}\u{2500} " }
-        else { "\u{251C}\u{2500}\u{2500} " };
-    // └──  and  ├──
+    let connector = if is_last {
+        "\u{2514}\u{2500}\u{2500} " // └──
+    } else {
+        "\u{251C}\u{2500}\u{2500} " // ├──
+    };
 
     let rst = if color { ansi::RESET } else { "" };
 
     match node {
         TreeNode::Reference { id, status } => {
             let ch = status_char(*status);
-            let style =
-                if color { status_style(*status) } else { "" };
-            let dim =
-                if color { ansi::DIM } else { "" };
-            println!(
+            let style = if color {
+                status_style(*status)
+            } else {
+                ""
+            };
+            let dim = if color { ansi::DIM } else { "" };
+            let _ = writeln!(
+                w,
                 "{prefix}{connector}\
                  {style}[{ch}]{rst} \
                  {dim}{id} \u{2192} (see above){rst}"
@@ -111,9 +123,13 @@ fn render_node(
             children,
         } => {
             let ch = status_char(*status);
-            let style =
-                if color { status_style(*status) } else { "" };
-            println!(
+            let style = if color {
+                status_style(*status)
+            } else {
+                ""
+            };
+            let _ = writeln!(
+                w,
                 "{prefix}{connector}\
                  {style}[{ch}]{rst} {style}{id}{rst}"
             );
@@ -121,14 +137,14 @@ fn render_node(
             let child_prefix = if is_last {
                 format!("{prefix}    ")
             } else {
-                format!("{prefix}\u{2502}   ")
-                // │
+                format!("{prefix}\u{2502}   ") // │
             };
 
             for (j, child) in children.iter().enumerate() {
                 let child_is_last =
                     j == children.len() - 1;
                 render_node(
+                    w,
                     child,
                     &child_prefix,
                     child_is_last,
@@ -165,15 +181,25 @@ mod tests {
 
     #[test]
     fn render_empty_shows_no_tasks() {
-        render_tree("Test", &[], false);
-        // No panic — prints "(no tasks)"
+        let mut buf = Vec::new();
+        render_tree(&mut buf, "Test", &[], false);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("Test"));
+        assert!(out.contains("(no tasks)"));
     }
 
     #[test]
     fn render_single_task() {
         let nodes =
             vec![task_node("A", Status::Todo, vec![])];
-        render_tree("Test", &nodes, false);
+        let mut buf = Vec::new();
+        render_tree(&mut buf, "Test", &nodes, false);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("A"), "output: {out}");
+        assert!(
+            out.contains("[ ]"),
+            "todo indicator: {out}"
+        );
     }
 
     #[test]
@@ -183,7 +209,13 @@ mod tests {
             Status::Done,
             vec![ref_node("B", Status::Todo)],
         )];
-        render_tree("Test", &nodes, false);
+        let mut buf = Vec::new();
+        render_tree(&mut buf, "Test", &nodes, false);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains("see above"),
+            "reference: {out}"
+        );
     }
 
     #[test]
@@ -200,7 +232,50 @@ mod tests {
             ),
             task_node("C", Status::Blocked, vec![]),
         ];
-        render_tree("Test", &nodes, true);
+        let mut buf = Vec::new();
+        render_tree(&mut buf, "Test", &nodes, true);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains(ansi::GREEN),
+            "green for done: {out}"
+        );
+        assert!(
+            out.contains(ansi::RED),
+            "red for blocked: {out}"
+        );
+    }
+
+    #[test]
+    fn render_box_drawing_chars() {
+        let nodes = vec![
+            task_node(
+                "A",
+                Status::Todo,
+                vec![task_node(
+                    "B",
+                    Status::Todo,
+                    vec![],
+                )],
+            ),
+            task_node("C", Status::Todo, vec![]),
+        ];
+        let mut buf = Vec::new();
+        render_tree(&mut buf, "P", &nodes, false);
+        let out = String::from_utf8(buf).unwrap();
+        // ├── for non-last, └── for last
+        assert!(
+            out.contains('\u{251C}'),
+            "branch: {out}"
+        );
+        assert!(
+            out.contains('\u{2514}'),
+            "corner: {out}"
+        );
+        // │ for continuation
+        assert!(
+            out.contains('\u{2502}'),
+            "vertical: {out}"
+        );
     }
 
     #[test]

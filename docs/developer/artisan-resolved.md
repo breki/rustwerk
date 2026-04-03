@@ -6,6 +6,36 @@ findings.
 
 ---
 
+### AQ-026 — render_tree writes to stdout, not testable
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.30.0 tree command
+- **Resolution:** Changed `render_tree`/`render_node` to
+  accept `&mut dyn Write`. Tests now capture output into
+  `Vec<u8>` and assert content. Added `render_box_drawing`
+  test verifying ├── └── │ characters.
+
+### AQ-025 — build_tree duplicates reverse_dependents
+
+- **Date:** 2026-04-03
+- **Category:** Abstraction Boundaries
+- **Commit context:** v0.30.0 tree command
+- **Resolution:** `build_tree` now calls
+  `self.reverse_dependents()` and filters/sorts the result
+  instead of building its own map. Made
+  `reverse_dependents` `pub(super)`.
+
+### AQ-024 — scheduling.rs now 1,609 lines
+
+- **Date:** 2026-04-03
+- **Category:** Module Size
+- **Commit context:** v0.30.0 tree command
+- **Resolution:** Extracted `task_tree()`,
+  `task_tree_remaining()`, `build_tree()`, and
+  `build_subtree()` into new `domain/project/tree.rs`
+  module with their tests. scheduling.rs: 1,609→1,335.
+
 ### AQ-023 — Bottleneck report mislabels ON_HOLD as ready/blocked
 
 - **Date:** 2026-04-03

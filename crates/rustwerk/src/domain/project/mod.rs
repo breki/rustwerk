@@ -1,6 +1,7 @@
 mod gantt_row;
 mod scheduling;
 mod summary;
+mod tree;
 mod tree_node;
 
 pub use gantt_row::GanttRow;
