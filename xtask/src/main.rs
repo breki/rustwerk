@@ -133,6 +133,7 @@ fn run_coverage() -> Result<(), String> {
     );
 
     // Per-file summary.
+    let mut below_threshold = Vec::new();
     if let Some(files) =
         json["data"][0]["files"].as_array()
     {
@@ -148,8 +149,13 @@ fn run_coverage() -> Result<(), String> {
                 .rsplit_once("src\\")
                 .or_else(|| name.rsplit_once("src/"))
                 .map_or(name, |(_, rest)| rest);
-            let marker =
-                if pct < COVERAGE_THRESHOLD { "!" } else { " " };
+            let marker = if pct < COVERAGE_THRESHOLD {
+                below_threshold
+                    .push((short.to_string(), pct));
+                "!"
+            } else {
+                " "
+            };
             println!("  {marker} {short:<50} {pct:>5.1}%");
         }
     }
@@ -159,6 +165,16 @@ fn run_coverage() -> Result<(), String> {
             "coverage {line_pct:.1}% is below \
              {COVERAGE_THRESHOLD}% threshold"
         ))
+    } else if !below_threshold.is_empty() {
+        let mut msg = String::from(
+            "modules below coverage threshold:",
+        );
+        for (name, pct) in &below_threshold {
+            msg.push_str(&format!(
+                "\n    {name}: {pct:.1}%"
+            ));
+        }
+        Err(msg)
     } else {
         println!(
             "  coverage OK ({line_pct:.1}% >= \

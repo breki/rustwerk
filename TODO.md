@@ -1,9 +1,15 @@
 # TODO
 
+- Regarding git-related tasks: describe to me in detail what each of these 
+  tasks would try to accomplish. I'm still considering the proper approach
+  with regard to git workflows - for example, what if the projec spans 
+  multiple git repositories? Or if we want to support both git and non-git workflows?
 - Can we use a proper TUI for walking the Gantt chart, so it would look
   something like Superfile or lazygit?
 - Investigate whether JSON is really the best format for the project file - 
   where and how to store a more complex task descriptions?
+- Add missing batch commands: dev.add, dev.remove (developer CRUD needed for
+  batch project setup)
 
 ## Done
 

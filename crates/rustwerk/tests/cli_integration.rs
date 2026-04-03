@@ -375,6 +375,51 @@ fn task_list_combined_filters() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn task_list_chain_unknown_task_fails() {
+    let dir = temp_dir("list-chain-unknown");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "A", "--id", "A"]);
+    let (_, stderr, ok) =
+        run(&dir, &["task", "list", "--chain", "NOPE"]);
+    assert!(!ok, "should fail for unknown task");
+    assert!(stderr.contains("not found"), "stderr: {stderr}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_list_no_matching_tasks() {
+    let dir = temp_dir("list-no-match");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "A", "--id", "A"]);
+    let (stdout, _, ok) =
+        run(&dir, &["task", "list", "--status", "done"]);
+    assert!(ok);
+    assert!(
+        stdout.contains("No matching tasks"),
+        "stdout: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_list_status_conflicts_with_available() {
+    let dir = temp_dir("list-conflict");
+    run(&dir, &["init", "P"]);
+    let (_, _, ok) = run(
+        &dir,
+        &[
+            "task", "list", "--available",
+            "--status", "done",
+        ],
+    );
+    assert!(
+        !ok,
+        "--available and --status should conflict"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // --- depend / undepend ---
 
 #[test]

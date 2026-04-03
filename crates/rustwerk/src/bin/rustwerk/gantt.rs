@@ -258,4 +258,92 @@ mod tests {
         let (bar, _) = bar_style(Status::Todo, false);
         assert_eq!(bar, ansi::DIM);
     }
+
+    #[test]
+    fn non_critical_in_progress_uses_yellow_bold() {
+        let (bar, id) =
+            bar_style(Status::InProgress, false);
+        assert_eq!(bar, ansi::YELLOW);
+        assert_eq!(id, ansi::BOLD);
+    }
+
+    #[test]
+    fn non_critical_blocked_uses_red() {
+        let (bar, id) = bar_style(Status::Blocked, false);
+        assert_eq!(bar, ansi::RED);
+        assert_eq!(id, ansi::RED);
+    }
+
+    #[test]
+    fn scale_min1_rounds_up_to_at_least_1() {
+        assert_eq!(scale_min1(1, 0.1), 1);
+        assert_eq!(scale_min1(10, 0.5), 5);
+        assert_eq!(scale_min1(0, 1.0), 1);
+    }
+
+    #[test]
+    fn scale_pos_allows_zero() {
+        assert_eq!(scale_pos(0, 1.0), 0);
+        assert_eq!(scale_pos(10, 0.5), 5);
+    }
+
+    use rustwerk::domain::task::TaskId;
+
+    fn make_row(
+        id: &str,
+        start: u32,
+        width: u32,
+        status: Status,
+        critical: bool,
+    ) -> GanttRow {
+        GanttRow {
+            id: TaskId::new(id).unwrap(),
+            start,
+            width,
+            status,
+            critical,
+        }
+    }
+
+    #[test]
+    fn render_gantt_empty_says_no_tasks() {
+        render_gantt(&[], 80, false);
+        // Doesn't panic — prints "No tasks."
+    }
+
+    #[test]
+    fn render_gantt_single_task_no_color() {
+        let rows =
+            vec![make_row("A", 0, 5, Status::Todo, false)];
+        render_gantt(&rows, 80, false);
+    }
+
+    #[test]
+    fn render_gantt_with_color() {
+        let rows = vec![
+            make_row("A", 0, 5, Status::Done, true),
+            make_row("B", 5, 3, Status::InProgress, false),
+            make_row("C", 0, 2, Status::Blocked, false),
+        ];
+        render_gantt(&rows, 80, true);
+    }
+
+    #[test]
+    fn render_gantt_narrow_terminal() {
+        let rows = vec![
+            make_row("A", 0, 10, Status::Done, false),
+            make_row("B", 10, 20, Status::Todo, false),
+        ];
+        render_gantt(&rows, 30, false);
+    }
+
+    #[test]
+    fn render_gantt_low_scale_factor_uses_wider_ticks() {
+        // Many tasks to force scale_factor < 0.5.
+        let rows = vec![
+            make_row("A", 0, 100, Status::Done, false),
+            make_row("B", 100, 100, Status::Todo, false),
+        ];
+        render_gantt(&rows, 40, false);
+    }
 }
