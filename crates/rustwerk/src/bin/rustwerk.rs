@@ -448,6 +448,16 @@ fn cmd_task_list(
 
     let crit = project.remaining_critical_path_set();
 
+    // Compute column widths from the data.
+    let id_width = project
+        .tasks
+        .keys()
+        .map(|id| id.as_str().len())
+        .max()
+        .unwrap_or(8)
+        .max(8);
+
+
     if available_only {
         let avail = project.available_tasks();
         if avail.is_empty() {
@@ -464,8 +474,10 @@ fn cmd_task_list(
             let marker =
                 if crit.contains(*id) { "*" } else { " " };
             println!(
-                " {marker}{id:<16} {}{complexity}",
+                " {marker}{:<iw$} {}{complexity}",
+                id.as_str(),
                 task.title,
+                iw = id_width,
             );
         }
     } else if active_only {
@@ -484,8 +496,10 @@ fn cmd_task_list(
             let marker =
                 if crit.contains(*id) { "*" } else { " " };
             println!(
-                " {marker}{id:<16} {}{complexity}",
+                " {marker}{:<iw$} {}{complexity}",
+                id.as_str(),
                 task.title,
+                iw = id_width,
             );
         }
     } else {
@@ -498,8 +512,11 @@ fn cmd_task_list(
             let marker =
                 if crit.contains(id) { "*" } else { " " };
             println!(
-                " {marker}{id:<16} {:<14} {}{complexity}",
-                task.status, task.title,
+                " {marker}{:<iw$} {:<14} {}{complexity}",
+                id.as_str(),
+                task.status,
+                task.title,
+                iw = id_width,
             );
         }
     }
