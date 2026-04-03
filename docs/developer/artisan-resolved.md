@@ -6,6 +6,17 @@ findings.
 
 ---
 
+### AQ-020 — scheduling.rs exceeds 500-line module-size rule
+
+- **Date:** 2026-04-03
+- **Category:** Module Size
+- **Commit context:** v0.30.0 tree command
+- **Resolution:** Split scheduling.rs (1,335 lines) into
+  five focused modules: `queries.rs` (361), `critical_path.rs`
+  (308), `bottleneck.rs` (257), `gantt_schedule.rs` (277),
+  `scheduling.rs` (247, kept topo sort + summary). All
+  modules now under 400 lines.
+
 ### AQ-026 — render_tree writes to stdout, not testable
 
 - **Date:** 2026-04-03

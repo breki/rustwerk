@@ -1,11 +1,15 @@
+mod bottleneck;
+mod critical_path;
 mod gantt_row;
+mod gantt_schedule;
+mod queries;
 mod scheduling;
 mod summary;
 mod tree;
 mod tree_node;
 
+pub use bottleneck::Bottleneck;
 pub use gantt_row::GanttRow;
-pub use scheduling::Bottleneck;
 pub use summary::ProjectSummary;
 pub use tree_node::TreeNode;
 
