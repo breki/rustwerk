@@ -20,7 +20,7 @@ multiple_crate_versions = "allow"
 
 [[bin]]
 name = "rustwerk"
-path = "src/bin/rustwerk.rs"
+path = "src/bin/rustwerk/main.rs"
 
 [dependencies]
 anyhow = "1"

@@ -6,6 +6,21 @@ findings.
 
 ---
 
+### AQ-011 — Module size: `project.rs` and `rustwerk.rs`
+
+- **Date:** 2026-04-03
+- **Category:** Module Size
+- **Commit context:** refactor split
+- **Description:** `project.rs` (1892 lines) and
+  `rustwerk.rs` (1529 lines) both exceeded the 500-line
+  production code threshold.
+- **Resolution:** Split `project.rs` into
+  `project/mod.rs` (449 prod) + `project/scheduling.rs`
+  (467 prod). Split `rustwerk.rs` into
+  `rustwerk/main.rs` (295) + `commands.rs` (362) +
+  `batch.rs` (326) + `gantt.rs` (213). All production
+  files now under 500 lines.
+
 ### AQ-010 — `left_cap` and `right_cap` are constants disguised as methods
 
 - **Date:** 2026-04-03
