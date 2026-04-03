@@ -837,8 +837,7 @@ fn render_gantt(
     let scale_factor = if max_end == 0 {
         1.0
     } else {
-        let f = bar_area as f64 / f64::from(max_end);
-        f.min(1.0) // never stretch beyond 1:1
+        bar_area as f64 / f64::from(max_end)
     };
 
     let scaled_max = scale_pos(max_end, scale_factor);
