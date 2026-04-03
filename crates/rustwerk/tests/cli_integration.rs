@@ -215,9 +215,42 @@ fn task_assign_and_unassign() {
     let dir = temp_dir("assign");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
+    // Register developer via batch (no `dev add` CLI yet).
+    let output = Command::new(rustwerk_bin())
+        .args(["batch"])
+        .current_dir(&dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .and_then(|mut child| {
+            use std::io::Write;
+            let stdin = child.stdin.as_mut().unwrap();
+            // Use a dummy "dev.add" — but batch doesn't
+            // support that yet. Instead, hand-edit the
+            // project.json to add a developer.
+            stdin.write_all(b"[]").unwrap();
+            child.wait_with_output()
+        })
+        .expect("batch failed");
+    assert!(output.status.success());
+    // Hand-add the developer to the project file.
+    let proj_path =
+        dir.join(".rustwerk").join("project.json");
+    let json = fs::read_to_string(&proj_path).unwrap();
+    let mut proj: serde_json::Value =
+        serde_json::from_str(&json).unwrap();
+    proj["developers"] = serde_json::json!({
+        "alice": {"name": "Alice"}
+    });
+    fs::write(
+        &proj_path,
+        serde_json::to_string_pretty(&proj).unwrap(),
+    )
+    .unwrap();
     let (stdout, _, ok) =
         run(&dir, &["task", "assign", "A", "alice"]);
-    assert!(ok);
+    assert!(ok, "assign should succeed");
     assert!(stdout.contains("alice"));
     let (stdout, _, ok) =
         run(&dir, &["task", "unassign", "A"]);

@@ -6,6 +6,19 @@ findings.
 
 ---
 
+### AQ-007 — Task::assignee stringly-typed, no referential integrity
+
+- **Date:** 2026-04-03
+- **Category:** Type Safety
+- **Commit context:** DEV-ASSIGN WBS task
+- **Description:** `assign()` accepted raw `&str`, tasks
+  could reference non-existent developers, case mismatches
+  bypassed the `remove_developer` guard.
+- **Fix:** `assign()` now takes `&DeveloperId`, validates
+  against `self.developers`. Unregistered developers are
+  rejected with `DeveloperNotFound`.
+- **Resolved:** 2026-04-03
+
 ### AQ-008 — Developer errors reuse `ValidationError`
 
 - **Date:** 2026-04-03

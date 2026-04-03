@@ -291,14 +291,17 @@ fn cmd_task_add(
 }
 
 fn cmd_task_assign(id: &str, to: &str) -> Result<()> {
+    use rustwerk::domain::developer::DeveloperId;
     let (root, mut project) = load_project()?;
     let task_id = TaskId::new(id)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let dev_id = DeveloperId::new(to)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     project
-        .assign(&task_id, to)
+        .assign(&task_id, &dev_id)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     save_project(&root, &project)?;
-    println!("{task_id}: assigned to {to}");
+    println!("{task_id}: assigned to {dev_id}");
     Ok(())
 }
 
@@ -650,6 +653,7 @@ fn execute_one(
             Ok(format!("{task_id}: {new_status}"))
         }
         "task.assign" => {
+            use rustwerk::domain::developer::DeveloperId;
             let id = args["id"]
                 .as_str()
                 .context("task.assign requires 'id'")?;
@@ -658,10 +662,12 @@ fn execute_one(
                 .context("task.assign requires 'to'")?;
             let task_id = TaskId::new(id)
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
-            project
-                .assign(&task_id, to)
+            let dev_id = DeveloperId::new(to)
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
-            Ok(format!("{task_id}: assigned to {to}"))
+            project
+                .assign(&task_id, &dev_id)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            Ok(format!("{task_id}: assigned to {dev_id}"))
         }
         "task.unassign" => {
             let id = args["id"]
@@ -1035,6 +1041,15 @@ mod tests {
         Project::new("Test").unwrap()
     }
 
+    fn add_test_dev(p: &mut Project, id: &str) {
+        use rustwerk::domain::developer::{
+            Developer, DeveloperId,
+        };
+        let dev_id = DeveloperId::new(id).unwrap();
+        let dev = Developer::new(id).unwrap();
+        let _ = p.add_developer(dev_id, dev);
+    }
+
     // --- parse_status ---
 
     #[test]
@@ -1250,6 +1265,7 @@ mod tests {
     #[test]
     fn batch_task_assign() {
         let mut p = test_project();
+        add_test_dev(&mut p, "alice");
         p.add_task(
             TaskId::new("A").unwrap(),
             Task::new("X").unwrap(),
@@ -1269,13 +1285,19 @@ mod tests {
     #[test]
     fn batch_task_unassign() {
         let mut p = test_project();
+        add_test_dev(&mut p, "bob");
         p.add_task(
             TaskId::new("A").unwrap(),
             Task::new("X").unwrap(),
         )
         .unwrap();
-        p.assign(&TaskId::new("A").unwrap(), "bob")
-            .unwrap();
+        {
+            use rustwerk::domain::developer::DeveloperId;
+            let dev =
+                DeveloperId::new("bob").unwrap();
+            p.assign(&TaskId::new("A").unwrap(), &dev)
+                .unwrap();
+        }
         let cmd = BatchCommand {
             command: "task.unassign".into(),
             args: serde_json::json!({"id": "A"}),

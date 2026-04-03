@@ -192,23 +192,25 @@ impl Project {
         Ok(())
     }
 
-    /// Assign a developer to a task.
+    /// Assign a registered developer to a task.
+    /// The developer must exist in the project's
+    /// developer registry.
     pub fn assign(
         &mut self,
         id: &TaskId,
-        assignee: &str,
+        developer_id: &DeveloperId,
     ) -> Result<(), DomainError> {
-        let assignee = assignee.trim();
-        if assignee.is_empty() {
-            return Err(DomainError::ValidationError(
-                "assignee must not be empty".into(),
+        if !self.developers.contains_key(developer_id) {
+            return Err(DomainError::DeveloperNotFound(
+                developer_id.to_string(),
             ));
         }
         let task =
             self.tasks.get_mut(id).ok_or_else(|| {
                 DomainError::TaskNotFound(id.to_string())
             })?;
-        task.assignee = Some(assignee.to_string());
+        task.assignee =
+            Some(developer_id.as_str().to_string());
         self.metadata.modified_at = Utc::now();
         Ok(())
     }
@@ -942,10 +944,20 @@ mod tests {
         );
     }
 
+    /// Helper to add a developer to a test project.
+    fn add_dev(p: &mut Project, id: &str, name: &str) {
+        let dev_id = DeveloperId::new(id).unwrap();
+        let dev = Developer::new(name).unwrap();
+        p.add_developer(dev_id, dev).unwrap();
+    }
+
     #[test]
     fn assign_task() {
         let (mut p, ids) = project_with_tasks(&["A"]);
-        p.assign(&ids[0], "alice").unwrap();
+        add_dev(&mut p, "alice", "Alice");
+        let dev =
+            DeveloperId::new("alice").unwrap();
+        p.assign(&ids[0], &dev).unwrap();
         assert_eq!(
             p.tasks.get(&ids[0]).unwrap().assignee.as_deref(),
             Some("alice")
@@ -953,33 +965,30 @@ mod tests {
     }
 
     #[test]
-    fn assign_trims_whitespace() {
+    fn assign_unregistered_developer_rejected() {
         let (mut p, ids) = project_with_tasks(&["A"]);
-        p.assign(&ids[0], "  bob  ").unwrap();
-        assert_eq!(
-            p.tasks.get(&ids[0]).unwrap().assignee.as_deref(),
-            Some("bob")
-        );
-    }
-
-    #[test]
-    fn assign_empty_rejected() {
-        let (mut p, ids) = project_with_tasks(&["A"]);
-        assert!(p.assign(&ids[0], "").is_err());
-        assert!(p.assign(&ids[0], "   ").is_err());
+        let dev =
+            DeveloperId::new("ghost").unwrap();
+        assert!(p.assign(&ids[0], &dev).is_err());
     }
 
     #[test]
     fn assign_nonexistent_task_errors() {
         let (mut p, _) = project_with_tasks(&["A"]);
+        add_dev(&mut p, "alice", "Alice");
         let id = TaskId::new("NOPE").unwrap();
-        assert!(p.assign(&id, "alice").is_err());
+        let dev =
+            DeveloperId::new("alice").unwrap();
+        assert!(p.assign(&id, &dev).is_err());
     }
 
     #[test]
     fn unassign_task() {
         let (mut p, ids) = project_with_tasks(&["A"]);
-        p.assign(&ids[0], "alice").unwrap();
+        add_dev(&mut p, "alice", "Alice");
+        let dev =
+            DeveloperId::new("alice").unwrap();
+        p.assign(&ids[0], &dev).unwrap();
         p.unassign(&ids[0]).unwrap();
         assert!(
             p.tasks.get(&ids[0]).unwrap().assignee.is_none()
@@ -1658,7 +1667,7 @@ mod tests {
             Developer::new("Igor").unwrap(),
         )
         .unwrap();
-        p.assign(&ids[0], "igor").unwrap();
+        p.assign(&ids[0], &dev_id).unwrap();
         let result = p.remove_developer(&dev_id);
         assert!(result.is_err());
     }

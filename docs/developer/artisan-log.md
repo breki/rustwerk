@@ -11,21 +11,6 @@ Artisan review is required before continuing feature work.
 
 ---
 
-### AQ-007 — Task::assignee is stringly-typed, no referential integrity
-
-- **Date:** 2026-04-03
-- **Category:** Type Safety
-- **Commit context:** v0.15.0 Developer domain type
-- **Description:** `Task::assignee` is `Option<String>`
-  while `DeveloperId` exists as a validated type. `assign()`
-  accepts raw `&str` — tasks can reference non-existent
-  developers, and case mismatches bypass the
-  `remove_developer` guard.
-- **Impact:** Phantom assignments, bypassed removal guards.
-- **Suggested fix:** This is the DEV-ASSIGN WBS task —
-  change `assignee` to `DeveloperId` and validate against
-  `self.developers`.
-
 ### AQ-001 — Silent complexity fallback masks unscored tasks
 
 - **Date:** 2026-04-03
