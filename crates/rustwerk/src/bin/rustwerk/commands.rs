@@ -326,38 +326,45 @@ pub(super) fn cmd_task_list(
     Ok(())
 }
 
-pub(super) fn cmd_depend(
+/// Shared logic for depend/undepend commands.
+fn modify_dependency(
     from: &str,
     to: &str,
+    add: bool,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
     let from_id = TaskId::new(from)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let to_id = TaskId::new(to)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
-    project
-        .add_dependency(&from_id, &to_id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    save_project(&root, &project)?;
-    println!("{from_id} depends on {to_id}");
+    if add {
+        project
+            .add_dependency(&from_id, &to_id)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        save_project(&root, &project)?;
+        println!("{from_id} depends on {to_id}");
+    } else {
+        project
+            .remove_dependency(&from_id, &to_id)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        save_project(&root, &project)?;
+        println!("Removed: {from_id} depends on {to_id}");
+    }
     Ok(())
+}
+
+pub(super) fn cmd_depend(
+    from: &str,
+    to: &str,
+) -> Result<()> {
+    modify_dependency(from, to, true)
 }
 
 pub(super) fn cmd_undepend(
     from: &str,
     to: &str,
 ) -> Result<()> {
-    let (root, mut project) = load_project()?;
-    let from_id = TaskId::new(from)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    let to_id = TaskId::new(to)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    project
-        .remove_dependency(&from_id, &to_id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    save_project(&root, &project)?;
-    println!("Removed: {from_id} depends on {to_id}");
-    Ok(())
+    modify_dependency(from, to, false)
 }
 
 #[cfg(test)]

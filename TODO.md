@@ -1,5 +1,8 @@
 # TODO
 
+- Gantt chart command should render tasks on the critical path in a different 
+  color (e.g. red) to highlight bottlenecks.
+- Gantt chart command should offer an option to only show tasks that are not done.
 - Can we use a proper TUI for walking the Gantt chart, so it would look
   something like Superfile or lazygit?
 - Investigate whether JSON is really the best format for the project file - 
