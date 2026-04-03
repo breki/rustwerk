@@ -50,6 +50,8 @@ enum Commands {
         #[arg(long)]
         file: Option<String>,
     },
+    /// Show ASCII Gantt chart of task schedule.
+    Gantt,
 }
 
 #[derive(Subcommand)]
@@ -258,7 +260,10 @@ fn cmd_task_add(
     let mut task = Task::new(title)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     task.description = desc.map(String::from);
-    task.complexity = complexity;
+    if let Some(c) = complexity {
+        task.set_complexity(c)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+    }
     if let Some(e) = effort {
         task.effort_estimate = Some(
             Effort::parse(e)
@@ -541,7 +546,8 @@ fn execute_one(
                     .map_err(|_| anyhow::anyhow!(
                         "complexity value too large: {c}"
                     ))?;
-                task.complexity = Some(c);
+                task.set_complexity(c)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
             }
             if let Some(e) = args.get("effort").and_then(|v| v.as_str()) {
                 task.effort_estimate = Some(
@@ -729,6 +735,76 @@ const MAX_BATCH_BYTES: u64 = 10 * 1024 * 1024;
 /// Maximum number of commands in a single batch.
 const MAX_BATCH_COMMANDS: usize = 1000;
 
+fn cmd_gantt() -> Result<()> {
+    let (_root, project) = load_project()?;
+    let rows = project.gantt_schedule();
+
+    if rows.is_empty() {
+        println!("No tasks.");
+        return Ok(());
+    }
+
+    let max_end = rows
+        .iter()
+        .map(|r| r.end())
+        .max()
+        .unwrap_or(0);
+
+    // Find the longest ID for padding.
+    let id_width = rows
+        .iter()
+        .map(|r| r.id.as_str().len())
+        .max()
+        .unwrap_or(8)
+        .max(8);
+
+    // Header with scale.
+    let label_width = id_width + 2; // marker + id + space
+    print!("{:width$}", "", width = label_width);
+    for i in (0..max_end).step_by(5) {
+        print!("{i:<5}");
+    }
+    println!();
+    print!("{:width$}", "", width = label_width);
+    for i in 0..max_end {
+        if i % 5 == 0 {
+            print!("|");
+        } else {
+            print!(" ");
+        }
+    }
+    println!();
+
+    // Rows — bar rendering uses domain methods.
+    for row in &rows {
+        let marker =
+            if row.critical { "*" } else { " " };
+        let (filled, empty) = row.bar_fill();
+        let fill_ch = row.fill_char();
+        let empty_ch = row.empty_char();
+        let bar = format!(
+            "{}{}",
+            std::iter::repeat_n(fill_ch, filled as usize)
+                .collect::<String>(),
+            std::iter::repeat_n(
+                empty_ch, empty as usize
+            )
+            .collect::<String>(),
+        );
+
+        let padding =
+            " ".repeat(row.start as usize);
+        print!(
+            "{marker}{:<width$} {padding}[{bar}]",
+            row.id,
+            width = id_width,
+        );
+        println!();
+    }
+
+    Ok(())
+}
+
 fn cmd_batch(file: Option<&str>) -> Result<()> {
     let json = if let Some(path) = file {
         std::fs::read_to_string(path)
@@ -859,6 +935,7 @@ fn main() -> Result<()> {
         Commands::Batch { file } => {
             cmd_batch(file.as_deref())
         }
+        Commands::Gantt => cmd_gantt(),
         Commands::Effort { action } => match action {
             EffortAction::Log {
                 id,

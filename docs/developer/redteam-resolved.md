@@ -5,6 +5,30 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-025 — Unbounded complexity causes OOM in Gantt
+
+- **Date:** 2026-04-03
+- **Category:** Security/DoS
+- **Commit context:** v0.13.0 Gantt chart
+- **Description:** No upper bound on complexity. Large
+  values cause `" ".repeat()` to allocate gigabytes in
+  the Gantt renderer.
+- **Fix:** Added `Task::set_complexity` validating
+  1..=1000. Applied in CLI, batch, and WBS import.
+- **Resolved:** 2026-04-03
+
+### RT-023 — Zero complexity accepted, corrupts schedule
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.13.0 Gantt chart
+- **Description:** `complexity: 0` passed through
+  `unwrap_or(1)` only for `None`, not `Some(0)`.
+  Zero-width bars broke chart layout and critical path.
+- **Fix:** `set_complexity` rejects 0. Validated in all
+  input paths.
+- **Resolved:** 2026-04-03
+
 ### RT-022 — Unbounded WBS import array (DoS)
 
 - **Date:** 2026-04-03

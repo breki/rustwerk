@@ -7,6 +7,16 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add ASCII Gantt chart command (v0.13.0)
+
+    `rustwerk gantt` renders a dependency-aware Gantt chart. Tasks
+    positioned by topological sort — start column = max(end of deps).
+    Bar width = complexity score. Fill shows status: `#` done, `#.`
+    in-progress, `.` todo, `!` blocked. Critical path tasks marked
+    with `*`. Scale header with column markers every 5 units.
+    `gantt_schedule()` on `Project` returns `Vec<GanttRow>`. 6 new
+    tests.
+
 - Add WBS import/export schema for AI agents (v0.12.0)
 
     New `ai::wbs_schema` module with `WbsTaskEntry` struct for

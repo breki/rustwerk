@@ -579,6 +579,103 @@ impl Project {
             total_complexity,
         }
     }
+
+    /// Compute Gantt chart schedule. Returns rows sorted
+    /// by start position then task ID.
+    pub fn gantt_schedule(&self) -> Vec<GanttRow> {
+        use std::collections::HashMap;
+
+        let order = self.topological_sort();
+        let crit = self.critical_path_set();
+        let mut end_at: HashMap<&TaskId, u32> =
+            HashMap::new();
+        let mut rows = Vec::new();
+
+        for id in &order {
+            let task = &self.tasks[id];
+            let width = task.complexity.unwrap_or(1);
+
+            // Start after all dependencies finish.
+            let start = task
+                .dependencies
+                .iter()
+                .filter_map(|dep| end_at.get(dep))
+                .copied()
+                .max()
+                .unwrap_or(0);
+            let end = start + width;
+            end_at.insert(id, end);
+
+            rows.push(GanttRow {
+                id: id.clone(),
+                start,
+                width,
+                status: task.status,
+                critical: crit.contains(id),
+            });
+        }
+
+        // Sort by start position, then by ID.
+        rows.sort_by(|a, b| {
+            a.start
+                .cmp(&b.start)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+
+        rows
+    }
+}
+
+/// A row in the Gantt chart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GanttRow {
+    /// Task ID.
+    pub id: TaskId,
+    /// Start column (complexity units from time 0).
+    pub start: u32,
+    /// Bar width (complexity).
+    pub width: u32,
+    /// Task status.
+    pub status: Status,
+    /// Whether this task is on the critical path.
+    pub critical: bool,
+}
+
+impl GanttRow {
+    /// End column (start + width).
+    pub fn end(&self) -> u32 {
+        self.start + self.width
+    }
+
+    /// Bar fill characters: (filled_count, empty_count).
+    /// Done = all filled, Todo = all empty, InProgress =
+    /// half-filled, Blocked = all filled with `!`.
+    pub fn bar_fill(&self) -> (u32, u32) {
+        match self.status {
+            Status::Done => (self.width, 0),
+            Status::Blocked => (self.width, 0),
+            Status::InProgress if self.width > 1 => {
+                let done = self.width / 2;
+                (done, self.width - done)
+            }
+            Status::InProgress => (0, self.width),
+            Status::Todo => (0, self.width),
+        }
+    }
+
+    /// Fill character for the "done" portion of the bar.
+    pub fn fill_char(&self) -> char {
+        match self.status {
+            Status::Done | Status::InProgress => '#',
+            Status::Blocked => '!',
+            Status::Todo => '.',
+        }
+    }
+
+    /// Fill character for the "remaining" portion.
+    pub fn empty_char(&self) -> char {
+        '.'
+    }
 }
 
 /// Summary of project status.
@@ -1320,5 +1417,89 @@ mod tests {
                 < f64::EPSILON
         );
         assert_eq!(s.total_complexity, 5);
+    }
+
+    #[test]
+    fn gantt_single_task() {
+        let (p, _) = project_with_tasks(&["A"]);
+        let rows = p.gantt_schedule();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].start, 0);
+        assert_eq!(rows[0].width, 1); // default complexity
+    }
+
+    #[test]
+    fn gantt_sequential_tasks() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity =
+            Some(3);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity =
+            Some(2);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        let rows = p.gantt_schedule();
+        let a = rows.iter().find(|r| r.id == ids[0]).unwrap();
+        let b = rows.iter().find(|r| r.id == ids[1]).unwrap();
+        assert_eq!(a.start, 0);
+        assert_eq!(a.width, 3);
+        assert_eq!(b.start, 3); // starts after A ends
+        assert_eq!(b.width, 2);
+    }
+
+    #[test]
+    fn gantt_parallel_tasks() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity =
+            Some(5);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity =
+            Some(3);
+        // No dependencies — both start at 0.
+        let rows = p.gantt_schedule();
+        assert_eq!(rows[0].start, 0);
+        assert_eq!(rows[1].start, 0);
+    }
+
+    #[test]
+    fn gantt_diamond() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B", "C"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity =
+            Some(5);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity =
+            Some(2);
+        p.tasks.get_mut(&ids[2]).unwrap().complexity =
+            Some(3);
+        // C depends on A and B.
+        p.add_dependency(&ids[2], &ids[0]).unwrap();
+        p.add_dependency(&ids[2], &ids[1]).unwrap();
+        let rows = p.gantt_schedule();
+        let c = rows
+            .iter()
+            .find(|r| r.id == ids[2])
+            .unwrap();
+        // C starts after the longer dep (A=5).
+        assert_eq!(c.start, 5);
+    }
+
+    #[test]
+    fn gantt_marks_critical_path() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity =
+            Some(5);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity =
+            Some(3);
+        p.add_dependency(&ids[1], &ids[0]).unwrap();
+        let rows = p.gantt_schedule();
+        // Both are on the critical path (only chain).
+        assert!(rows.iter().all(|r| r.critical));
+    }
+
+    #[test]
+    fn gantt_empty_project() {
+        let p = Project::new("Empty").unwrap();
+        let rows = p.gantt_schedule();
+        assert!(rows.is_empty());
     }
 }

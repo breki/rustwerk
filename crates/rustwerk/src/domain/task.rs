@@ -283,6 +283,27 @@ pub struct Task {
 }
 
 impl Task {
+    /// Maximum allowed complexity value.
+    pub const MAX_COMPLEXITY: u32 = 1000;
+
+    /// Set complexity, validating the range (1..=1000).
+    pub fn set_complexity(
+        &mut self,
+        value: u32,
+    ) -> Result<(), DomainError> {
+        if value == 0 || value > Self::MAX_COMPLEXITY {
+            return Err(DomainError::ValidationError(
+                format!(
+                    "complexity must be between 1 and {} \
+                     (got {value})",
+                    Self::MAX_COMPLEXITY
+                ),
+            ));
+        }
+        self.complexity = Some(value);
+        Ok(())
+    }
+
     /// Total logged effort in hours across all entries.
     pub fn total_actual_effort_hours(&self) -> f64 {
         self.effort_entries

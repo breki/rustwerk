@@ -4,12 +4,28 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-023
+**Next ID:** RT-026
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
 
 ---
+
+### RT-024 — Cyclic graph in hand-edited JSON causes panic
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.13.0 Gantt chart
+- **Description:** `topological_sort` silently returns
+  fewer tasks when cycles exist in hand-edited JSON
+  (runtime `add_dependency` prevents cycles but there's
+  no validation on load). `critical_path` then panics
+  accessing `dist[other_id]` for tasks not in the
+  topological order.
+- **Impact:** Hard crash on `rustwerk gantt` or
+  `rustwerk task list` with corrupted project file.
+- **Suggested fix:** Validate graph on load, or check
+  `order.len() == tasks.len()` after topological sort.
 
 ### RT-014 — Batch `--file` reads any path (path traversal)
 

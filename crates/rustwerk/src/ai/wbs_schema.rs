@@ -165,7 +165,9 @@ fn import_inner(
         }
         let mut task = Task::new(&entry.title)?;
         task.description = entry.description.clone();
-        task.complexity = entry.complexity;
+        if let Some(c) = entry.complexity {
+            task.set_complexity(c)?;
+        }
         if let Some(e) = &entry.effort_estimate {
             task.effort_estimate =
                 Some(Effort::parse(e)?);
