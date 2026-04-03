@@ -6,6 +6,20 @@ findings.
 
 ---
 
+### AQ-005 — `--active` output missing critical-path marker
+
+- **Date:** 2026-04-03
+- **Category:** Consistency / Abstraction
+- **Commit context:** v0.13.1 available/active fix
+- **Description:** `--available` showed `*` for critical
+  path tasks but `--active` used a hardcoded two-space
+  indent. In-progress tasks on the critical path are the
+  most schedule-sensitive — dropping the marker misleads
+  prioritization.
+- **Fix:** Applied same `crit.contains(*id)` marker logic
+  to the active branch.
+- **Resolved:** 2026-04-03
+
 ### AQ-004 — Missing end() accessor on GanttRow
 
 - **Date:** 2026-04-03

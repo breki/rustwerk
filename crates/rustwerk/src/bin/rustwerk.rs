@@ -114,6 +114,9 @@ enum TaskAction {
         /// dependencies done, not itself done).
         #[arg(long)]
         available: bool,
+        /// Show only tasks currently in progress.
+        #[arg(long, conflicts_with = "available")]
+        active: bool,
     },
     /// Remove a task.
     Remove {
@@ -430,7 +433,10 @@ fn cmd_task_status(
 // project.json could contain ANSI escape sequences that
 // affect terminal rendering. Sanitization should be added
 // before this is used in untrusted environments.
-fn cmd_task_list(available_only: bool) -> Result<()> {
+fn cmd_task_list(
+    available_only: bool,
+    active_only: bool,
+) -> Result<()> {
     let (_root, project) = load_project()?;
     if project.tasks.is_empty() {
         println!("No tasks.");
@@ -446,6 +452,26 @@ fn cmd_task_list(available_only: bool) -> Result<()> {
             return Ok(());
         }
         for id in &avail {
+            let task = &project.tasks[*id];
+            let complexity = task
+                .complexity
+                .map_or(String::new(), |c| {
+                    format!(" [{c}]")
+                });
+            let marker =
+                if crit.contains(*id) { "*" } else { " " };
+            println!(
+                " {marker}{id:<16} {}{complexity}",
+                task.title,
+            );
+        }
+    } else if active_only {
+        let active = project.active_tasks();
+        if active.is_empty() {
+            println!("No active tasks.");
+            return Ok(());
+        }
+        for id in &active {
             let task = &project.tasks[*id];
             let complexity = task
                 .complexity
@@ -922,8 +948,8 @@ fn main() -> Result<()> {
                     desc.as_deref(),
                 )
             }
-            TaskAction::List { available } => {
-                cmd_task_list(available)
+            TaskAction::List { available, active } => {
+                cmd_task_list(available, active)
             }
             TaskAction::Depend { from, to } => {
                 cmd_depend(&from, &to)

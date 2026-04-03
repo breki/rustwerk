@@ -5,6 +5,20 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-026 — `--available --active` silently ignores `--active`
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.13.1 available/active fix
+- **Description:** Both `--available` and `--active` could
+  be passed simultaneously. The `if/else if` chain silently
+  honoured `--available` and dropped `--active` with no
+  error. An AI agent calling programmatically had no way
+  to detect the misuse.
+- **Fix:** Added `#[arg(conflicts_with = "available")]` on
+  `active` so clap rejects the combination at parse time.
+- **Resolved:** 2026-04-03
+
 ### RT-025 — Unbounded complexity causes OOM in Gantt
 
 - **Date:** 2026-04-03

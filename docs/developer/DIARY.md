@@ -7,6 +7,13 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Fix `--available` to show TODO only, add `--active` flag (v0.13.1)
+
+    `task list --available` now shows only TODO tasks whose deps are
+    all done (previously included IN_PROGRESS). New `task list --active`
+    shows only IN_PROGRESS tasks. `active_tasks()` query on `Project`.
+    3 new tests.
+
 - Add ASCII Gantt chart command (v0.13.0)
 
     `rustwerk gantt` renders a dependency-aware Gantt chart. Tasks

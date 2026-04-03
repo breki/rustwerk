@@ -516,12 +516,13 @@ impl Project {
         path.into_iter().collect()
     }
 
-    /// Return task IDs whose dependencies are all done.
+    /// Return task IDs that are ready to start: status is
+    /// TODO and all dependencies are done.
     pub fn available_tasks(&self) -> Vec<&TaskId> {
         self.tasks
             .iter()
             .filter(|(_, task)| {
-                task.status != Status::Done
+                task.status == Status::Todo
                     && task.dependencies.iter().all(|dep| {
                         self.tasks
                             .get(dep)
@@ -529,6 +530,17 @@ impl Project {
                                 t.status == Status::Done
                             })
                     })
+            })
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    /// Return task IDs that are currently in progress.
+    pub fn active_tasks(&self) -> Vec<&TaskId> {
+        self.tasks
+            .iter()
+            .filter(|(_, task)| {
+                task.status == Status::InProgress
             })
             .map(|(id, _)| id)
             .collect()
@@ -1236,6 +1248,32 @@ mod tests {
         p.set_status(&ids[0], Status::Done, false).unwrap();
         let avail = p.available_tasks();
         assert!(avail.is_empty());
+    }
+
+    #[test]
+    fn available_tasks_excludes_in_progress() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        let avail = p.available_tasks();
+        assert!(avail.is_empty());
+    }
+
+    #[test]
+    fn active_tasks_returns_in_progress() {
+        let (mut p, ids) =
+            project_with_tasks(&["A", "B"]);
+        p.set_status(&ids[0], Status::InProgress, false)
+            .unwrap();
+        let active = p.active_tasks();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].as_str(), "A");
+    }
+
+    #[test]
+    fn active_tasks_empty_when_none_in_progress() {
+        let (p, _) = project_with_tasks(&["A", "B"]);
+        assert!(p.active_tasks().is_empty());
     }
 
     #[test]
