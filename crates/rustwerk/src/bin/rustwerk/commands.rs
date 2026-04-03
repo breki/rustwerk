@@ -40,8 +40,9 @@ pub(super) fn cmd_show() -> Result<()> {
     println!();
     println!(
         "Tasks:    {} total  ({} done, {} in-progress, \
-         {} todo, {} blocked)",
-        s.total, s.done, s.in_progress, s.todo, s.blocked
+         {} todo, {} blocked, {} on-hold)",
+        s.total, s.done, s.in_progress, s.todo, s.blocked,
+        s.on_hold
     );
     println!("Complete: {:.0}%", s.pct_complete);
     if s.total_complexity > 0 {
@@ -489,6 +490,7 @@ pub(super) fn cmd_report_complete() -> Result<()> {
     println!("  Done:        {:>3}", s.done);
     println!("  In Progress: {:>3}", s.in_progress);
     println!("  Blocked:     {:>3}", s.blocked);
+    println!("  On Hold:     {:>3}", s.on_hold);
     println!("  Todo:        {:>3}", s.todo);
     println!("  Total:       {:>3}", s.total);
 
@@ -630,6 +632,10 @@ pub(super) fn cmd_report_bottlenecks() -> Result<()> {
             == rustwerk::domain::task::Status::InProgress
         {
             "in progress"
+        } else if bn.status
+            == rustwerk::domain::task::Status::OnHold
+        {
+            "on hold"
         } else if bn.ready {
             "ready"
         } else {
@@ -680,6 +686,18 @@ mod tests {
         assert_eq!(
             parse_status("TODO").unwrap(),
             Status::Todo
+        );
+        assert_eq!(
+            parse_status("on-hold").unwrap(),
+            Status::OnHold
+        );
+        assert_eq!(
+            parse_status("on_hold").unwrap(),
+            Status::OnHold
+        );
+        assert_eq!(
+            parse_status("onhold").unwrap(),
+            Status::OnHold
         );
     }
 

@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T16:28:24.559783100Z"
+    "modified_at": "2026-04-03T16:57:20.906128Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -327,7 +327,7 @@
     },
     "GIT-ATOMIC": {
       "title": "Atomic commit and push with rollback",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "GIT-SWITCH"
       ],
@@ -335,7 +335,7 @@
     },
     "GIT-CONFLICT": {
       "title": "Conflict resolution (pull --rebase)",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "GIT-ATOMIC"
       ],
@@ -343,12 +343,12 @@
     },
     "GIT-CTX": {
       "title": "Git context detection (current branch, is-main)",
-      "status": "todo",
+      "status": "on_hold",
       "complexity": 3
     },
     "GIT-SWITCH": {
       "title": "Stash + branch switch (RAII context manager)",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "GIT-CTX"
       ],
@@ -356,7 +356,7 @@
     },
     "GIT-WIRE": {
       "title": "Wire git into mutating CLI commands",
-      "status": "todo",
+      "status": "on_hold",
       "dependencies": [
         "GIT-ATOMIC",
         "CLI-TASK"

@@ -7,6 +7,17 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add ON_HOLD task status (v0.29.0)
+
+    New `Status::OnHold` variant for intentionally deferred
+    tasks. Valid transitions: TODO→ON_HOLD, IN_PROGRESS→
+    ON_HOLD, ON_HOLD→TODO, ON_HOLD→IN_PROGRESS. On-hold
+    tasks are excluded from `available_tasks()`,
+    `gantt --remaining`, and the remaining critical path.
+    They render as dim in Gantt charts and appear in
+    summary/report counts with a dedicated label. Phase 5
+    git tasks marked on-hold pending workflow design.
+
 - Add task list filters: status, assignee, chain (v0.28.0)
 
     New `--status`, `--assignee`, and `--chain` flags on

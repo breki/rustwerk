@@ -5,6 +5,46 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-044 — --status filter help text missing on-hold
+
+- **Date:** 2026-04-03
+- **Category:** Cosmetic
+- **Commit context:** v0.29.0 ON_HOLD status
+- **Resolution:** Updated help text in List command's
+  `--status` arg to include `on-hold`.
+
+### RT-043 — Tasks depending on ON_HOLD show as dep-blocked
+
+- **Date:** 2026-04-03
+- **Category:** Correctness (Low)
+- **Commit context:** v0.29.0 ON_HOLD status
+- **Description:** `dep_blocked_tasks` flags TODO tasks
+  with non-Done deps, so ON_HOLD deps trigger blocking.
+- **Resolution:** Kept as correct behavior — an on-hold
+  dep IS incomplete. No code change needed.
+
+### RT-042 — Missing OnHold → InProgress transition
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.29.0 ON_HOLD status
+- **Description:** No direct `OnHold → InProgress` path
+  forced unnecessary roundtrip through TODO.
+- **Resolution:** Added `(OnHold, InProgress)` transition.
+
+### RT-041 — ON_HOLD tasks pollute remaining critical path
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.29.0 ON_HOLD status
+- **Description:** `remaining_critical_path` and
+  `gantt_schedule_remaining` filtered `!= Done`, so
+  ON_HOLD tasks appeared as active work on critical path
+  and in `gantt --remaining`.
+- **Resolution:** Added `&& status != OnHold` filter to
+  both methods. ON_HOLD deps treated as satisfied in
+  remaining schedule.
+
 ### RT-039 — --assignee case-sensitive with no normalization
 
 - **Date:** 2026-04-03

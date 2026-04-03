@@ -33,7 +33,7 @@ impl GanttRow {
                 (done, self.width - done)
             }
             Status::InProgress => (0, self.width),
-            Status::Todo => (0, self.width),
+            Status::Todo | Status::OnHold => (0, self.width),
         }
     }
 
@@ -49,9 +49,9 @@ impl GanttRow {
             Status::Done => '\u{2588}',    // █
             Status::Blocked => '\u{2592}', // ▒
             Status::InProgress => '\u{2593}', // ▓
-            // bar_fill() returns filled=0 for Todo, so this
-            // is only reached if bar_fill logic changes.
-            Status::Todo => '\u{2591}', // ░
+            // bar_fill() returns filled=0 for Todo/OnHold,
+            // so this is only reached if bar_fill changes.
+            Status::Todo | Status::OnHold => '\u{2591}', // ░
         }
     }
 

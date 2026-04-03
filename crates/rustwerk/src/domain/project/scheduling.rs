@@ -147,17 +147,20 @@ impl Project {
         (path, max_dist)
     }
 
-    /// Compute the critical path considering only tasks
-    /// that are not done. This shows the longest remaining
-    /// chain of work.
+    /// Compute the critical path considering only active
+    /// tasks (excludes Done and OnHold). This shows the
+    /// longest remaining chain of work.
     pub fn remaining_critical_path(
         &self,
     ) -> (Vec<TaskId>, u32) {
-        // Filter to undone tasks only.
+        // Filter to active tasks (not done, not on hold).
         let undone: std::collections::BTreeMap<&TaskId, &Task> =
             self.tasks
                 .iter()
-                .filter(|(_, t)| t.status != Status::Done)
+                .filter(|(_, t)| {
+                    t.status != Status::Done
+                        && t.status != Status::OnHold
+                })
                 .collect();
 
         if undone.is_empty() {
@@ -519,6 +522,7 @@ impl Project {
         let mut in_progress = 0u32;
         let mut blocked = 0u32;
         let mut done = 0u32;
+        let mut on_hold = 0u32;
         let mut total_estimated_hours = 0.0_f64;
         let mut total_actual_hours = 0.0_f64;
         let mut total_complexity = 0u32;
@@ -529,6 +533,7 @@ impl Project {
                 Status::InProgress => in_progress += 1,
                 Status::Blocked => blocked += 1,
                 Status::Done => done += 1,
+                Status::OnHold => on_hold += 1,
             }
             if let Some(est) = &task.effort_estimate {
                 total_estimated_hours += est.to_hours();
@@ -553,6 +558,7 @@ impl Project {
             in_progress,
             blocked,
             done,
+            on_hold,
             pct_complete,
             total_estimated_hours,
             total_actual_hours,
@@ -618,14 +624,16 @@ impl Project {
 
         for id in &order {
             let task = &self.tasks[id];
-            if task.status == Status::Done {
+            if task.status == Status::Done
+                || task.status == Status::OnHold
+            {
                 continue;
             }
             let width = task.complexity.unwrap_or(1);
 
-            // Start after undone dependencies finish.
-            // Done dependencies are ignored (already
-            // satisfied).
+            // Start after active dependencies finish.
+            // Done and OnHold dependencies are ignored
+            // (satisfied or deferred).
             let start = task
                 .dependencies
                 .iter()
@@ -634,6 +642,8 @@ impl Project {
                         .get(*dep)
                         .is_some_and(|t| {
                             t.status != Status::Done
+                                && t.status
+                                    != Status::OnHold
                         })
                 })
                 .filter_map(|dep| end_at.get(dep))

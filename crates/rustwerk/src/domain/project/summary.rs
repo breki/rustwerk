@@ -11,6 +11,8 @@ pub struct ProjectSummary {
     pub blocked: u32,
     /// Tasks in DONE status.
     pub done: u32,
+    /// Tasks in ON_HOLD status.
+    pub on_hold: u32,
     /// Percentage complete (done/total * 100).
     pub pct_complete: f64,
     /// Sum of all effort estimates in hours.

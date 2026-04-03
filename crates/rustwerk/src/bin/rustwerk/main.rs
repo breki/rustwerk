@@ -163,7 +163,8 @@ enum TaskAction {
     Status {
         /// Task ID.
         id: String,
-        /// New status: todo, in-progress, blocked, done.
+        /// New status: todo, in-progress, blocked, done,
+        /// on-hold.
         status: String,
         /// Bypass transition validation.
         #[arg(long)]
@@ -179,7 +180,7 @@ enum TaskAction {
         #[arg(long, conflicts_with = "available")]
         active: bool,
         /// Filter by status (todo, in-progress, blocked,
-        /// done).
+        /// done, on-hold).
         #[arg(long, conflicts_with_all = ["available", "active"])]
         status: Option<String>,
         /// Filter by assignee developer ID.
@@ -278,9 +279,12 @@ pub(crate) fn parse_status(s: &str) -> Result<Status> {
         }
         "blocked" => Ok(Status::Blocked),
         "done" => Ok(Status::Done),
+        "on-hold" | "on_hold" | "onhold" => {
+            Ok(Status::OnHold)
+        }
         _ => bail!(
             "unknown status: {s} (expected: todo, \
-             in-progress, blocked, done)"
+             in-progress, blocked, done, on-hold)"
         ),
     }
 }

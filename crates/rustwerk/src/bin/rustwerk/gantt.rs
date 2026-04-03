@@ -66,7 +66,7 @@ fn bar_style(
                 (ansi::YELLOW, ansi::BOLD)
             }
             Status::Blocked => (ansi::RED, ansi::RED),
-            Status::Todo => (ansi::DIM, ""),
+            Status::Todo | Status::OnHold => (ansi::DIM, ""),
         }
     }
 }

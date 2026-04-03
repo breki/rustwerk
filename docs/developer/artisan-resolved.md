@@ -6,6 +6,25 @@ findings.
 
 ---
 
+### AQ-023 — Bottleneck report mislabels ON_HOLD as ready/blocked
+
+- **Date:** 2026-04-03
+- **Category:** Type Safety
+- **Commit context:** v0.29.0 ON_HOLD status
+- **Description:** Bottleneck state label used if/else
+  chain that would label ON_HOLD tasks as "ready" or
+  "blocked" instead of "on hold".
+- **Resolution:** Added explicit `Status::OnHold` branch
+  returning "on hold" label.
+
+### AQ-022 — Missing OnHold → InProgress transition
+
+- **Date:** 2026-04-03
+- **Category:** API Design
+- **Commit context:** v0.29.0 ON_HOLD status
+- **Description:** Duplicate of RT-042.
+- **Resolution:** Fixed under RT-042.
+
 ### AQ-021 — O(V+E) full-graph sort in dependency_chain
 
 - **Date:** 2026-04-03

@@ -203,7 +203,7 @@ Filters:
   dependencies done, task is TODO).
 - `--active` — Show only tasks currently in progress.
 - `--status <STATUS>` — Filter by status (todo,
-  in-progress, blocked, done).
+  in-progress, blocked, done, on-hold).
 - `--assignee <ID>` — Filter by assigned developer.
 - `--chain <TASK>` — Show a task and all its transitive
   dependencies.
@@ -225,8 +225,10 @@ Tasks follow a workflow with valid transitions:
 
 ```
 TODO → IN_PROGRESS → DONE
-                   → BLOCKED → IN_PROGRESS
-                             → TODO
+     → ON_HOLD     → BLOCKED → IN_PROGRESS
+                              → TODO
+IN_PROGRESS → ON_HOLD → TODO
+                      → IN_PROGRESS
 ```
 
 Change status:
@@ -234,10 +236,12 @@ Change status:
 ```
 rustwerk task status AUTH-LOGIN in-progress
 rustwerk task status AUTH-LOGIN done
+rustwerk task status AUTH-LOGIN on-hold
 ```
 
 Status values: `todo`, `in-progress` (also accepts
-`in_progress`, `inprogress`), `blocked`, `done`.
+`in_progress`, `inprogress`), `blocked`, `done`,
+`on-hold` (also accepts `on_hold`, `onhold`).
 
 Use `--force` to bypass transition validation:
 

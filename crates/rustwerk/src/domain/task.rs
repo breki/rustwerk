@@ -85,6 +85,8 @@ pub enum Status {
     Blocked,
     /// Completed.
     Done,
+    /// Intentionally deferred.
+    OnHold,
 }
 
 impl Status {
@@ -94,10 +96,14 @@ impl Status {
         matches!(
             (self, target),
             (Self::Todo, Self::InProgress)
+                | (Self::Todo, Self::OnHold)
                 | (Self::InProgress, Self::Done)
                 | (Self::InProgress, Self::Blocked)
+                | (Self::InProgress, Self::OnHold)
                 | (Self::Blocked, Self::InProgress)
                 | (Self::Blocked, Self::Todo)
+                | (Self::OnHold, Self::Todo)
+                | (Self::OnHold, Self::InProgress)
         )
     }
 }
@@ -109,6 +115,7 @@ impl fmt::Display for Status {
             Self::InProgress => write!(f, "IN_PROGRESS"),
             Self::Blocked => write!(f, "BLOCKED"),
             Self::Done => write!(f, "DONE"),
+            Self::OnHold => write!(f, "ON_HOLD"),
         }
     }
 }
@@ -400,6 +407,21 @@ mod tests {
         assert!(
             Status::Blocked.can_transition_to(Status::Todo)
         );
+        // On-hold transitions.
+        assert!(
+            Status::Todo.can_transition_to(Status::OnHold)
+        );
+        assert!(
+            Status::OnHold.can_transition_to(Status::Todo)
+        );
+        assert!(
+            Status::InProgress
+                .can_transition_to(Status::OnHold)
+        );
+        assert!(
+            Status::OnHold
+                .can_transition_to(Status::InProgress)
+        );
     }
 
     #[test]
@@ -415,6 +437,19 @@ mod tests {
             !Status::Done
                 .can_transition_to(Status::InProgress)
         );
+        assert!(
+            !Status::OnHold
+                .can_transition_to(Status::Done)
+        );
+        assert!(
+            !Status::Done
+                .can_transition_to(Status::OnHold)
+        );
+    }
+
+    #[test]
+    fn status_display_on_hold() {
+        assert_eq!(Status::OnHold.to_string(), "ON_HOLD");
     }
 
     #[test]
