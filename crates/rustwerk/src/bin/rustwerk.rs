@@ -1,5 +1,5 @@
 use std::env;
-use std::io::Read as _;
+use std::io::{IsTerminal, Read as _};
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
@@ -762,6 +762,8 @@ const MAX_BATCH_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_BATCH_COMMANDS: usize = 1000;
 
 fn cmd_gantt() -> Result<()> {
+    use rustwerk::domain::task::Status;
+
     let (_root, project) = load_project()?;
     let rows = project.gantt_schedule();
 
@@ -770,6 +772,7 @@ fn cmd_gantt() -> Result<()> {
         return Ok(());
     }
 
+    let color = use_color();
     let max_end = rows
         .iter()
         .map(|r| r.end())
@@ -785,13 +788,15 @@ fn cmd_gantt() -> Result<()> {
         .max(8);
 
     // Header with scale.
-    let label_width = id_width + 2; // marker + id + space
-    print!("{:width$}", "", width = label_width);
+    let label_width = id_width + 2;
+    let dim = if color { ansi::DIM } else { "" };
+    let rst = if color { ansi::RESET } else { "" };
+    print!("{dim}{:width$}", "", width = label_width);
     for i in (0..max_end).step_by(5) {
         print!("{i:<5}");
     }
-    println!();
-    print!("{:width$}", "", width = label_width);
+    println!("{rst}");
+    print!("{dim}{:width$}", "", width = label_width);
     for i in 0..max_end {
         if i % 5 == 0 {
             print!("|");
@@ -799,7 +804,7 @@ fn cmd_gantt() -> Result<()> {
             print!(" ");
         }
     }
-    println!();
+    println!("{rst}");
 
     // Rows — bar rendering uses domain methods.
     for row in &rows {
@@ -808,20 +813,41 @@ fn cmd_gantt() -> Result<()> {
         let (filled, empty) = row.bar_fill();
         let fill_ch = row.fill_char();
         let empty_ch = row.empty_char();
-        let bar = format!(
-            "{}{}",
+
+        // Color the bar based on status.
+        let (bar_color, id_style) = if color {
+            match row.status {
+                Status::Done => (ansi::GREEN, ""),
+                Status::InProgress => {
+                    (ansi::YELLOW, ansi::BOLD)
+                }
+                Status::Blocked => (ansi::RED, ansi::RED),
+                Status::Todo => (ansi::DIM, ""),
+            }
+        } else {
+            ("", "")
+        };
+
+        let crit_style = if color && row.critical {
+            ansi::CYAN
+        } else {
+            ""
+        };
+
+        let filled_str: String =
             std::iter::repeat_n(fill_ch, filled as usize)
-                .collect::<String>(),
-            std::iter::repeat_n(
-                empty_ch, empty as usize
-            )
-            .collect::<String>(),
-        );
+                .collect();
+        let empty_str: String =
+            std::iter::repeat_n(empty_ch, empty as usize)
+                .collect();
 
         let padding =
             " ".repeat(row.start as usize);
         print!(
-            "{marker}{:<width$} {padding}[{bar}]",
+            "{crit_style}{marker}{rst}\
+             {id_style}{:<width$}{rst} \
+             {padding}{bar_color}[{filled_str}{empty_str}]\
+             {rst}",
             row.id,
             width = id_width,
         );
@@ -908,6 +934,25 @@ fn cmd_batch(file: Option<&str>) -> Result<()> {
     save_project(&root, &project)?;
     println!("{}", serde_json::to_string_pretty(&results)?);
     Ok(())
+}
+
+/// Check whether color output is enabled.
+/// Colors are on if stdout is a terminal, unless
+/// `NO_COLOR` env var is set.
+fn use_color() -> bool {
+    std::io::stdout().is_terminal()
+        && env::var_os("NO_COLOR").is_none()
+}
+
+/// ANSI color codes.
+mod ansi {
+    pub(super) const RESET: &str = "\x1b[0m";
+    pub(super) const BOLD: &str = "\x1b[1m";
+    pub(super) const DIM: &str = "\x1b[2m";
+    pub(super) const GREEN: &str = "\x1b[32m";
+    pub(super) const YELLOW: &str = "\x1b[33m";
+    pub(super) const RED: &str = "\x1b[31m";
+    pub(super) const CYAN: &str = "\x1b[36m";
 }
 
 fn main() -> Result<()> {

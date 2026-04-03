@@ -6,6 +6,18 @@ findings.
 
 ---
 
+### AQ-006 — `ansi` module uses `pub` in binary crate
+
+- **Date:** 2026-04-03
+- **Category:** Abstraction Boundaries
+- **Commit context:** v0.14.0 Gantt colors
+- **Description:** `ansi` module constants used `pub`
+  visibility inside `src/bin/rustwerk.rs`, but nothing
+  outside the file can reach them. Misleading visibility.
+- **Fix:** Changed to `pub(super)` to restrict to parent
+  module scope.
+- **Resolved:** 2026-04-03
+
 ### AQ-005 — `--active` output missing critical-path marker
 
 - **Date:** 2026-04-03

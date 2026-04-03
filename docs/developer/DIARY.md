@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-03
 
+- Add ANSI colors to Gantt chart (v0.14.0)
+
+    `rustwerk gantt` now renders with ANSI colors: green for done,
+    yellow/bold for in-progress, red for blocked, dim for todo, cyan
+    for critical-path markers. Auto-detects terminal via
+    `std::io::IsTerminal`; respects `NO_COLOR` env var. Scale header
+    rendered in dim. No external dependencies.
+
 - Fix `--available` to show TODO only, add `--active` flag (v0.13.1)
 
     `task list --available` now shows only TODO tasks whose deps are

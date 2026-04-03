@@ -5,6 +5,20 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-027 — ANSI state leaks across Gantt row fields
+
+- **Date:** 2026-04-03
+- **Category:** Correctness
+- **Commit context:** v0.14.0 Gantt colors
+- **Description:** The format string for Gantt rows applied
+  `crit_style` (CYAN) before the marker and `id_style`
+  after it, with only one reset at the end. For critical
+  Done tasks, `crit_style = CYAN` carried through the ID
+  when `id_style = ""`, making the ID appear cyan.
+- **Fix:** Added `{rst}` reset between marker and ID style
+  scopes so each color context is isolated.
+- **Resolved:** 2026-04-03
+
 ### RT-026 — `--available --active` silently ignores `--active`
 
 - **Date:** 2026-04-03
