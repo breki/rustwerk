@@ -116,20 +116,24 @@ conventions.
 
    **If no issues found:** continue to the next step.
 
-   **Findings log:** After the review (whether issues were
-   found or not), update `docs/developer/redteam-log.md`:
+   **Findings log:** Two files track findings:
+   - `docs/developer/redteam-log.md` — open findings only
+   - `docs/developer/redteam-resolved.md` — fixed archive
 
-   - Read the existing file (create if it doesn't exist)
-   - For each **new** finding, append to the "Open" section
-     with a unique ID (RT-001, RT-002, etc.), date, commit
-     context, full description (not a one-liner — include
-     what, why, trigger, and suggested fix), and category
-   - For findings the user chose to **fix**, move them from
-     "Open" to "Resolved" with the fix date and how it was
-     resolved
-   - Include `docs/developer/redteam-log.md` in staged files
+   After the review:
+   - Read `redteam-log.md` to get the next RT-ID (noted
+     in the "Next ID" field at the top)
+   - For each **new** finding, append to `redteam-log.md`
+     with the next ID, date, commit context, full
+     description (what, why, trigger, suggested fix), and
+     category. Increment the "Next ID" field.
+   - For findings the user chose to **fix**, move them
+     from `redteam-log.md` to the end of
+     `redteam-resolved.md` with the fix date and how it
+     was resolved
+   - Include both files in staged files if changed
    - **Threshold warning:** if 10 or more findings are in
-     the "Open" section, tell the user that a comprehensive
+     `redteam-log.md`, tell the user that a comprehensive
      full-codebase red team review is needed before
      continuing feature work
 
