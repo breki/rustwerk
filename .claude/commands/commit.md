@@ -122,6 +122,12 @@ conventions.
    > types, stringly-typed APIs where enums/newtypes
    > would be safer, unnecessary clones or allocations.
    >
+   > **Module Size**: any source file over 500 lines
+   > that contains multiple structs/enums with their
+   > own impl blocks should be flagged for splitting
+   > into smaller, focused modules. Check the files
+   > touched by the diff AND their current total size.
+   >
    > Only report real, actionable issues with specific
    > line references. Do NOT duplicate clippy warnings
    > or red team security findings. Do NOT report
