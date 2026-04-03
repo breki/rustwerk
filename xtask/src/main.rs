@@ -28,6 +28,10 @@ enum XCommand {
 /// Minimum line coverage percentage.
 const COVERAGE_THRESHOLD: f64 = 90.0;
 
+/// Maximum allowed exact duplication percentage
+/// (production code only, tests excluded).
+const DUPLICATION_THRESHOLD: f64 = 6.0;
+
 fn main() {
     let cli = Cli::parse();
 
@@ -36,7 +40,8 @@ fn main() {
         XCommand::Test { filter } => run_test(filter),
         XCommand::Validate => run_clippy()
             .and_then(|_| run_test(None))
-            .and_then(|_| run_coverage()),
+            .and_then(|_| run_coverage())
+            .and_then(|_| run_dupes()),
         XCommand::Fmt => run_fmt(),
         XCommand::Coverage => run_coverage(),
     };
@@ -161,6 +166,30 @@ fn run_coverage() -> Result<(), String> {
         );
         Ok(())
     }
+}
+
+fn run_dupes() -> Result<(), String> {
+    println!(
+        "→ checking code duplication \
+         (threshold: {DUPLICATION_THRESHOLD}%)"
+    );
+    let threshold = format!("{DUPLICATION_THRESHOLD}");
+    run_cmd(
+        "code-dupes",
+        &[
+            "-p",
+            "crates/rustwerk/src",
+            "--exclude-tests",
+            "check",
+            "--max-exact-percent",
+            &threshold,
+        ],
+    )
+    .map_err(|e| {
+        format!(
+            "{e}\n  Install with: cargo install code-dupes"
+        )
+    })
 }
 
 /// Resolve the cargo binary path. Prefers the `CARGO`
