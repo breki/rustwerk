@@ -120,17 +120,22 @@ conventions.
    - `docs/developer/redteam-log.md` — open findings only
    - `docs/developer/redteam-resolved.md` — fixed archive
 
+   Both files are in **reverse chronological order**
+   (newest first). New entries go right after the `---`
+   separator.
+
    After the review:
    - Read `redteam-log.md` to get the next RT-ID (noted
      in the "Next ID" field at the top)
-   - For each **new** finding, append to `redteam-log.md`
+   - For each **new** finding, insert at the **top** of
+     `redteam-log.md` (right after the `---` separator)
      with the next ID, date, commit context, full
      description (what, why, trigger, suggested fix), and
      category. Increment the "Next ID" field.
-   - For findings the user chose to **fix**, move them
-     from `redteam-log.md` to the end of
-     `redteam-resolved.md` with the fix date and how it
-     was resolved
+   - For findings the user chose to **fix**, remove them
+     from `redteam-log.md` and insert at the **top** of
+     `redteam-resolved.md` (right after the `---`
+     separator) with the fix date and how it was resolved
    - Include both files in staged files if changed
    - **Threshold warning:** if 10 or more findings are in
      `redteam-log.md`, tell the user that a comprehensive
