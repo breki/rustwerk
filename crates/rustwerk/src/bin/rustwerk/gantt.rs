@@ -15,8 +15,7 @@ const FALLBACK_WIDTH: usize = 80;
 /// falls back to 80.
 fn term_width() -> usize {
     terminal_size::terminal_size()
-        .map(|(w, _)| w.0 as usize)
-        .unwrap_or(FALLBACK_WIDTH)
+        .map_or(FALLBACK_WIDTH, |(w, _)| w.0 as usize)
 }
 
 /// Scale a value by a factor, with minimum 1 (for bar
@@ -86,7 +85,7 @@ fn render_gantt(rows: &[GanttRow], terminal_width: usize, color: bool) {
         return;
     }
 
-    let max_end = rows.iter().map(|r| r.end()).max().unwrap_or(0);
+    let max_end = rows.iter().map(GanttRow::end).max().unwrap_or(0);
 
     // Find the longest ID for padding.
     let id_width = rows

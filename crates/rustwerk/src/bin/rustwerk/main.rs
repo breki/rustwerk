@@ -124,7 +124,7 @@ enum ReportAction {
 
 #[derive(Subcommand)]
 enum EffortAction {
-    /// Log effort on a task (must be IN_PROGRESS).
+    /// Log effort on a task (must be `IN_PROGRESS`).
     Log {
         /// Task ID.
         id: String,

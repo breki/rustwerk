@@ -1,6 +1,5 @@
 # TODO
 
-- redteam should also review the github actions if there are any changes there
 - The manual should include (in a separate page) a full specification of rustwerk's project file format
 - Can we use a proper TUI for walking the Gantt chart, so it would look
   something like Superfile or lazygit?
@@ -11,6 +10,8 @@
 
 ## Done
 
+- Add GitHub Actions and config review to red team in /commit (2026-04-04)
+- Red team baseline review of project config: 6 findings fixed (2026-04-04)
 - Fix GitHub Actions CI and add release workflow (2026-04-04)
 - Clean up CLAUDE.md: remove redundant sections, add skills table (2026-04-04)
 - Add /rustwerk skill for CLI project management reference (2026-04-04)

@@ -86,7 +86,7 @@ pub fn export_from_project(project: &Project) -> Vec<WbsTaskEntry> {
             effort_estimate: task
                 .effort_estimate
                 .as_ref()
-                .map(|e| e.to_string()),
+                .map(std::string::ToString::to_string),
             assignee: task.assignee.clone(),
         })
         .collect()
@@ -153,14 +153,14 @@ fn import_inner(
             continue;
         }
         let mut task = Task::new(&entry.title)?;
-        task.description = entry.description.clone();
+        task.description.clone_from(&entry.description);
         if let Some(c) = entry.complexity {
             task.set_complexity(c)?;
         }
         if let Some(e) = &entry.effort_estimate {
             task.effort_estimate = Some(Effort::parse(e)?);
         }
-        task.assignee = entry.assignee.clone();
+        task.assignee.clone_from(&entry.assignee);
         project.add_task(id, task)?;
         created += 1;
     }

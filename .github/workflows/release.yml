@@ -136,6 +136,12 @@ jobs:
           ' CHANGELOG.md)
           echo "$NOTES" > release_notes.md
 
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -5,13 +5,13 @@ pub struct ProjectSummary {
     pub total: u32,
     /// Tasks in TODO status.
     pub todo: u32,
-    /// Tasks in IN_PROGRESS status.
+    /// Tasks in `IN_PROGRESS` status.
     pub in_progress: u32,
     /// Tasks in BLOCKED status.
     pub blocked: u32,
     /// Tasks in DONE status.
     pub done: u32,
-    /// Tasks in ON_HOLD status.
+    /// Tasks in `ON_HOLD` status.
     pub on_hold: u32,
     /// Percentage complete (done/total * 100).
     pub pct_complete: f64,

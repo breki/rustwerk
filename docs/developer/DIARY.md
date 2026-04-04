@@ -7,6 +7,15 @@ reverse chronological order.
 
 ### 2026-04-04
 
+- Harden project configuration (v0.31.0)
+
+    Consolidated workspace lints (`[workspace.lints]`),
+    added `unsafe_code = "forbid"`, enabled clippy pedantic
+    with curated allows, disabled unused `chrono` default
+    features, added `*.pdb` to `.gitignore`, added SHA256
+    checksums to release workflow. Extended `/commit` red
+    team to review GitHub Actions and project config files.
+
 - Fix GitHub Actions CI and add release workflow (v0.31.0)
 
     Rewrote CI workflow to use only GitHub-owned actions

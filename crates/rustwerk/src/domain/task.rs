@@ -78,15 +78,14 @@ impl Status {
     pub fn can_transition_to(self, target: Self) -> bool {
         matches!(
             (self, target),
-            (Self::Todo, Self::InProgress)
-                | (Self::Todo, Self::OnHold)
-                | (Self::InProgress, Self::Done)
-                | (Self::InProgress, Self::Blocked)
-                | (Self::InProgress, Self::OnHold)
-                | (Self::Blocked, Self::InProgress)
-                | (Self::Blocked, Self::Todo)
-                | (Self::OnHold, Self::Todo)
-                | (Self::OnHold, Self::InProgress)
+            (
+                Self::Todo | Self::Blocked | Self::OnHold,
+                Self::InProgress,
+            ) | (
+                Self::Todo | Self::InProgress,
+                Self::OnHold,
+            ) | (Self::InProgress, Self::Done | Self::Blocked)
+                | (Self::Blocked | Self::OnHold, Self::Todo)
         )
     }
 }

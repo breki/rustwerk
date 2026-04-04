@@ -1,5 +1,7 @@
-use clap::{Parser, Subcommand};
+use std::fmt::Write as _;
 use std::process::Command;
+
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "xtask")]
@@ -37,11 +39,11 @@ fn main() {
 
     let result = match cli.command {
         XCommand::Clippy => run_clippy(),
-        XCommand::Test { filter } => run_test(filter),
+        XCommand::Test { filter } => run_test(filter.as_deref()),
         XCommand::Validate => run_clippy()
-            .and_then(|_| run_test(None))
-            .and_then(|_| run_coverage())
-            .and_then(|_| run_dupes()),
+            .and_then(|()| run_test(None))
+            .and_then(|()| run_coverage())
+            .and_then(|()| run_dupes()),
         XCommand::Fmt => run_fmt(),
         XCommand::Coverage => run_coverage(),
     };
@@ -59,16 +61,14 @@ fn run_clippy() -> Result<(), String> {
     )
 }
 
-fn run_test(filter: Option<String>) -> Result<(), String> {
+fn run_test(filter: Option<&str>) -> Result<(), String> {
     let mut args = vec!["test", "--workspace"];
-    let filter_owned;
-    if let Some(f) = &filter {
+    if let Some(f) = filter {
         if f.is_empty() {
             return Err("test filter must not be empty".into());
         }
-        filter_owned = f.clone();
         args.push("--");
-        args.push(&filter_owned);
+        args.push(f);
     }
     run_cmd(&cargo_bin(), &args)
 }
@@ -147,7 +147,7 @@ fn run_coverage() -> Result<(), String> {
     } else if !below_threshold.is_empty() {
         let mut msg = String::from("modules below coverage threshold:");
         for (name, pct) in &below_threshold {
-            msg.push_str(&format!("\n    {name}: {pct:.1}%"));
+            let _ = write!(msg, "\n    {name}: {pct:.1}%");
         }
         Err(msg)
     } else {

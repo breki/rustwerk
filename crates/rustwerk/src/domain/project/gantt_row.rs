@@ -21,19 +21,19 @@ impl GanttRow {
         self.start + self.width
     }
 
-    /// Bar fill characters: (filled_count, empty_count).
-    /// Done = all filled, Todo = all empty, InProgress =
+    /// Bar fill characters: (`filled_count`, `empty_count`).
+    /// Done = all filled, Todo = all empty, `InProgress` =
     /// half-filled, Blocked = all filled with `!`.
     pub fn bar_fill(&self) -> (u32, u32) {
         match self.status {
-            Status::Done => (self.width, 0),
-            Status::Blocked => (self.width, 0),
+            Status::Done | Status::Blocked => (self.width, 0),
             Status::InProgress if self.width > 1 => {
                 let done = self.width / 2;
                 (done, self.width - done)
             }
-            Status::InProgress => (0, self.width),
-            Status::Todo | Status::OnHold => (0, self.width),
+            Status::InProgress
+            | Status::Todo
+            | Status::OnHold => (0, self.width),
         }
     }
 

@@ -10,13 +10,8 @@ default-run = "rustwerk"
 keywords = ["project-management", "wbs", "cli", "git-native"]
 categories = ["command-line-utilities"]
 
-[lints.rust]
-warnings = "deny"
-
-[lints.clippy]
-perf = { level = "deny", priority = -1 }
-cargo_common_metadata = "deny"
-multiple_crate_versions = "allow"
+[lints]
+workspace = true
 
 [[bin]]
 name = "rustwerk"
@@ -24,7 +19,7 @@ path = "src/bin/rustwerk/main.rs"
 
 [dependencies]
 anyhow = "1"
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"

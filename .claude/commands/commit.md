@@ -60,11 +60,12 @@ conventions.
    not modify them.
 
    **IMPORTANT:** Always run both reviews when the diff
-   contains code changes (`.rs`, `.toml`, etc.). Never
-   skip them — even for "straightforward" CRUD or simple
-   changes. The only exception is commits that contain no
-   code at all (docs-only, config-only, project state
-   only).
+   contains code changes (`.rs`, `.toml`, etc.) or
+   GitHub Actions workflows (`.yml` in `.github/`).
+   Never skip them — even for "straightforward" CRUD or
+   simple changes. The only exception is commits that
+   contain no code at all (docs-only, non-workflow
+   config, project state only).
 
    **Agent A — Red Team** (security & correctness):
 
@@ -79,6 +80,21 @@ conventions.
    > **Security**: command injection, path traversal,
    > unsafe deserialization, unvalidated input, TOCTOU
    > races, information leaks, denial of service vectors.
+   >
+   > **CI/CD** (when `.github/workflows/` files are in
+   > the diff): shell injection via untrusted context
+   > variables (`GITHUB_REF_NAME`, PR titles, branch
+   > names), excessive permissions, unpinned actions,
+   > cache poisoning, secret exposure, missing input
+   > validation on tags/branches.
+   >
+   > **Project Configuration** (when `Cargo.toml`,
+   > `rustfmt.toml`, `clippy.toml`, `.gitignore`, or
+   > other root config files are in the diff): insecure
+   > defaults, overly permissive settings, missing
+   > deny/forbid lint levels, yanked or vulnerable
+   > dependency versions, feature flags that weaken
+   > safety.
    >
    > Be adversarial — assume the code is wrong and try to
    > prove it. Only report real, actionable issues with

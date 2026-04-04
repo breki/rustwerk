@@ -59,7 +59,7 @@ impl Project {
     }
 
     /// Compute the critical path considering only active
-    /// tasks (excludes Done and OnHold). This shows the
+    /// tasks (excludes Done and `OnHold`). This shows the
     /// longest remaining chain of work.
     pub fn remaining_critical_path(&self) -> (Vec<TaskId>, u32) {
         // Filter to active tasks (not done, not on hold).

@@ -15,7 +15,7 @@ impl Project {
     }
 
     /// Build a tree of remaining work, excluding Done and
-    /// OnHold tasks. Tasks whose dependencies are all
+    /// `OnHold` tasks. Tasks whose dependencies are all
     /// excluded become new roots.
     pub fn task_tree_remaining(&self) -> Vec<TreeNode> {
         self.build_tree(|t| {

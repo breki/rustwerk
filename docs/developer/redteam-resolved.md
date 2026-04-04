@@ -5,6 +5,54 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-058 — No checksums for release artifacts
+
+- **Date:** 2026-04-04
+- **Category:** Security
+- **Commit context:** project config hardening
+- **Resolution:** Added `sha256sum` step to release workflow
+  that generates `SHA256SUMS` file included in release.
+
+### RT-057 — `.gitignore` missing `*.pdb`
+
+- **Date:** 2026-04-04
+- **Category:** Security
+- **Commit context:** project config hardening
+- **Resolution:** Added `*.pdb` to `.gitignore`.
+
+### RT-056 — `chrono` default features not disabled
+
+- **Date:** 2026-04-04
+- **Category:** Security
+- **Commit context:** project config hardening
+- **Resolution:** Set `default-features = false` with
+  explicit `clock`, `serde`, `std` features.
+
+### RT-055 — Missing `unsafe_code = "forbid"`
+
+- **Date:** 2026-04-04
+- **Category:** Security
+- **Commit context:** project config hardening
+- **Resolution:** Added `unsafe_code = "forbid"` to
+  workspace lints.
+
+### RT-054 — Workspace lints not shared; crates diverge
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** project config hardening
+- **Resolution:** Moved lints to `[workspace.lints]` in
+  root `Cargo.toml`, both crates use `workspace = true`.
+
+### RT-053 — No clippy pedantic lint group enabled
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** project config hardening
+- **Resolution:** Added `pedantic = { level = "warn" }` to
+  workspace clippy lints. Fixed all pedantic warnings across
+  the codebase.
+
 ### RT-052 — Actions not pinned to SHA
 
 - **Date:** 2026-04-04

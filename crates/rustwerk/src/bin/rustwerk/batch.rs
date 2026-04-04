@@ -35,6 +35,7 @@ struct BatchResult {
 }
 
 /// Execute a single batch command against a project.
+#[allow(clippy::too_many_lines)] // dispatch match
 fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
     let args = &cmd.args;
     match cmd.command.as_str() {
@@ -47,7 +48,7 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             if let Some(d) = args.get("desc").and_then(|v| v.as_str()) {
                 task.description = Some(d.to_string());
             }
-            if let Some(c) = args.get("complexity").and_then(|v| v.as_u64()) {
+            if let Some(c) = args.get("complexity").and_then(serde_json::Value::as_u64) {
                 let c = u32::try_from(c).map_err(|_| {
                     anyhow::anyhow!("complexity value too large: {c}")
                 })?;
@@ -107,7 +108,7 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 .as_str()
                 .context("task.status requires 'status'")?;
             let force =
-                args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+                args.get("force").and_then(serde_json::Value::as_bool).unwrap_or(false);
             let task_id =
                 TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
             let new_status = parse_status(status)?;
@@ -272,7 +273,7 @@ pub(super) fn cmd_batch(file: Option<&str>) -> Result<()> {
                     "applied": i
                 });
                 eprintln!("{}", serde_json::to_string_pretty(&error_output)?);
-                bail!("batch failed at command {i} ({})", safe_cmd);
+                bail!("batch failed at command {i} ({safe_cmd})");
             }
         }
     }
