@@ -32,8 +32,70 @@ the overhead of a full project management suite is not
 justified, but you still want dependency-aware scheduling,
 critical path visibility, and a structured workflow.
 
+## Typical Workflow
+
+RustWerk is designed to work hand-in-hand with an AI
+coding agent. A typical workflow has two phases:
+
+### 1. Project Setup (AI-Driven)
+
+You describe a project or a large epic to your AI agent
+and ask it to produce a Work Breakdown Structure (WBS).
+The agent creates a structured plan with tasks,
+dependencies, complexity estimates, and effort budgets.
+It then uses the RustWerk CLI — typically via `batch`
+commands — to populate the project in one shot:
+
+```
+rustwerk init "My Project"
+rustwerk batch --file wbs.json
+```
+
+Because RustWerk speaks JSON natively, the agent can
+generate the entire project definition without manual
+data entry. The result is a fully wired dependency
+graph with effort estimates, ready to execute.
+
+### 2. Daily Development (Developer-Driven)
+
+Once the project is set up, you use RustWerk as part of
+your daily development loop:
+
+1. **Pick a task** — find what's ready to work on:
+   ```
+   rustwerk task list --available
+   ```
+2. **Assign it** — claim the task (uses `RUSTWERK_USER`
+   if set):
+   ```
+   rustwerk task assign AUTH-LOGIN
+   ```
+3. **Start work** — mark the task in progress:
+   ```
+   rustwerk task status AUTH-LOGIN in-progress
+   ```
+4. **Log effort** — track time as you go (uses
+   `RUSTWERK_USER` if set):
+   ```
+   rustwerk effort log AUTH-LOGIN 2H
+   ```
+5. **Complete the task** — mark it done:
+   ```
+   rustwerk task status AUTH-LOGIN done
+   ```
+6. **Check progress** — review the dashboard and Gantt:
+   ```
+   rustwerk status
+   rustwerk gantt --remaining
+   ```
+
+The project file is committed alongside your code, so
+task state stays in sync with the codebase and is
+visible in pull request diffs.
+
 ## Table of Contents
 
+- [Typical Workflow](#typical-workflow)
 - [Getting Started](#getting-started)
 - [Sample Project Walkthrough](#sample-project-walkthrough)
 - [Task Management](#task-management)
@@ -55,6 +117,7 @@ critical path visibility, and a structured workflow.
 - [Reports](#reports)
 - [Batch Commands](#batch-commands)
 - [Project File](#project-file)
+- [Project File Specification](project-file-spec.md)
 
 ## Getting Started
 
@@ -276,14 +339,22 @@ Assign a registered developer to a task:
 rustwerk task assign AUTH-LOGIN alice
 ```
 
+If the `RUSTWERK_USER` environment variable is set, the
+developer argument can be omitted:
+
+```
+export RUSTWERK_USER=alice
+rustwerk task assign AUTH-LOGIN
+```
+
 Remove the assignment:
 
 ```
 rustwerk task unassign AUTH-LOGIN
 ```
 
-Note: the developer must be registered in the project
-(developer management is a planned feature).
+The developer must be registered in the project (see
+[Developer Management](#developer-management)).
 
 ## Developer Management
 
@@ -360,6 +431,12 @@ Units: `H` (hours), `D` (days = 8H), `W` (weeks = 40H),
 rustwerk effort log AUTH-LOGIN 3H --dev alice
 rustwerk effort log AUTH-LOGIN 1.5H --dev alice \
   --note "debugging auth flow"
+```
+
+If `RUSTWERK_USER` is set, `--dev` can be omitted:
+
+```
+rustwerk effort log AUTH-LOGIN 3H
 ```
 
 The task must be IN_PROGRESS to log effort.
@@ -560,6 +637,10 @@ downstream dependents are omitted.
 Execute multiple commands atomically from a JSON file
 or stdin. All commands succeed or none are applied.
 
+Batch commands are deterministic: all arguments must be
+explicit in the JSON input. Environment variable
+defaults (such as `RUSTWERK_USER`) do not apply.
+
 ### From a File
 
 ```
@@ -622,3 +703,7 @@ The file contains:
 RustWerk looks for the `.rustwerk/` directory starting
 from the current directory and walking up the directory
 tree, similar to how git finds `.git/`.
+
+For the full file format specification — including every
+field, type, validation rule, and example — see the
+[Project File Specification](project-file-spec.md).

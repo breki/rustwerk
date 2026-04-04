@@ -7,6 +7,15 @@ reverse chronological order.
 
 ### 2026-04-04
 
+- Add `RUSTWERK_USER` env var for developer identity (v0.32.0)
+
+    `task assign` and `effort log` now fall back to the
+    `RUSTWERK_USER` environment variable when no developer
+    is specified on the command line. Batch commands remain
+    fully explicit — no env var fallback by design. Added
+    `resolve_developer()` helper, project file format spec,
+    typical workflow section in the manual.
+
 - Harden project configuration (v0.31.0)
 
     Consolidated workspace lints (`[workspace.lints]`),

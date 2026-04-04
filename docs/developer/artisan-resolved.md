@@ -6,6 +6,26 @@ findings.
 
 ---
 
+### AQ-029 — Test does not assert on error message
+
+- **Date:** 2026-04-04
+- **Category:** Error Handling
+- **Commit context:** v0.32.0 `RUSTWERK_USER` env var
+- **Resolution:** Added `stderr.contains("no developer
+  specified")` assertion to `task_assign_no_dev_fails`
+  test to verify the intended error path triggers.
+
+### AQ-028 — Inconsistent `RUSTWERK_USER` fallback
+
+- **Date:** 2026-04-04
+- **Category:** API Design
+- **Commit context:** v0.32.0 `RUSTWERK_USER` env var
+- **Resolution:** Applied `RUSTWERK_USER` fallback to
+  `effort log --dev` (made optional). Extracted shared
+  `resolve_developer()` helper used by both `task assign`
+  and `effort log` dispatch. Env-var resolution inlined
+  in dispatch also resolved (AQ-013 equivalent).
+
 ### AQ-020 — scheduling.rs exceeds 500-line module-size rule
 
 - **Date:** 2026-04-03

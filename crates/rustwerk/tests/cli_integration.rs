@@ -231,6 +231,47 @@ fn task_assign_and_unassign() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn task_assign_from_env_var() {
+    let dir = temp_dir("assign-env");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    run(&dir, &["dev", "add", "alice", "Alice"]);
+    // Assign using RUSTWERK_USER env var instead of
+    // positional argument.
+    let output = Command::new(rustwerk_bin())
+        .args(["task", "assign", "A"])
+        .current_dir(&dir)
+        .env("RUSTWERK_USER", "alice")
+        .output()
+        .expect("failed to run rustwerk");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "assign via env should succeed");
+    assert!(stdout.contains("alice"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_assign_no_dev_fails() {
+    let dir = temp_dir("assign-nodev");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    // No positional arg and no RUSTWERK_USER — should fail.
+    let output = Command::new(rustwerk_bin())
+        .args(["task", "assign", "A"])
+        .current_dir(&dir)
+        .env_remove("RUSTWERK_USER")
+        .output()
+        .expect("failed to run rustwerk");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no developer specified"),
+        "expected env-var error, got: {stderr}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // --- task list ---
 
 #[test]
@@ -433,6 +474,26 @@ fn effort_log_requires_in_progress() {
     run(&dir, &["task", "add", "T", "--id", "A"]);
     let (_, _, ok) = run(&dir, &["effort", "log", "A", "1H", "--dev", "bob"]);
     assert!(!ok, "should fail on TODO task");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn effort_log_from_env_var() {
+    let dir = temp_dir("effort-env");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    run(&dir, &["dev", "add", "alice", "Alice"]);
+    run(&dir, &["task", "status", "A", "in-progress"]);
+    // Log effort using RUSTWERK_USER instead of --dev.
+    let output = Command::new(rustwerk_bin())
+        .args(["effort", "log", "A", "2H"])
+        .current_dir(&dir)
+        .env("RUSTWERK_USER", "alice")
+        .output()
+        .expect("failed to run rustwerk");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "effort log via env should succeed");
+    assert!(stdout.contains("2H"));
     let _ = fs::remove_dir_all(&dir);
 }
 

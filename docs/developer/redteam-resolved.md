@@ -5,6 +5,16 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-059 — Batch `task.assign` missing `RUSTWERK_USER` fallback
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** v0.32.0 `RUSTWERK_USER` env var
+- **Resolution:** By design. Batch commands are
+  deterministic — all arguments must be explicit in the
+  JSON input. Added code comment and manual documentation
+  stating this is intentional.
+
 ### RT-058 — No checksums for release artifacts
 
 - **Date:** 2026-04-04

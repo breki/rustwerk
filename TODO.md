@@ -1,6 +1,5 @@
 # TODO
 
-- The manual should include (in a separate page) a full specification of rustwerk's project file format
 - Can we use a proper TUI for walking the Gantt chart, so it would look
   something like Superfile or lazygit?
 - Investigate whether JSON is really the best format for the project file - 
@@ -10,6 +9,7 @@
 
 ## Done
 
+- Add project file format specification to docs (2026-04-04)
 - Add GitHub Actions and config review to red team in /commit (2026-04-04)
 - Red team baseline review of project config: 6 findings fixed (2026-04-04)
 - Fix GitHub Actions CI and add release workflow (2026-04-04)

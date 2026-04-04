@@ -21,8 +21,11 @@ cargo xtask fmt                  # format code
 Never use raw `cargo test` or `cargo clippy` — always
 go through `xtask`.
 
-The working directory is already set to the project root.
-Never use `cd` to the project root or `git -C <dir>`.
+**IMPORTANT: The working directory is already set to the
+project root. NEVER use `cd` to the project root or
+`git -C <dir>` — blanket permission rules cannot be
+set for commands starting with `cd` or `git -C`, so
+they require manual approval every time.**
 
 ## Coding Standards
 

@@ -121,6 +121,9 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
             Ok(format!("{task_id}: {new_status}"))
         }
+        // Batch commands are deterministic: all arguments
+        // must be explicit in the JSON. No RUSTWERK_USER
+        // fallback — the caller must always supply "to".
         "task.assign" => {
             use rustwerk::domain::developer::DeveloperId;
             let id =

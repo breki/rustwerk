@@ -14,6 +14,20 @@ use rustwerk::domain::task::Status;
 use rustwerk::persistence::file_store;
 
 use batch::cmd_batch;
+
+/// Resolve a developer ID from an explicit argument or
+/// the `RUSTWERK_USER` environment variable.
+fn resolve_developer(explicit: Option<String>) -> Result<String> {
+    explicit
+        .or_else(|| env::var("RUSTWERK_USER").ok())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no developer specified and \
+                 RUSTWERK_USER is not set"
+            )
+        })
+}
+
 use commands::{
     cmd_depend, cmd_dev_add, cmd_dev_list, cmd_dev_remove, cmd_effort_estimate,
     cmd_effort_log, cmd_init, cmd_report_bottlenecks, cmd_report_complete,
@@ -130,9 +144,9 @@ enum EffortAction {
         id: String,
         /// Effort amount (e.g. "2.5H", "1D").
         amount: String,
-        /// Developer name.
+        /// Developer ID (defaults to `RUSTWERK_USER`).
         #[arg(long)]
-        dev: String,
+        dev: Option<String>,
         /// Optional note.
         #[arg(long)]
         note: Option<String>,
@@ -214,12 +228,14 @@ enum TaskAction {
         #[arg(long)]
         desc: Option<String>,
     },
-    /// Assign a developer to a task.
+    /// Assign a developer to a task. Falls back to the
+    /// `RUSTWERK_USER` environment variable when no
+    /// developer is specified.
     Assign {
         /// Task ID.
         id: String,
-        /// Developer name.
-        to: String,
+        /// Developer ID (defaults to `RUSTWERK_USER`).
+        to: Option<String>,
     },
     /// Remove the assignee from a task.
     Unassign {
@@ -313,7 +329,10 @@ fn main() -> Result<()> {
                 cmd_task_status(&id, &status, force)
             }
             TaskAction::Remove { id } => cmd_task_remove(&id),
-            TaskAction::Assign { id, to } => cmd_task_assign(&id, &to),
+            TaskAction::Assign { id, to } => {
+                let dev = resolve_developer(to)?;
+                cmd_task_assign(&id, &dev)
+            }
             TaskAction::Unassign { id } => cmd_task_unassign(&id),
             TaskAction::Update { id, title, desc } => {
                 cmd_task_update(&id, title.as_deref(), desc.as_deref())
@@ -359,7 +378,10 @@ fn main() -> Result<()> {
                 amount,
                 dev,
                 note,
-            } => cmd_effort_log(&id, &amount, &dev, note.as_deref()),
+            } => {
+                let dev = resolve_developer(dev)?;
+                cmd_effort_log(&id, &amount, &dev, note.as_deref())
+            }
             EffortAction::Estimate { id, amount } => {
                 cmd_effort_estimate(&id, &amount)
             }
