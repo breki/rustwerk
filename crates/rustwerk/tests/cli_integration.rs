@@ -1532,3 +1532,47 @@ fn task_list_tag_invalid_fails() {
     assert!(!ok, "invalid tag should fail early");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- task describe ---
+
+#[test]
+fn task_describe_shows_file_contents() {
+    let dir = temp_dir("describe-shows");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "My Task", "--id", "A"]);
+
+    let tasks_dir = dir.join(".rustwerk/tasks");
+    fs::create_dir_all(&tasks_dir).unwrap();
+    fs::write(tasks_dir.join("A.md"), "# Task A\n\nDetails here.\n")
+        .unwrap();
+
+    let (stdout, _, ok) = run(&dir, &["task", "describe", "A"]);
+    assert!(ok, "describe should succeed");
+    assert!(stdout.contains("# Task A"));
+    assert!(stdout.contains("Details here."));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_describe_no_file_shows_hint() {
+    let dir = temp_dir("describe-no-file");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "My Task", "--id", "B"]);
+
+    let (stdout, _, ok) = run(&dir, &["task", "describe", "B"]);
+    assert!(ok, "describe should succeed even without file");
+    assert!(stdout.contains("No description file for B"));
+    assert!(stdout.contains(".rustwerk"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_describe_nonexistent_task_fails() {
+    let dir = temp_dir("describe-nonexistent");
+    run(&dir, &["init", "P"]);
+
+    let (_, _, ok) =
+        run(&dir, &["task", "describe", "NOPE"]);
+    assert!(!ok, "describe should fail for unknown task");
+    let _ = fs::remove_dir_all(&dir);
+}

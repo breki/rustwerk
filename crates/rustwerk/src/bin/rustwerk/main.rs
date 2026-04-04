@@ -32,8 +32,8 @@ use commands::{
     cmd_depend, cmd_dev_add, cmd_dev_list, cmd_dev_remove, cmd_effort_estimate,
     cmd_effort_log, cmd_init, cmd_report_bottlenecks, cmd_report_complete,
     cmd_report_effort, cmd_show, cmd_status, cmd_task_add, cmd_task_assign,
-    cmd_task_list, cmd_task_remove, cmd_task_status, cmd_task_unassign,
-    cmd_task_update, cmd_undepend,
+    cmd_task_describe, cmd_task_list, cmd_task_remove, cmd_task_status,
+    cmd_task_unassign, cmd_task_update, cmd_undepend,
 };
 use gantt::cmd_gantt;
 
@@ -267,6 +267,12 @@ enum TaskAction {
         /// Dependency to remove.
         to: String,
     },
+    /// Show the description file for a task
+    /// (.rustwerk/tasks/<ID>.md).
+    Describe {
+        /// Task ID.
+        id: String,
+    },
 }
 
 /// Find the project root by looking for `.rustwerk/`
@@ -375,6 +381,7 @@ fn main() -> Result<()> {
             ),
             TaskAction::Depend { from, to } => cmd_depend(&from, &to),
             TaskAction::Undepend { from, to } => cmd_undepend(&from, &to),
+            TaskAction::Describe { id } => cmd_task_describe(&id),
         },
         Commands::Dev { action } => match action {
             DevAction::Add {

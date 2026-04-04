@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-04
 
+- Add `task describe` command for task description files (v0.37.0)
+
+    `task describe <ID>` reads and displays
+    `.rustwerk/tasks/<ID>.md`. Shows the file path when
+    no description exists. Added `task_description_path`
+    to `file_store` (accepts `&TaskId` for type safety).
+    Updated `/next-task` skill to use `task describe`.
+
 - Add `--tag` filter to `task list` command (v0.36.0)
 
     `task list --tag <TAG>` filters tasks by tag. Combines

@@ -334,6 +334,18 @@ rustwerk task update AUTH-LOGIN --tags "backend,auth"
 rustwerk task update AUTH-LOGIN --tags ""  # clear tags
 ```
 
+### View Task Description
+
+Show the detailed description file for a task:
+
+```
+rustwerk task describe AUTH-LOGIN
+```
+
+Description files are stored at
+`.rustwerk/tasks/<ID>.md`. If no file exists, the
+command prints the expected path so you can create one.
+
 ### Remove a Task
 
 ```

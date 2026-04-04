@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::domain::project::Project;
+use crate::domain::task::TaskId;
 
 /// Errors that can occur during file-based persistence.
 #[derive(Debug, thiserror::Error)]
@@ -26,6 +27,19 @@ const PROJECT_FILE: &str = "project.json";
 /// directory.
 pub fn project_file_path(root: &Path) -> PathBuf {
     root.join(PROJECT_DIR).join(PROJECT_FILE)
+}
+
+/// Convention: task description files live at
+/// `.rustwerk/tasks/<ID>.md` relative to the repo root.
+const TASKS_DIR: &str = "tasks";
+
+/// Return the path to a task description file given a
+/// root directory and task ID.
+pub fn task_description_path(root: &Path, task_id: &TaskId) -> PathBuf {
+    root.join(PROJECT_DIR)
+        .join(TASKS_DIR)
+        .join(task_id.as_str())
+        .with_extension("md")
 }
 
 /// Save a project to `.rustwerk/project.json` under the
@@ -93,5 +107,12 @@ mod tests {
     fn project_file_path_convention() {
         let path = project_file_path(Path::new("/repo"));
         assert!(path.ends_with(".rustwerk/project.json"));
+    }
+
+    #[test]
+    fn task_description_path_convention() {
+        let tid = crate::domain::task::TaskId::new("PLG-API").unwrap();
+        let path = task_description_path(Path::new("/repo"), &tid);
+        assert!(path.ends_with(".rustwerk/tasks/PLG-API.md"));
     }
 }

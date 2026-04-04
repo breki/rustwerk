@@ -6,6 +6,31 @@ findings.
 
 ---
 
+### AQ-041 — Hand-rolled "task not found" in `cmd_task_describe`
+
+- **Date:** 2026-04-04
+- **Category:** Abstraction Boundaries
+- **Commit context:** v0.37.0 `task describe` command
+- **Resolution:** Changed from `anyhow::bail!` to
+  `DomainError::TaskNotFound`, consistent with other
+  domain-validated commands.
+
+### AQ-042 — Unnecessary `format!` in `task_description_path`
+
+- **Date:** 2026-04-04
+- **Category:** API Design
+- **Commit context:** v0.37.0 `task describe` command
+- **Resolution:** Replaced `format!("{task_id}.md")` with
+  `.join(task_id.as_str()).with_extension("md")`.
+
+### AQ-043 — Trailing period inconsistency in messages
+
+- **Date:** 2026-04-04
+- **Category:** Error Handling & Messages
+- **Commit context:** v0.37.0 `task describe` command
+- **Resolution:** Removed trailing period from "No description
+  file" message to match majority of CLI output.
+
 ### AQ-040 — `--tag` filter silently ignores invalid tags
 
 - **Date:** 2026-04-04

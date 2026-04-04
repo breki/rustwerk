@@ -65,6 +65,15 @@ Use `--tags ""` to clear all tags.
 At least one of `--title`, `--desc`, or `--tags` is
 required.
 
+### View task description
+
+```
+rustwerk task describe <ID>
+```
+
+Shows the contents of `.rustwerk/tasks/<ID>.md`. If no
+file exists, prints the expected path.
+
 ### Remove a task
 
 ```

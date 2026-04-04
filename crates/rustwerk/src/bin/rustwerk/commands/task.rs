@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use rustwerk::domain::developer::DeveloperId;
 use rustwerk::domain::task::{Effort, Tag, Task, TaskId};
+use rustwerk::persistence::file_store;
 
 use crate::{load_project, parse_status, save_project};
 
@@ -261,6 +262,28 @@ fn modify_dependency(from: &str, to: &str, add: bool) -> Result<()> {
         project.remove_dependency(&from_id, &to_id)?;
         save_project(&root, &project)?;
         println!("Removed: {from_id} depends on {to_id}");
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_task_describe(id: &str) -> Result<()> {
+    use rustwerk::domain::error::DomainError;
+
+    let (root, project) = load_project()?;
+    let task_id = TaskId::new(id)?;
+
+    if !project.tasks.contains_key(&task_id) {
+        return Err(DomainError::TaskNotFound(task_id.to_string()).into());
+    }
+
+    let path = file_store::task_description_path(&root, &task_id);
+    match std::fs::read_to_string(&path) {
+        Ok(content) => print!("{content}"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            println!("No description file for {task_id}");
+            println!("Create one at: {}", path.display());
+        }
+        Err(e) => return Err(e.into()),
     }
     Ok(())
 }

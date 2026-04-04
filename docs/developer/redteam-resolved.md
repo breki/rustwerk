@@ -5,6 +5,23 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-065 — TOCTOU race in `cmd_task_describe`
+
+- **Date:** 2026-04-04
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.37.0 `task describe` command
+- **Resolution:** Replaced `path.exists()` + `read_to_string`
+  with a single `read_to_string` call, matching on
+  `ErrorKind::NotFound` for the "no file" branch.
+
+### RT-066 — `task_description_path` accepts raw `&str`
+
+- **Date:** 2026-04-04
+- **Category:** Security / latent path traversal (Medium)
+- **Commit context:** v0.37.0 `task describe` command
+- **Resolution:** Changed signature from `&str` to `&TaskId`,
+  ensuring only validated task IDs can reach path construction.
+
 ### RT-064 — CLI `task update` with no fields is a silent no-op
 
 - **Date:** 2026-04-04

@@ -33,9 +33,14 @@ cargo build -p rustwerk
    target/debug/rustwerk task status <ID> in-progress
    ```
 
-4. **Read the WBS** — Read `docs/planning/wbs.md` to
-   understand the task description, dependencies, and
-   complexity.
+4. **Read the task description** — Run:
+   ```
+   target/debug/rustwerk task describe <ID>
+   ```
+   If a description file exists (`.rustwerk/tasks/<ID>.md`),
+   use it as the primary source for implementation details,
+   acceptance criteria, and context. Also check
+   `docs/planning/wbs.md` for additional context if needed.
 
 5. **Plan if needed** — For tasks with complexity >= 5, or
    if the implementation approach is unclear, use
