@@ -193,10 +193,7 @@ pub(crate) fn cmd_task_list(
     // Apply tag filter.
     if let Some(ref tag) = tag {
         ids.retain(|id| {
-            project
-                .tasks
-                .get(*id)
-                .is_some_and(|t| t.tags.contains(tag))
+            project.tasks.get(*id).is_some_and(|t| t.tags.contains(tag))
         });
     }
 

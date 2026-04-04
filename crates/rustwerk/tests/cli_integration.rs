@@ -1339,8 +1339,13 @@ fn task_add_with_tags() {
     let (stdout, _, ok) = run(
         &dir,
         &[
-            "task", "add", "Tagged task", "--id", "T1",
-            "--tags", "backend,urgent",
+            "task",
+            "add",
+            "Tagged task",
+            "--id",
+            "T1",
+            "--tags",
+            "backend,urgent",
         ],
     );
     assert!(ok, "task add --tags failed: {stdout}");
@@ -1348,8 +1353,7 @@ fn task_add_with_tags() {
     // Verify tags persisted in project.json.
     let path = dir.join(".rustwerk/project.json");
     let json = fs::read_to_string(&path).unwrap();
-    let proj: serde_json::Value =
-        serde_json::from_str(&json).unwrap();
+    let proj: serde_json::Value = serde_json::from_str(&json).unwrap();
     let tags = &proj["tasks"]["T1"]["tags"];
     assert_eq!(
         tags,
@@ -1365,21 +1369,15 @@ fn task_update_sets_tags() {
     run(&dir, &["init", "P"]);
     run(
         &dir,
-        &[
-            "task", "add", "T", "--id", "A",
-            "--tags", "old-tag",
-        ],
+        &["task", "add", "T", "--id", "A", "--tags", "old-tag"],
     );
-    let (_, _, ok) = run(
-        &dir,
-        &["task", "update", "A", "--tags", "new-a,new-b"],
-    );
+    let (_, _, ok) =
+        run(&dir, &["task", "update", "A", "--tags", "new-a,new-b"]);
     assert!(ok, "task update --tags failed");
 
     let path = dir.join(".rustwerk/project.json");
     let json = fs::read_to_string(&path).unwrap();
-    let proj: serde_json::Value =
-        serde_json::from_str(&json).unwrap();
+    let proj: serde_json::Value = serde_json::from_str(&json).unwrap();
     let tags = &proj["tasks"]["A"]["tags"];
     assert_eq!(
         tags,
@@ -1395,21 +1393,14 @@ fn task_update_clears_tags() {
     run(&dir, &["init", "P"]);
     run(
         &dir,
-        &[
-            "task", "add", "T", "--id", "A",
-            "--tags", "backend",
-        ],
+        &["task", "add", "T", "--id", "A", "--tags", "backend"],
     );
-    let (_, _, ok) = run(
-        &dir,
-        &["task", "update", "A", "--tags", ""],
-    );
+    let (_, _, ok) = run(&dir, &["task", "update", "A", "--tags", ""]);
     assert!(ok, "clear tags failed");
 
     let path = dir.join(".rustwerk/project.json");
     let json = fs::read_to_string(&path).unwrap();
-    let proj: serde_json::Value =
-        serde_json::from_str(&json).unwrap();
+    let proj: serde_json::Value = serde_json::from_str(&json).unwrap();
     // Empty tags should be omitted from JSON.
     assert!(
         proj["tasks"]["A"].get("tags").is_none(),
@@ -1424,10 +1415,7 @@ fn task_add_invalid_tag_fails() {
     run(&dir, &["init", "P"]);
     let (_, _, ok) = run(
         &dir,
-        &[
-            "task", "add", "T", "--id", "A",
-            "--tags", "has spaces",
-        ],
+        &["task", "add", "T", "--id", "A", "--tags", "has spaces"],
     );
     assert!(!ok, "invalid tag should fail");
     let _ = fs::remove_dir_all(&dir);
@@ -1440,36 +1428,44 @@ fn task_list_filter_by_tag() {
     run(
         &dir,
         &[
-            "task", "add", "Backend work", "--id", "A",
-            "--tags", "backend",
+            "task",
+            "add",
+            "Backend work",
+            "--id",
+            "A",
+            "--tags",
+            "backend",
         ],
     );
     run(
         &dir,
         &[
-            "task", "add", "Frontend work", "--id", "B",
-            "--tags", "frontend",
+            "task",
+            "add",
+            "Frontend work",
+            "--id",
+            "B",
+            "--tags",
+            "frontend",
         ],
     );
     run(
         &dir,
         &[
-            "task", "add", "Both", "--id", "C",
-            "--tags", "backend,frontend",
+            "task",
+            "add",
+            "Both",
+            "--id",
+            "C",
+            "--tags",
+            "backend,frontend",
         ],
     );
-    run(
-        &dir,
-        &["task", "add", "No tags", "--id", "D"],
-    );
+    run(&dir, &["task", "add", "No tags", "--id", "D"]);
 
-    let (stdout, _, ok) =
-        run(&dir, &["task", "list", "--tag", "backend"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--tag", "backend"]);
     assert!(ok, "list --tag failed");
-    assert!(
-        stdout.contains("A"),
-        "should include A: {stdout}"
-    );
+    assert!(stdout.contains("A"), "should include A: {stdout}");
     assert!(
         !stdout.contains("B ") && !stdout.contains("B\n"),
         "should exclude B (frontend only): {stdout}"
@@ -1491,17 +1487,11 @@ fn task_list_tag_combined_with_status() {
     run(&dir, &["init", "P"]);
     run(
         &dir,
-        &[
-            "task", "add", "A", "--id", "A",
-            "--tags", "backend",
-        ],
+        &["task", "add", "A", "--id", "A", "--tags", "backend"],
     );
     run(
         &dir,
-        &[
-            "task", "add", "B", "--id", "B",
-            "--tags", "backend",
-        ],
+        &["task", "add", "B", "--id", "B", "--tags", "backend"],
     );
     run(&dir, &["task", "status", "A", "in-progress"]);
 
@@ -1509,8 +1499,12 @@ fn task_list_tag_combined_with_status() {
     let (stdout, _, ok) = run(
         &dir,
         &[
-            "task", "list", "--tag", "backend",
-            "--status", "in-progress",
+            "task",
+            "list",
+            "--tag",
+            "backend",
+            "--status",
+            "in-progress",
         ],
     );
     assert!(ok);
@@ -1527,8 +1521,7 @@ fn task_list_tag_invalid_fails() {
     let dir = temp_dir("list-tag-invalid");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
-    let (_, _, ok) =
-        run(&dir, &["task", "list", "--tag", "not valid!"]);
+    let (_, _, ok) = run(&dir, &["task", "list", "--tag", "not valid!"]);
     assert!(!ok, "invalid tag should fail early");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1543,8 +1536,7 @@ fn task_describe_shows_file_contents() {
 
     let tasks_dir = dir.join(".rustwerk/tasks");
     fs::create_dir_all(&tasks_dir).unwrap();
-    fs::write(tasks_dir.join("A.md"), "# Task A\n\nDetails here.\n")
-        .unwrap();
+    fs::write(tasks_dir.join("A.md"), "# Task A\n\nDetails here.\n").unwrap();
 
     let (stdout, _, ok) = run(&dir, &["task", "describe", "A"]);
     assert!(ok, "describe should succeed");
@@ -1571,8 +1563,7 @@ fn task_describe_nonexistent_task_fails() {
     let dir = temp_dir("describe-nonexistent");
     run(&dir, &["init", "P"]);
 
-    let (_, _, ok) =
-        run(&dir, &["task", "describe", "NOPE"]);
+    let (_, _, ok) = run(&dir, &["task", "describe", "NOPE"]);
     assert!(!ok, "describe should fail for unknown task");
     let _ = fs::remove_dir_all(&dir);
 }

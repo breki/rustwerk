@@ -39,10 +39,7 @@ struct BatchResult {
 /// be strings.
 fn parse_batch_tags(arr: &[serde_json::Value]) -> Result<Vec<&str>> {
     arr.iter()
-        .map(|v| {
-            v.as_str()
-                .context("tags array must contain only strings")
-        })
+        .map(|v| v.as_str().context("tags array must contain only strings"))
         .collect()
 }
 
