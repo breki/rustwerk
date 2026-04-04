@@ -7,6 +7,13 @@ reverse chronological order.
 
 ### 2026-04-04
 
+- Add `--tag` filter to `task list` command (v0.36.0)
+
+    `task list --tag <TAG>` filters tasks by tag. Combines
+    with existing filters (`--status`, `--assignee`,
+    `--available`, `--chain`). Uses `Task::has_tag` for
+    case-insensitive matching.
+
 - Add `--tags` flag to `task add` and `task update` (v0.35.0)
 
     CLI commands `task add` and `task update` now accept

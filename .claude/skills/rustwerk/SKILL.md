@@ -42,21 +42,28 @@ cargo build
 
 ```
 rustwerk task add "Title" [--id ID] [--desc DESC] \
-  [--complexity N] [--effort AMT]
+  [--complexity N] [--effort AMT] [--tags TAGS]
 ```
 
 - `--id`: mnemonic ID (e.g. `DOM-TAG`); auto-generated
   if omitted
 - `--complexity`: Fibonacci scale (1, 2, 3, 5, 8, 13)
 - `--effort`: estimate like `2H`, `1D`, `0.5W`, `1M`
+- `--tags`: comma-separated tags (slug-like: lowercase
+  alphanumeric + hyphens, max 50 chars each, max 20
+  per task). Example: `--tags "backend,urgent"`
 
 ### Update a task
 
 ```
-rustwerk task update <ID> [--title TITLE] [--desc DESC]
+rustwerk task update <ID> [--title TITLE] [--desc DESC] \
+  [--tags TAGS]
 ```
 
 Use `--desc ""` to clear the description.
+Use `--tags ""` to clear all tags.
+At least one of `--title`, `--desc`, or `--tags` is
+required.
 
 ### Remove a task
 
@@ -96,6 +103,7 @@ Filters (combinable):
 - `--status <STATUS>` — filter by specific status
 - `--assignee <DEV>` — filter by developer ID
 - `--chain <ID>` — show task and its transitive deps
+- `--tag <TAG>` — filter by tag
 
 `--available` and `--status` are mutually exclusive.
 
@@ -111,23 +119,26 @@ Cycles are rejected automatically.
 ### Assignment
 
 ```
-rustwerk task assign <ID> <DEV_ID>
+rustwerk task assign <ID> [DEV_ID]
 rustwerk task unassign <ID>
 ```
 
 Developer must be registered first (see `dev add`).
+If `DEV_ID` is omitted, falls back to `RUSTWERK_USER`
+environment variable.
 
 ## Effort Tracking
 
 ### Log effort
 
 ```
-rustwerk effort log <ID> <AMOUNT> --dev <DEV> \
+rustwerk effort log <ID> <AMOUNT> [--dev <DEV>] \
   [--note NOTE]
 ```
 
 Task must be IN_PROGRESS. Amount format: `2H`, `0.5D`,
-etc.
+etc. If `--dev` is omitted, falls back to
+`RUSTWERK_USER` environment variable.
 
 ### Set estimate
 
@@ -138,11 +149,15 @@ rustwerk effort estimate <ID> <AMOUNT>
 ## Developer Management
 
 ```
-rustwerk dev add <NAME> [--id ID] [--email EMAIL] \
+rustwerk dev add <ID> <NAME> [--email EMAIL] \
   [--role ROLE]
 rustwerk dev remove <ID>
 rustwerk dev list
 ```
+
+- `<ID>`: lowercase alphanumeric + hyphens (e.g.
+  `alice`, `bob-smith`)
+- `<NAME>`: display name (e.g. `"Alice Smith"`)
 
 ## Visualization
 
@@ -197,9 +212,9 @@ rustwerk batch --file commands.json
 
 | Command | Required | Optional |
 |---------|----------|----------|
-| `task.add` | `title` | `id`, `desc`, `complexity`, `effort` |
+| `task.add` | `title` | `id`, `desc`, `complexity`, `effort`, `tags` (array) |
 | `task.remove` | `id` | |
-| `task.update` | `id` | `title`, `desc` |
+| `task.update` | `id` | `title`, `desc`, `tags` (array) |
 | `task.status` | `id`, `status` | `force` (bool) |
 | `task.assign` | `id`, `to` | |
 | `task.unassign` | `id` | |
@@ -207,6 +222,8 @@ rustwerk batch --file commands.json
 | `task.undepend` | `from`, `to` | |
 | `effort.log` | `id`, `amount`, `dev` | `note` |
 | `effort.estimate` | `id`, `amount` | |
+| `dev.add` | `id`, `name` | `email`, `role` |
+| `dev.remove` | `id` | |
 
 Limits: 10 MB input, 1000 commands per batch.
 

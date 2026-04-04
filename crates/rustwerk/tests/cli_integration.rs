@@ -1432,3 +1432,103 @@ fn task_add_invalid_tag_fails() {
     assert!(!ok, "invalid tag should fail");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn task_list_filter_by_tag() {
+    let dir = temp_dir("list-tag");
+    run(&dir, &["init", "P"]);
+    run(
+        &dir,
+        &[
+            "task", "add", "Backend work", "--id", "A",
+            "--tags", "backend",
+        ],
+    );
+    run(
+        &dir,
+        &[
+            "task", "add", "Frontend work", "--id", "B",
+            "--tags", "frontend",
+        ],
+    );
+    run(
+        &dir,
+        &[
+            "task", "add", "Both", "--id", "C",
+            "--tags", "backend,frontend",
+        ],
+    );
+    run(
+        &dir,
+        &["task", "add", "No tags", "--id", "D"],
+    );
+
+    let (stdout, _, ok) =
+        run(&dir, &["task", "list", "--tag", "backend"]);
+    assert!(ok, "list --tag failed");
+    assert!(
+        stdout.contains("A"),
+        "should include A: {stdout}"
+    );
+    assert!(
+        !stdout.contains("B ") && !stdout.contains("B\n"),
+        "should exclude B (frontend only): {stdout}"
+    );
+    assert!(
+        stdout.contains("C"),
+        "should include C (has backend): {stdout}"
+    );
+    assert!(
+        !stdout.contains("D ") && !stdout.contains("D\n"),
+        "should exclude D (no tags): {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_list_tag_combined_with_status() {
+    let dir = temp_dir("list-tag-status");
+    run(&dir, &["init", "P"]);
+    run(
+        &dir,
+        &[
+            "task", "add", "A", "--id", "A",
+            "--tags", "backend",
+        ],
+    );
+    run(
+        &dir,
+        &[
+            "task", "add", "B", "--id", "B",
+            "--tags", "backend",
+        ],
+    );
+    run(&dir, &["task", "status", "A", "in-progress"]);
+
+    // Filter by tag + status should intersect.
+    let (stdout, _, ok) = run(
+        &dir,
+        &[
+            "task", "list", "--tag", "backend",
+            "--status", "in-progress",
+        ],
+    );
+    assert!(ok);
+    assert!(stdout.contains("A"), "A matches: {stdout}");
+    assert!(
+        !stdout.contains(" B"),
+        "B is todo, should be excluded: {stdout}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_list_tag_invalid_fails() {
+    let dir = temp_dir("list-tag-invalid");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let (_, _, ok) =
+        run(&dir, &["task", "list", "--tag", "not valid!"]);
+    assert!(!ok, "invalid tag should fail early");
+    let _ = fs::remove_dir_all(&dir);
+}

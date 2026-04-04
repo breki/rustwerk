@@ -215,6 +215,9 @@ enum TaskAction {
         /// and all its transitive dependencies).
         #[arg(long)]
         chain: Option<String>,
+        /// Filter by tag (show only tasks with this tag).
+        #[arg(long)]
+        tag: Option<String>,
     },
     /// Remove a task.
     Remove {
@@ -361,12 +364,14 @@ fn main() -> Result<()> {
                 status,
                 assignee,
                 chain,
+                tag,
             } => cmd_task_list(
                 available,
                 active,
                 status.as_deref(),
                 assignee.as_deref(),
                 chain.as_deref(),
+                tag.as_deref(),
             ),
             TaskAction::Depend { from, to } => cmd_depend(&from, &to),
             TaskAction::Undepend { from, to } => cmd_undepend(&from, &to),

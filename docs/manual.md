@@ -278,6 +278,8 @@ Filters:
 - `--assignee <ID>` — Filter by assigned developer.
 - `--chain <TASK>` — Show a task and all its transitive
   dependencies.
+- `--tag <TAG>` — Filter by tag (show only tasks with
+  this tag).
 
 Filters can be combined:
 
@@ -287,7 +289,9 @@ rustwerk task list --active
 rustwerk task list --status todo
 rustwerk task list --assignee alice
 rustwerk task list --chain DEPLOY
+rustwerk task list --tag backend
 rustwerk task list --assignee alice --status in-progress
+rustwerk task list --tag backend --status todo
 ```
 
 ### Update Task Status

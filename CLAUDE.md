@@ -58,6 +58,6 @@ Project-specific skills available as slash commands:
 | `/commit` | Commit with versioning, diary, and code review |
 | `/next-task` | Pick and implement the next WBS task |
 | `/todo` | Process the next pending TODO item |
-| `/rustwerk` | RustWerk CLI reference for project management |
+| `/rustwerk` | RustWerk CLI reference for project management (update on any functional change) |
 | `/tui-expert` | TUI rendering and alignment guidelines |
 | `/simplify` | Review changed code for quality |

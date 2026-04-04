@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use anyhow::Result;
 
 use rustwerk::domain::developer::DeveloperId;
-use rustwerk::domain::task::{Effort, Task, TaskId};
+use rustwerk::domain::task::{Effort, Tag, Task, TaskId};
 
 use crate::{load_project, parse_status, save_project};
 
@@ -131,6 +131,7 @@ pub(crate) fn cmd_task_list(
     status_filter: Option<&str>,
     assignee_filter: Option<&str>,
     chain_filter: Option<&str>,
+    tag_filter: Option<&str>,
 ) -> Result<()> {
     let (_root, project) = load_project()?;
     if project.tasks.is_empty() {
@@ -143,13 +144,15 @@ pub(crate) fn cmd_task_list(
     // Parse filters early so we fail fast.
     let status = status_filter.map(parse_status).transpose()?;
     let chain_tid = chain_filter.map(TaskId::new).transpose()?;
+    let tag = tag_filter.map(Tag::new).transpose()?;
 
     // Build the base set of task IDs to display.
     let has_filters = available_only
         || active_only
         || status.is_some()
         || assignee_filter.is_some()
-        || chain_tid.is_some();
+        || chain_tid.is_some()
+        || tag.is_some();
 
     // Collect all task IDs, then narrow down.
     let all_ids: Vec<&TaskId> = project.tasks.keys().collect();
@@ -184,6 +187,16 @@ pub(crate) fn cmd_task_list(
         let chain: HashSet<&TaskId> =
             project.dependency_chain(tid)?.into_iter().collect();
         ids = ids.intersection(&chain).copied().collect();
+    }
+
+    // Apply tag filter.
+    if let Some(ref tag) = tag {
+        ids.retain(|id| {
+            project
+                .tasks
+                .get(*id)
+                .is_some_and(|t| t.tags.contains(tag))
+        });
     }
 
     if ids.is_empty() {

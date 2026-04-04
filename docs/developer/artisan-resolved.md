@@ -6,6 +6,17 @@ findings.
 
 ---
 
+### AQ-040 — `--tag` filter silently ignores invalid tags
+
+- **Date:** 2026-04-04
+- **Category:** API Design / Consistency
+- **Commit context:** v0.36.0 `--tag` filter
+- **Resolution:** Added early `Tag::new` validation
+  alongside `--chain`/`--status` under the "fail fast"
+  comment. Invalid tags now produce a clear error. Uses
+  validated `Tag` in the retain closure via
+  `t.tags.contains(&tag)`.
+
 ### AQ-039 — Encapsulation violation: direct project.tasks access for tags
 
 - **Date:** 2026-04-04
