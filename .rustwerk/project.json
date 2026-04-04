@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-04T09:37:38.141820200Z"
+    "modified_at": "2026-04-04T13:55:51.005563900Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -76,6 +76,16 @@
         "STORE-FILE"
       ],
       "complexity": 3
+    },
+    "CLI-DESCRIBE": {
+      "title": "CLI task describe command (.rustwerk/tasks/<ID>.md)",
+      "description": "Add 'task describe <ID>' command that reads/writes .rustwerk/tasks/<ID>.md markdown files. 'task describe <ID>' shows the file contents. 'task describe <ID> --edit' opens or creates the file. 'task show' could also display the description if the file exists. Convention: files are named by task ID in uppercase.",
+      "status": "todo",
+      "effort_estimate": "3H",
+      "complexity": 3,
+      "tags": [
+        "cli"
+      ]
     },
     "CLI-DEV-ADD": {
       "title": "CLI dev add — add developer to project",
@@ -417,52 +427,82 @@
       ],
       "complexity": 8
     },
-    "PLG-ACTLOG": {
-      "title": "Built-in ActivityLogPlugin",
-      "status": "on_hold",
-      "dependencies": [
-        "PLG-WIRE"
-      ],
-      "complexity": 3
+    "PLG-API": {
+      "title": "Plugin API crate with DTOs and FFI contract",
+      "description": "Create rustwerk-plugin-api crate: PluginInfo, PluginResult, TaskPushResult, TaskDto structs. Define 4 extern C function signatures (api_version, plugin_info, push_tasks, free_string). API_VERSION constant. Helper functions for plugin authors.",
+      "status": "todo",
+      "effort_estimate": "4H",
+      "complexity": 5,
+      "tags": [
+        "plugin"
+      ]
     },
-    "PLG-CONFIG": {
-      "title": "Plugin configuration (per-plugin JSON)",
-      "status": "on_hold",
+    "PLG-CLI": {
+      "title": "CLI plugin list and push subcommands",
+      "description": "Add Plugin command to main.rs with List and Push actions. plugin list discovers and shows plugins. plugin push <name> --project-key PROJ [--tasks T1,T2] pushes tasks. Config assembly from env vars (JIRA_URL, JIRA_TOKEN), git user.email, CLI args.",
+      "status": "todo",
       "dependencies": [
-        "PLG-REG",
-        "SER-JSON"
+        "PLG-HOST"
       ],
-      "complexity": 3
+      "effort_estimate": "4H",
+      "complexity": 5,
+      "tags": [
+        "cli",
+        "plugin"
+      ]
     },
-    "PLG-EVENT": {
-      "title": "DomainEvent enum and HookPoint subscription",
-      "status": "on_hold",
+    "PLG-HOST": {
+      "title": "Plugin host with libloading dynamic loader",
+      "description": "Add plugin_host.rs to binary with #[allow(unsafe_code)]. LoadedPlugin struct wrapping libloading::Library. Plugin discovery in .rustwerk/plugins/, ~/.rustwerk/plugins/, and target/. Platform-specific extension filter (.dll/.so/.dylib). API version check. String memory management via plugin's free_string.",
+      "status": "todo",
       "dependencies": [
-        "PLG-REG"
+        "PLG-API",
+        "PLG-WORKSPACE"
       ],
-      "complexity": 3
+      "effort_estimate": "6H",
+      "complexity": 8,
+      "tags": [
+        "plugin"
+      ]
     },
-    "PLG-REG": {
-      "title": "PluginRegistry (register, unregister, dispatch)",
-      "status": "on_hold",
+    "PLG-JIRA": {
+      "title": "Jira plugin crate (cdylib) with REST client",
+      "description": "Create rustwerk-jira-plugin crate as cdylib. Implement 4 FFI exports. Jira REST client using ureq (sync). HTTP Basic Auth (email:token). Direct URL first, Platform API Gateway fallback for scoped tokens. Cloud ID from _edge/tenant_info.",
+      "status": "todo",
       "dependencies": [
-        "PLG-TRAIT"
+        "PLG-API",
+        "PLG-WORKSPACE"
       ],
-      "complexity": 3
+      "effort_estimate": "8H",
+      "complexity": 8,
+      "tags": [
+        "jira",
+        "plugin"
+      ]
     },
-    "PLG-TRAIT": {
-      "title": "Plugin trait (object-safe)",
-      "status": "on_hold",
-      "complexity": 3
-    },
-    "PLG-WIRE": {
-      "title": "Wire event dispatching into Project mutations",
-      "status": "on_hold",
+    "PLG-MAP": {
+      "title": "Task-to-Jira issue mapping (ADF format)",
+      "description": "Map TaskDto to Jira issue creation payload. POST /rest/api/3/issue. Description in Atlassian Document Format. Project key from config. Issue type defaults to Task.",
+      "status": "todo",
       "dependencies": [
-        "PLG-EVENT",
-        "DOM-ADD"
+        "PLG-JIRA"
       ],
-      "complexity": 5
+      "effort_estimate": "2H",
+      "complexity": 3,
+      "tags": [
+        "jira",
+        "plugin"
+      ]
+    },
+    "PLG-WORKSPACE": {
+      "title": "Wire plugin crates into workspace",
+      "description": "Add rustwerk-plugin-api and rustwerk-jira-plugin to workspace members. Add libloading (optional, behind plugins feature) and rustwerk-plugin-api deps to main crate. Crate-level unsafe_code overrides for plugin crates.",
+      "status": "todo",
+      "effort_estimate": "1H",
+      "complexity": 2,
+      "tags": [
+        "plugin"
+      ]
     },
     "QRY-BOTTLE": {
       "title": "Bottleneck detection",
