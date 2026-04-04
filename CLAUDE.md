@@ -2,18 +2,15 @@
 
 Git-native, AI-agent-friendly project orchestration CLI.
 
-## Quick Reference
-
 - **Stack**: Rust, single portable binary
 - **Target platforms**: Windows, Linux, macOS
 - **Interface**: CLI with structured JSON I/O
 - **Design**: procedural logic first, AI only for
   reasoning tasks
 
-## CLI Commands
+## Build Commands
 
 ```bash
-# Build (never use raw cargo test/clippy)
 cargo xtask validate             # clippy + tests + coverage
 cargo xtask test [filter]        # tests only
 cargo xtask clippy               # lint only
@@ -21,51 +18,43 @@ cargo xtask coverage             # coverage only (≥90%)
 cargo xtask fmt                  # format code
 ```
 
-**Important:** The working directory is already set to
-the project root. Never use `cd` to the project root
-or `git -C <project-dir>` — run all commands directly.
+Never use raw `cargo test` or `cargo clippy` — always
+go through `xtask`.
 
-**Commits:** Use `/commit` command. No "Co-Authored-By",
-no emoji.
-
-## Formatting
-
-- Wrap markdown at 80 characters per line.
+The working directory is already set to the project root.
+Never use `cd` to the project root or `git -C <dir>`.
 
 ## Coding Standards
 
 - Rust edition 2021
 - `#[deny(warnings)]` via workspace lints
 - clippy pedantic where practical
-- Error handling: use `thiserror` for library errors,
-  `anyhow` for CLI errors (add when needed)
+- Error handling: `thiserror` for library errors,
+  `anyhow` for CLI errors
 - Prefer `&str` over `String` in function signatures
 - All public items must have doc comments
+- Wrap markdown at 80 characters per line
 
-## Semantic Versioning
+## Commits
 
-Version lives in `crates/rustwerk/Cargo.toml` (single source
-of truth). The `/commit` command handles version bumps
-automatically based on commit type:
-
-| Commit Type | Version Bump |
-|-------------|-------------|
-| `feat` | **minor** (0.x.0) |
-| `fix`, `perf` | **patch** (0.1.x) |
-| `docs`, `test`, `refactor`, `chore`, `style` | no bump |
+Use `/commit`. No "Co-Authored-By", no emoji.
 
 ## End-User Manual
 
-The file `docs/manual.md` is the end-user manual. When
-a `feat` or `fix` commit changes CLI behavior (new
-commands, new flags, changed output), update the manual
-to reflect the change. Keep examples current. Skip
-manual updates for internal refactors, test changes,
-or non-user-facing work.
+The file `docs/manual.md` is the end-user manual. Update
+it when a `feat` or `fix` commit changes CLI behavior.
+Skip updates for internal refactors or non-user-facing
+work.
 
-## Development Diary
+## Skills
 
-Track significant changes in `docs/developer/DIARY.md`. Add
-entries for functional or infrastructure changes only. See
-[docs/developer/diary-guidelines.md](docs/developer/diary-guidelines.md)
-for format details.
+Project-specific skills available as slash commands:
+
+| Skill | Purpose |
+|-------|---------|
+| `/commit` | Commit with versioning, diary, and code review |
+| `/next-task` | Pick and implement the next WBS task |
+| `/todo` | Process the next pending TODO item |
+| `/rustwerk` | RustWerk CLI reference for project management |
+| `/tui-expert` | TUI rendering and alignment guidelines |
+| `/simplify` | Review changed code for quality |
