@@ -7,6 +7,14 @@ reverse chronological order.
 
 ### 2026-04-04
 
+- Add `--tags` flag to `task add` and `task update` (v0.35.0)
+
+    CLI commands `task add` and `task update` now accept
+    `--tags` for comma-separated tag input. Batch commands
+    `task.add` and `task.update` accept a `tags` JSON array.
+    Added `Task::set_tags` domain method for replacing all
+    tags at once. Updated manual.
+
 - Add `tags` field to task model (v0.34.0)
 
     Tasks now support an optional `tags` field using a

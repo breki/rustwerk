@@ -7,12 +7,23 @@ use rustwerk::domain::task::{Effort, Task, TaskId};
 
 use crate::{load_project, parse_status, save_project};
 
+/// Parse a comma-separated tags string into a vec of
+/// tag slices. An empty string returns an empty vec.
+fn parse_tags(tags_str: &str) -> Vec<&str> {
+    if tags_str.is_empty() {
+        Vec::new()
+    } else {
+        tags_str.split(',').map(str::trim).collect()
+    }
+}
+
 pub(crate) fn cmd_task_add(
     title: &str,
     id: Option<&str>,
     desc: Option<&str>,
     complexity: Option<u32>,
     effort: Option<&str>,
+    tags: Option<&str>,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
     let mut task = Task::new(title)?;
@@ -22,6 +33,10 @@ pub(crate) fn cmd_task_add(
     }
     if let Some(e) = effort {
         task.effort_estimate = Some(Effort::parse(e)?);
+    }
+    if let Some(t) = tags {
+        let tag_list = parse_tags(t);
+        task.set_tags(&tag_list)?;
     }
 
     let task_id = if let Some(id_str) = id {
@@ -69,12 +84,23 @@ pub(crate) fn cmd_task_update(
     id: &str,
     title: Option<&str>,
     desc: Option<&str>,
+    tags: Option<&str>,
 ) -> Result<()> {
+    if title.is_none() && desc.is_none() && tags.is_none() {
+        anyhow::bail!(
+            "task update requires at least one of \
+             --title, --desc, or --tags"
+        );
+    }
     let (root, mut project) = load_project()?;
     let task_id = TaskId::new(id)?;
     // Empty string for desc means clear it.
     let description = desc.map(|d| if d.is_empty() { None } else { Some(d) });
     project.update_task(&task_id, title, description)?;
+    if let Some(t) = tags {
+        let tag_list = parse_tags(t);
+        project.set_task_tags(&task_id, &tag_list)?;
+    }
     save_project(&root, &project)?;
     let task = &project.tasks[&task_id];
     println!("Updated {task_id}: {}", task.title);

@@ -35,6 +35,17 @@ struct BatchResult {
     message: String,
 }
 
+/// Parse a JSON array of tags, requiring all elements to
+/// be strings.
+fn parse_batch_tags(arr: &[serde_json::Value]) -> Result<Vec<&str>> {
+    arr.iter()
+        .map(|v| {
+            v.as_str()
+                .context("tags array must contain only strings")
+        })
+        .collect()
+}
+
 /// Execute a single batch command against a project.
 #[allow(clippy::too_many_lines)] // dispatch match
 fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
@@ -59,6 +70,10 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             if let Some(e) = args.get("effort").and_then(|v| v.as_str()) {
                 task.effort_estimate = Some(Effort::parse(e)?);
             }
+            if let Some(tags) = args.get("tags").and_then(|v| v.as_array()) {
+                let tag_strs = parse_batch_tags(tags)?;
+                task.set_tags(&tag_strs)?;
+            }
             let task_id =
                 if let Some(id_str) = args.get("id").and_then(|v| v.as_str()) {
                     let tid = TaskId::new(id_str)?;
@@ -82,15 +97,20 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             let task_id = TaskId::new(id)?;
             let title = args.get("title").and_then(|v| v.as_str());
             let desc = args.get("desc").and_then(|v| v.as_str());
-            if title.is_none() && desc.is_none() {
+            let tags = args.get("tags").and_then(|v| v.as_array());
+            if title.is_none() && desc.is_none() && tags.is_none() {
                 bail!(
                     "task.update requires at least one \
-                     of 'title' or 'desc'"
+                     of 'title', 'desc', or 'tags'"
                 );
             }
             let description =
                 desc.map(|d| if d.is_empty() { None } else { Some(d) });
             project.update_task(&task_id, title, description)?;
+            if let Some(tag_arr) = tags {
+                let tag_strs = parse_batch_tags(tag_arr)?;
+                project.set_task_tags(&task_id, &tag_strs)?;
+            }
             Ok(format!("Updated {task_id}"))
         }
         "task.status" => {

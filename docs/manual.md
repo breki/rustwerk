@@ -244,12 +244,17 @@ Options:
   path calculation.
 - `--effort <AMOUNT>` — Effort estimate (e.g. `5H`,
   `1D`, `2W`).
+- `--tags <TAGS>` — Comma-separated tags for
+  categorization. Tags are slug-like (lowercase
+  alphanumeric + hyphens, max 50 chars each, max 20
+  per task).
 
 Examples:
 
 ```
 rustwerk task add "Design API" --id API-DESIGN \
-  --complexity 5 --effort 2D --desc "REST API design"
+  --complexity 5 --effort 2D --desc "REST API design" \
+  --tags "backend,api"
 
 rustwerk task add "Quick fix"
 # Auto-generates ID: T0001
@@ -321,6 +326,8 @@ rustwerk task status AUTH-LOGIN todo --force
 rustwerk task update AUTH-LOGIN --title "New title"
 rustwerk task update AUTH-LOGIN --desc "New description"
 rustwerk task update AUTH-LOGIN --desc ""  # clear desc
+rustwerk task update AUTH-LOGIN --tags "backend,auth"
+rustwerk task update AUTH-LOGIN --tags ""  # clear tags
 ```
 
 ### Remove a Task
@@ -662,9 +669,9 @@ echo '[
 
 | Command | Required Args | Optional Args |
 |---------|--------------|---------------|
-| `task.add` | `title` | `id`, `desc`, `complexity`, `effort` |
+| `task.add` | `title` | `id`, `desc`, `complexity`, `effort`, `tags` (array) |
 | `task.remove` | `id` | |
-| `task.update` | `id` | `title`, `desc` |
+| `task.update` | `id` | `title`, `desc`, `tags` (array) |
 | `task.status` | `id`, `status` | `force` (bool) |
 | `task.assign` | `id`, `to` | |
 | `task.unassign` | `id` | |

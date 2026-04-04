@@ -6,6 +6,15 @@ findings.
 
 ---
 
+### AQ-039 — Encapsulation violation: direct project.tasks access for tags
+
+- **Date:** 2026-04-04
+- **Category:** Abstraction Boundaries
+- **Commit context:** v0.35.0 `--tags` flag
+- **Resolution:** Added `Project::set_task_tags` method
+  that handles `modified_at` internally. CLI and batch
+  now use this method instead of direct field access.
+
 ### AQ-032 — Repetitive `.map_err` boilerplate across codebase
 
 - **Date:** 2026-04-04

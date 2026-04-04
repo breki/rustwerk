@@ -382,6 +382,27 @@ impl Task {
         }
     }
 
+    /// Replace all tags on this task. Each tag is validated.
+    /// Pass an empty slice to clear all tags.
+    pub fn set_tags(&mut self, tags: &[&str]) -> Result<(), DomainError> {
+        let mut new_tags = Vec::with_capacity(tags.len());
+        for &t in tags {
+            let tag = Tag::new(t)?;
+            if !new_tags.contains(&tag) {
+                new_tags.push(tag);
+            }
+        }
+        if new_tags.len() > Self::MAX_TAGS {
+            return Err(DomainError::ValidationError(format!(
+                "a task may have at most {} tags",
+                Self::MAX_TAGS
+            )));
+        }
+        new_tags.sort();
+        self.tags = new_tags;
+        Ok(())
+    }
+
     /// Check whether this task has a given tag
     /// (case-insensitive).
     pub fn has_tag(&self, tag: &str) -> bool {
@@ -692,6 +713,36 @@ mod tests {
     fn task_has_tag_invalid_returns_false() {
         let t = Task::new("Test").unwrap();
         assert!(!t.has_tag("not valid!"));
+    }
+
+    #[test]
+    fn task_set_tags() {
+        let mut t = Task::new("Test").unwrap();
+        t.add_tag("old").unwrap();
+        t.set_tags(&["beta", "alpha"]).unwrap();
+        let names: Vec<&str> = t.tags.iter().map(Tag::as_str).collect();
+        assert_eq!(names, vec!["alpha", "beta"]);
+    }
+
+    #[test]
+    fn task_set_tags_clears() {
+        let mut t = Task::new("Test").unwrap();
+        t.add_tag("backend").unwrap();
+        t.set_tags(&[]).unwrap();
+        assert!(t.tags.is_empty());
+    }
+
+    #[test]
+    fn task_set_tags_deduplicates() {
+        let mut t = Task::new("Test").unwrap();
+        t.set_tags(&["a", "a", "b"]).unwrap();
+        assert_eq!(t.tags.len(), 2);
+    }
+
+    #[test]
+    fn task_set_tags_invalid_rejected() {
+        let mut t = Task::new("Test").unwrap();
+        assert!(t.set_tags(&["valid", "not valid"]).is_err());
     }
 
     #[test]

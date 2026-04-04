@@ -179,6 +179,10 @@ enum TaskAction {
         /// Optional effort estimate (e.g. "5H", "1D").
         #[arg(long)]
         effort: Option<String>,
+        /// Comma-separated tags (slug-like: lowercase
+        /// alphanumeric and hyphens).
+        #[arg(long)]
+        tags: Option<String>,
     },
     /// Set task status.
     Status {
@@ -227,6 +231,10 @@ enum TaskAction {
         /// New description (use "" to clear).
         #[arg(long)]
         desc: Option<String>,
+        /// Comma-separated tags (replaces all existing
+        /// tags; use "" to clear).
+        #[arg(long)]
+        tags: Option<String>,
     },
     /// Assign a developer to a task. Falls back to the
     /// `RUSTWERK_USER` environment variable when no
@@ -318,12 +326,14 @@ fn main() -> Result<()> {
                 desc,
                 complexity,
                 effort,
+                tags,
             } => cmd_task_add(
                 &title,
                 id.as_deref(),
                 desc.as_deref(),
                 complexity,
                 effort.as_deref(),
+                tags.as_deref(),
             ),
             TaskAction::Status { id, status, force } => {
                 cmd_task_status(&id, &status, force)
@@ -334,9 +344,17 @@ fn main() -> Result<()> {
                 cmd_task_assign(&id, &dev)
             }
             TaskAction::Unassign { id } => cmd_task_unassign(&id),
-            TaskAction::Update { id, title, desc } => {
-                cmd_task_update(&id, title.as_deref(), desc.as_deref())
-            }
+            TaskAction::Update {
+                id,
+                title,
+                desc,
+                tags,
+            } => cmd_task_update(
+                &id,
+                title.as_deref(),
+                desc.as_deref(),
+                tags.as_deref(),
+            ),
             TaskAction::List {
                 available,
                 active,

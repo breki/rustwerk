@@ -1329,3 +1329,106 @@ fn status_empty_project() {
     assert!(stdout.contains("0%"), "zero pct: {stdout}");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- tags ---
+
+#[test]
+fn task_add_with_tags() {
+    let dir = temp_dir("add-tags");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) = run(
+        &dir,
+        &[
+            "task", "add", "Tagged task", "--id", "T1",
+            "--tags", "backend,urgent",
+        ],
+    );
+    assert!(ok, "task add --tags failed: {stdout}");
+
+    // Verify tags persisted in project.json.
+    let path = dir.join(".rustwerk/project.json");
+    let json = fs::read_to_string(&path).unwrap();
+    let proj: serde_json::Value =
+        serde_json::from_str(&json).unwrap();
+    let tags = &proj["tasks"]["T1"]["tags"];
+    assert_eq!(
+        tags,
+        &serde_json::json!(["backend", "urgent"]),
+        "tags should be sorted: {tags}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_update_sets_tags() {
+    let dir = temp_dir("update-tags");
+    run(&dir, &["init", "P"]);
+    run(
+        &dir,
+        &[
+            "task", "add", "T", "--id", "A",
+            "--tags", "old-tag",
+        ],
+    );
+    let (_, _, ok) = run(
+        &dir,
+        &["task", "update", "A", "--tags", "new-a,new-b"],
+    );
+    assert!(ok, "task update --tags failed");
+
+    let path = dir.join(".rustwerk/project.json");
+    let json = fs::read_to_string(&path).unwrap();
+    let proj: serde_json::Value =
+        serde_json::from_str(&json).unwrap();
+    let tags = &proj["tasks"]["A"]["tags"];
+    assert_eq!(
+        tags,
+        &serde_json::json!(["new-a", "new-b"]),
+        "tags should be replaced: {tags}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_update_clears_tags() {
+    let dir = temp_dir("update-clear-tags");
+    run(&dir, &["init", "P"]);
+    run(
+        &dir,
+        &[
+            "task", "add", "T", "--id", "A",
+            "--tags", "backend",
+        ],
+    );
+    let (_, _, ok) = run(
+        &dir,
+        &["task", "update", "A", "--tags", ""],
+    );
+    assert!(ok, "clear tags failed");
+
+    let path = dir.join(".rustwerk/project.json");
+    let json = fs::read_to_string(&path).unwrap();
+    let proj: serde_json::Value =
+        serde_json::from_str(&json).unwrap();
+    // Empty tags should be omitted from JSON.
+    assert!(
+        proj["tasks"]["A"].get("tags").is_none(),
+        "empty tags should be omitted"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_add_invalid_tag_fails() {
+    let dir = temp_dir("add-bad-tag");
+    run(&dir, &["init", "P"]);
+    let (_, _, ok) = run(
+        &dir,
+        &[
+            "task", "add", "T", "--id", "A",
+            "--tags", "has spaces",
+        ],
+    );
+    assert!(!ok, "invalid tag should fail");
+    let _ = fs::remove_dir_all(&dir);
+}

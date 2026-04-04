@@ -5,6 +5,24 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-064 — CLI `task update` with no fields is a silent no-op
+
+- **Date:** 2026-04-04
+- **Category:** Correctness (Low)
+- **Commit context:** v0.35.0 `--tags` flag
+- **Resolution:** Added early guard in `cmd_task_update`
+  that bails if none of `--title`, `--desc`, or `--tags`
+  are provided, matching the batch path's validation.
+
+### RT-063 — Batch `tags` silently drops non-string values
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** v0.35.0 `--tags` flag
+- **Resolution:** Added `parse_batch_tags` helper that
+  uses `.map(|v| v.as_str().context(...))` instead of
+  `filter_map`, so non-string values produce an error.
+
 ### RT-062 — Unbounded tag count (DoS via memory/CPU)
 
 - **Date:** 2026-04-04

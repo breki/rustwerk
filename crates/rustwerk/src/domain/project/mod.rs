@@ -188,6 +188,22 @@ impl Project {
         Ok(())
     }
 
+    /// Replace all tags on a task. Pass an empty slice to
+    /// clear all tags.
+    pub fn set_task_tags(
+        &mut self,
+        id: &TaskId,
+        tags: &[&str],
+    ) -> Result<(), DomainError> {
+        let task = self
+            .tasks
+            .get_mut(id)
+            .ok_or_else(|| DomainError::TaskNotFound(id.to_string()))?;
+        task.set_tags(tags)?;
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
     /// Assign a registered developer to a task.
     /// The developer must exist in the project's
     /// developer registry.
