@@ -5,6 +5,22 @@ reverse chronological order.
 
 ---
 
+### 2026-04-04
+
+- Fix GitHub Actions CI and add release workflow (v0.31.0)
+
+    Rewrote CI workflow to use only GitHub-owned actions
+    (replaced `dtolnay/rust-toolchain` and
+    `Swatinem/rust-cache` with `rustup` + `actions/cache`).
+    Split single validate job into parallel fmt, clippy, and
+    multi-platform test jobs (ubuntu, windows, macos). Added
+    `workflow_call` trigger so the release workflow can reuse
+    CI. New `release.yml` triggers on `v*.*.*` tags, runs CI,
+    builds release binaries for 5 targets (linux x86_64,
+    linux arm64, windows x86_64, macos x86_64, macos arm64),
+    and publishes a GitHub Release with notes extracted from
+    `CHANGELOG.md`. Added initial `CHANGELOG.md`.
+
 ### 2026-04-03
 
 - Add `status` command for compact project dashboard (v0.31.0)

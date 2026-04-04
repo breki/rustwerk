@@ -5,6 +5,49 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-052 — Actions not pinned to SHA
+
+- **Date:** 2026-04-04
+- **Category:** Security
+- **Commit context:** CI/release workflow setup
+- **Resolution:** Pinned all `actions/checkout`,
+  `actions/cache`, `actions/upload-artifact`, and
+  `actions/download-artifact` to full commit SHAs with
+  version comments.
+
+### RT-051 — Non-semver tags trigger release workflow
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** CI/release workflow setup
+- **Resolution:** Added semver validation step early in
+  the build job that rejects malformed tags.
+
+### RT-050 — Cache includes target/ allowing poisoning
+
+- **Date:** 2026-04-04
+- **Category:** Security
+- **Commit context:** CI/release workflow setup
+- **Resolution:** Removed `target` from cache paths in
+  both `ci.yml` and `release.yml`. Only `~/.cargo/registry`
+  and `~/.cargo/git` are cached now.
+
+### RT-049 — Awk regex injection via crafted tag name
+
+- **Date:** 2026-04-04
+- **Category:** Security
+- **Commit context:** CI/release workflow setup
+- **Resolution:** Changed awk from regex match (`~`) to
+  string match (`index()`) for version comparison.
+
+### RT-048 — Missing permissions block in CI workflow
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** CI/release workflow setup
+- **Resolution:** Added `permissions: contents: read` at
+  the top of `ci.yml`.
+
 ### RT-046 — project.tasks[*id] panics on absent key
 
 - **Date:** 2026-04-03

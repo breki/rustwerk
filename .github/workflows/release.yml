@@ -1,0 +1,146 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: ci
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate tag
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not valid semver"
+            exit 1
+          fi
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup target add ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: >
+          sudo apt-get update &&
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: >-
+            ${{ runner.os }}-${{ matrix.target }}-cargo-${{
+            hashFiles('**/Cargo.lock') }}
+          restore-keys: >-
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Determine archive name
+        id: archive
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          NAME="rustwerk-${VERSION}-${{ matrix.target }}"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          STAGING="${{ steps.archive.outputs.name }}"
+          mkdir "$STAGING"
+          cp target/${{ matrix.target }}/release/rustwerk "$STAGING/"
+          cp LICENSE "$STAGING/"
+          tar czf "${STAGING}.tar.gz" "$STAGING"
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          STAGING="${{ steps.archive.outputs.name }}"
+          mkdir "$STAGING"
+          cp target/${{ matrix.target }}/release/rustwerk.exe "$STAGING/"
+          cp LICENSE "$STAGING/"
+          7z a "${STAGING}.zip" "$STAGING"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.archive.outputs.name }}
+          path: >-
+            ${{ steps.archive.outputs.name }}.${{
+            matrix.archive }}
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "[" ver "]") > 0) found=1
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+          echo "$NOTES" > release_notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          --title "$GITHUB_REF_NAME"
+          --notes-file release_notes.md
+          artifacts/*
