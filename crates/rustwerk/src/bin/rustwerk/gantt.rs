@@ -14,8 +14,7 @@ const FALLBACK_WIDTH: usize = 80;
 /// Get terminal width. Uses `terminal_size` crate,
 /// falls back to 80.
 fn term_width() -> usize {
-    terminal_size::terminal_size()
-        .map_or(FALLBACK_WIDTH, |(w, _)| w.0 as usize)
+    terminal_size::terminal_size().map_or(FALLBACK_WIDTH, |(w, _)| w.0 as usize)
 }
 
 /// Scale a value by a factor, with minimum 1 (for bar

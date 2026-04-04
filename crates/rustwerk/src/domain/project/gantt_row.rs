@@ -31,9 +31,9 @@ impl GanttRow {
                 let done = self.width / 2;
                 (done, self.width - done)
             }
-            Status::InProgress
-            | Status::Todo
-            | Status::OnHold => (0, self.width),
+            Status::InProgress | Status::Todo | Status::OnHold => {
+                (0, self.width)
+            }
         }
     }
 

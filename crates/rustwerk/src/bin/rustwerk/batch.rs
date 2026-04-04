@@ -48,7 +48,9 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             if let Some(d) = args.get("desc").and_then(|v| v.as_str()) {
                 task.description = Some(d.to_string());
             }
-            if let Some(c) = args.get("complexity").and_then(serde_json::Value::as_u64) {
+            if let Some(c) =
+                args.get("complexity").and_then(serde_json::Value::as_u64)
+            {
                 let c = u32::try_from(c).map_err(|_| {
                     anyhow::anyhow!("complexity value too large: {c}")
                 })?;
@@ -107,8 +109,10 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             let status = args["status"]
                 .as_str()
                 .context("task.status requires 'status'")?;
-            let force =
-                args.get("force").and_then(serde_json::Value::as_bool).unwrap_or(false);
+            let force = args
+                .get("force")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
             let task_id =
                 TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
             let new_status = parse_status(status)?;
