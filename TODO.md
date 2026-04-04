@@ -1,6 +1,5 @@
 # TODO
 
-- Add a /rustwerk skill that knows how to use rustwerk CLI for project management
 - Fix Github actions, also prepare release process (like it is done for https://github.com/breki/kozmotic)
 - The manual should include (in a separate page) a full specification of rustwerk's project file format
 - Can we use a proper TUI for walking the Gantt chart, so it would look
@@ -12,6 +11,7 @@
 
 ## Done
 
+- Add /rustwerk skill for CLI project management reference (2026-04-04)
 - Add WBS tasks for tag support: DOM-TAG, CLI-TAG-SET, CLI-TAG-FILTER (2026-04-04)
 - Add ON_HOLD status and mark Phase 5 git tasks on-hold (2026-04-03)
 - Describe git tasks in detail; defer Phase 5 pending workflow design decisions (2026-04-03)
