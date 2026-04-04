@@ -6,6 +6,44 @@ findings.
 
 ---
 
+### AQ-038 — File size: task.rs at 614 lines
+
+- **Date:** 2026-04-04
+- **Category:** Module Size
+- **Commit context:** v0.34.0 tags field
+- **Resolution:** Noted but acceptable — file contains
+  closely related types. Will extract `Effort` types if
+  it grows further.
+
+### AQ-037 — Linear search on a sorted collection
+
+- **Date:** 2026-04-04
+- **Category:** Efficiency
+- **Commit context:** v0.34.0 tags field
+- **Resolution:** Replaced `contains()` with
+  `binary_search()` in `add_tag`, `remove_tag`, and
+  `has_tag`. Insert uses `binary_search` insertion
+  point instead of push+sort.
+
+### AQ-036 — Inconsistent return types: add_tag vs remove_tag
+
+- **Date:** 2026-04-04
+- **Category:** API Design
+- **Commit context:** v0.34.0 tags field
+- **Resolution:** Both `add_tag` and `remove_tag` now
+  return `Result<bool, DomainError>` where `bool`
+  indicates whether the collection was modified.
+
+### AQ-035 — `Vec<String>` where a `Tag` newtype would be safer
+
+- **Date:** 2026-04-04
+- **Category:** Type Safety
+- **Commit context:** v0.34.0 tags field
+- **Resolution:** Introduced `Tag` newtype with
+  `new(s: &str) -> Result<Self, DomainError>`,
+  custom `Serialize`/`Deserialize`, `Display`. Field
+  changed from `Vec<String>` to `Vec<Tag>`.
+
 ### AQ-034 — Missing test for `dev.add` without `id`
 
 - **Date:** 2026-04-04

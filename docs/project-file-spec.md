@@ -91,7 +91,8 @@ Task IDs come in two forms:
       "timestamp": "2026-04-03T10:00:00Z",
       "note": "Initial implementation"
     }
-  ]
+  ],
+  "tags": ["backend", "auth"]
 }
 ```
 
@@ -105,6 +106,7 @@ Task IDs come in two forms:
 | `complexity` | integer | no | omitted | Complexity score, 1–1000 |
 | `assignee` | string | no | omitted | Developer ID of the assigned developer |
 | `effort_entries` | array | no | omitted | Logged effort entries (see [Effort Entries](#effort-entries)) |
+| `tags` | array | no | omitted | List of tag strings for categorization (see [Tags](#tags)) |
 
 ### Status Values
 
@@ -183,6 +185,26 @@ Effort can only be logged on tasks with status
 | `developer` | string | yes | Developer ID who did the work |
 | `timestamp` | string | yes | When the effort was logged (RFC 3339, UTC) |
 | `note` | string | no | Optional note (omitted if not set) |
+
+### Tags
+
+The `tags` array holds slug-like strings used to
+categorize and filter tasks. Tags are stored in
+lowercase and sorted alphabetically. The array is
+omitted from JSON when empty. A task may have at most
+20 tags.
+
+**Constraints:**
+- Each tag is trimmed and lowercased on input.
+- Must contain only lowercase alphanumeric characters
+  and hyphens. Pattern: `^[a-z0-9-]+$`.
+- Maximum length: 50 characters.
+- Maximum count: 20 tags per task.
+- Empty tags (after trim) are rejected.
+- Duplicate tags are silently ignored (idempotent).
+
+Examples: `["backend", "urgent"]`,
+`["auth", "phase-1"]`.
 
 ## Developers
 

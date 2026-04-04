@@ -7,6 +7,16 @@ reverse chronological order.
 
 ### 2026-04-04
 
+- Add `tags` field to task model (v0.34.0)
+
+    Tasks now support an optional `tags` field using a
+    validated `Tag` newtype — slug-like strings (lowercase
+    alphanumeric + hyphens, max 50 chars), sorted and
+    deduplicated, max 20 per task. Domain methods:
+    `add_tag`, `remove_tag`, `has_tag`. Tags are validated
+    on deserialization, omitted from JSON when empty.
+    Updated project file spec with Tags section.
+
 - Add `dev.add` and `dev.remove` batch commands (v0.33.0)
 
     Batch operations can now register and remove developers

@@ -5,6 +5,31 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-062 — Unbounded tag count (DoS via memory/CPU)
+
+- **Date:** 2026-04-04
+- **Category:** Security (Low)
+- **Commit context:** v0.34.0 tags field
+- **Resolution:** Added `Task::MAX_TAGS = 20` limit.
+  `add_tag` returns error when limit is reached.
+
+### RT-061 — Deserialized tags bypass all validation
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** v0.34.0 tags field
+- **Resolution:** Introduced `Tag` newtype with custom
+  `Deserialize` impl that validates on load. Invalid
+  tags in JSON are rejected at parse time.
+
+### RT-060 — No validation of tag content
+
+- **Date:** 2026-04-04
+- **Category:** Correctness
+- **Commit context:** v0.34.0 tags field
+- **Resolution:** `Tag::new` validates slug format:
+  lowercase alphanumeric + hyphens, max 50 chars.
+
 ### RT-059 — Batch `task.assign` missing `RUSTWERK_USER` fallback
 
 - **Date:** 2026-04-04

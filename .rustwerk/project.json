@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-04T03:28:57.294899500Z"
+    "modified_at": "2026-04-04T08:56:23.754089Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -330,7 +330,7 @@
     "DOM-TAG": {
       "title": "Add tags field to task model",
       "description": "Add an optional tags field (Vec<String>) to the Task domain model. Update serialization/deserialization to support tags in project.json. Tags should be lowercase, alphanumeric with hyphens.",
-      "status": "todo",
+      "status": "done",
       "effort_estimate": "2H",
       "complexity": 3
     },
