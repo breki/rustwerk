@@ -4,12 +4,36 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-031
+**Next ID:** AQ-033
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.
 
 ---
+
+### AQ-032 — Repetitive `.map_err` boilerplate across codebase
+
+- **Date:** 2026-04-04
+- **Category:** Error Handling
+- **Commit context:** v0.33.0 batch dev commands
+- **Description:** `.map_err(|e| anyhow::anyhow!("{e}"))` appears
+  19 times in `batch.rs` alone and many more across the CLI.
+  Domain error types could implement `Into<anyhow::Error>`
+  or a helper could consolidate this.
+- **Better approach:** If domain errors implement
+  `std::error::Error`, the `?` operator works directly with
+  anyhow. Otherwise, add a `to_anyhow` helper function.
+
+### AQ-031 — `batch.rs` exceeds 500-line threshold
+
+- **Date:** 2026-04-04
+- **Category:** Module Size
+- **Commit context:** v0.33.0 batch dev commands
+- **Description:** `batch.rs` is ~700 lines, with ~370 lines
+  of tests. The `execute_one` dispatch function already has
+  `#[allow(clippy::too_many_lines)]`.
+- **Better approach:** Extract tests into a sibling file or
+  split `execute_one` into sub-dispatchers by domain.
 
 ### AQ-027 — Cycle handling in build_subtree undocumented
 

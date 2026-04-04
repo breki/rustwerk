@@ -7,6 +7,13 @@ reverse chronological order.
 
 ### 2026-04-04
 
+- Add `dev.add` and `dev.remove` batch commands (v0.33.0)
+
+    Batch operations can now register and remove developers
+    via `dev.add` (with optional `email` and `role` fields)
+    and `dev.remove`. This completes the batch command set
+    needed for fully automated project setup from a WBS.
+
 - Add `RUSTWERK_USER` env var for developer identity (v0.32.0)
 
     `task assign` and `effort log` now fall back to the

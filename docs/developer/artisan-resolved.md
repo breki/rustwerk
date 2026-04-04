@@ -6,6 +6,22 @@ findings.
 
 ---
 
+### AQ-034 — Missing test for `dev.add` without `id`
+
+- **Date:** 2026-04-04
+- **Category:** Error Handling
+- **Commit context:** v0.33.0 batch dev commands
+- **Resolution:** Added `batch_dev_add_missing_id` test.
+
+### AQ-033 — Inline `use` for developer types in batch
+
+- **Date:** 2026-04-04
+- **Category:** API Design
+- **Commit context:** v0.33.0 batch dev commands
+- **Resolution:** Moved `Developer` and `DeveloperId` imports
+  to module-level, removed 3 inline `use` statements from
+  match arms.
+
 ### AQ-030 — `commands.rs` exceeds 500-line threshold
 
 - **Date:** 2026-04-04

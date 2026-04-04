@@ -4,11 +4,10 @@
   something like Superfile or lazygit?
 - Investigate whether JSON is really the best format for the project file - 
   where and how to store a more complex task descriptions?
-- Add missing batch commands: dev.add, dev.remove (developer CRUD needed for
-  batch project setup)
 
 ## Done
 
+- Add batch commands dev.add and dev.remove (2026-04-04)
 - Add project file format specification to docs (2026-04-04)
 - Add GitHub Actions and config review to red team in /commit (2026-04-04)
 - Red team baseline review of project config: 6 findings fixed (2026-04-04)

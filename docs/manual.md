@@ -5,6 +5,33 @@ orchestration CLI. It manages tasks, dependencies,
 effort tracking, and schedule visualization from the
 command line.
 
+## Table of Contents
+
+- [Why RustWerk?](#why-rustwerk)
+- [Typical Workflow](#typical-workflow)
+- [Getting Started](#getting-started)
+- [Sample Project Walkthrough](#sample-project-walkthrough)
+- [Task Management](#task-management)
+  - [Add a Task](#add-a-task)
+  - [List Tasks](#list-tasks)
+  - [Update Task Status](#update-task-status)
+  - [Update a Task](#update-a-task)
+  - [Remove a Task](#remove-a-task)
+  - [Assign a Task](#assign-a-task)
+- [Developer Management](#developer-management)
+- [Dependencies](#dependencies)
+- [Effort Tracking](#effort-tracking)
+- [Project Status Dashboard](#project-status-dashboard)
+- [Dependency Tree](#dependency-tree)
+- [Gantt Chart](#gantt-chart)
+  - [View Schedule](#view-schedule)
+  - [Show Remaining Work Only](#show-remaining-work-only)
+  - [Color Behavior](#color-behavior)
+- [Reports](#reports)
+- [Batch Commands](#batch-commands)
+- [Project File](#project-file)
+- [Project File Specification](project-file-spec.md)
+
 ## Why RustWerk?
 
 Most project management tools live in the cloud — web
@@ -92,32 +119,6 @@ your daily development loop:
 The project file is committed alongside your code, so
 task state stays in sync with the codebase and is
 visible in pull request diffs.
-
-## Table of Contents
-
-- [Typical Workflow](#typical-workflow)
-- [Getting Started](#getting-started)
-- [Sample Project Walkthrough](#sample-project-walkthrough)
-- [Task Management](#task-management)
-  - [Add a Task](#add-a-task)
-  - [List Tasks](#list-tasks)
-  - [Update Task Status](#update-task-status)
-  - [Update a Task](#update-a-task)
-  - [Remove a Task](#remove-a-task)
-  - [Assign a Task](#assign-a-task)
-- [Developer Management](#developer-management)
-- [Dependencies](#dependencies)
-- [Effort Tracking](#effort-tracking)
-- [Project Status Dashboard](#project-status-dashboard)
-- [Dependency Tree](#dependency-tree)
-- [Gantt Chart](#gantt-chart)
-  - [View Schedule](#view-schedule)
-  - [Show Remaining Work Only](#show-remaining-work-only)
-  - [Color Behavior](#color-behavior)
-- [Reports](#reports)
-- [Batch Commands](#batch-commands)
-- [Project File](#project-file)
-- [Project File Specification](project-file-spec.md)
 
 ## Getting Started
 
@@ -671,6 +672,8 @@ echo '[
 | `task.undepend` | `from`, `to` | |
 | `effort.log` | `id`, `amount`, `dev` | `note` |
 | `effort.estimate` | `id`, `amount` | |
+| `dev.add` | `id`, `name` | `email`, `role` |
+| `dev.remove` | `id` | |
 
 ### Error Handling
 

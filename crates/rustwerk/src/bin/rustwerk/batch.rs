@@ -3,6 +3,7 @@ use std::io::Read as _;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+use rustwerk::domain::developer::{Developer, DeveloperId};
 use rustwerk::domain::project::Project;
 use rustwerk::domain::task::{Effort, EffortEntry, Task, TaskId};
 
@@ -125,7 +126,7 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
         // must be explicit in the JSON. No RUSTWERK_USER
         // fallback — the caller must always supply "to".
         "task.assign" => {
-            use rustwerk::domain::developer::DeveloperId;
+
             let id =
                 args["id"].as_str().context("task.assign requires 'id'")?;
             let to =
@@ -215,6 +216,36 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 .set_effort_estimate(&task_id, effort)
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
             Ok(format!("{task_id}: estimate set to {amount}"))
+        }
+        "dev.add" => {
+
+            let id =
+                args["id"].as_str().context("dev.add requires 'id'")?;
+            let name =
+                args["name"].as_str().context("dev.add requires 'name'")?;
+            let dev_id =
+                DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let mut dev =
+                Developer::new(name).map_err(|e| anyhow::anyhow!("{e}"))?;
+            dev.email =
+                args.get("email").and_then(|v| v.as_str()).map(String::from);
+            dev.role =
+                args.get("role").and_then(|v| v.as_str()).map(String::from);
+            project
+                .add_developer(dev_id.clone(), dev)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            Ok(format!("Added developer {dev_id}"))
+        }
+        "dev.remove" => {
+
+            let id =
+                args["id"].as_str().context("dev.remove requires 'id'")?;
+            let dev_id =
+                DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let dev = project
+                .remove_developer(&dev_id)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            Ok(format!("Removed developer {dev_id}: {}", dev.name))
         }
         other => bail!("unknown command: {other}"),
     }
@@ -474,7 +505,7 @@ mod tests {
         p.add_task(TaskId::new("A").unwrap(), Task::new("X").unwrap())
             .unwrap();
         {
-            use rustwerk::domain::developer::DeveloperId;
+
             let dev = DeveloperId::new("bob").unwrap();
             p.assign(&TaskId::new("A").unwrap(), &dev).unwrap();
         }
@@ -565,6 +596,96 @@ mod tests {
         };
         let msg = execute_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("5H"));
+    }
+
+    // --- execute_one: dev.add/remove ---
+
+    #[test]
+    fn batch_dev_add() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "dev.add".into(),
+            args: serde_json::json!({
+                "id": "alice",
+                "name": "Alice Smith",
+                "email": "alice@example.com",
+                "role": "lead"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("alice"));
+        assert_eq!(p.developers.len(), 1);
+    }
+
+    #[test]
+    fn batch_dev_add_minimal() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "dev.add".into(),
+            args: serde_json::json!({
+                "id": "bob",
+                "name": "Bob"
+            }),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("bob"));
+    }
+
+    #[test]
+    fn batch_dev_add_missing_id() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "dev.add".into(),
+            args: serde_json::json!({"name": "Alice"}),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
+    }
+
+    #[test]
+    fn batch_dev_add_missing_name() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "dev.add".into(),
+            args: serde_json::json!({"id": "x"}),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
+    }
+
+    #[test]
+    fn batch_dev_add_duplicate_rejected() {
+        let mut p = test_project();
+        add_test_dev(&mut p, "alice");
+        let cmd = BatchCommand {
+            command: "dev.add".into(),
+            args: serde_json::json!({
+                "id": "alice",
+                "name": "Alice"
+            }),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
+    }
+
+    #[test]
+    fn batch_dev_remove() {
+        let mut p = test_project();
+        add_test_dev(&mut p, "alice");
+        let cmd = BatchCommand {
+            command: "dev.remove".into(),
+            args: serde_json::json!({"id": "alice"}),
+        };
+        let msg = execute_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("alice"));
+        assert!(p.developers.is_empty());
+    }
+
+    #[test]
+    fn batch_dev_remove_nonexistent() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "dev.remove".into(),
+            args: serde_json::json!({"id": "nobody"}),
+        };
+        assert!(execute_one(&mut p, &cmd).is_err());
     }
 
     // --- execute_one: unknown command ---
