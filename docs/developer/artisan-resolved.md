@@ -6,6 +6,17 @@ findings.
 
 ---
 
+### AQ-030 — `commands.rs` exceeds 500-line threshold
+
+- **Date:** 2026-04-04
+- **Category:** Module Size
+- **Commit context:** refactor after v0.32.0
+- **Resolution:** Split `commands.rs` (652 lines) into
+  five focused modules: `task.rs` (290), `project.rs`
+  (145), `report.rs` (177), `dev.rs` (61), `effort.rs`
+  (51), with `mod.rs` re-exports. Added error-path
+  integration tests and per-module coverage floor (85%).
+
 ### AQ-029 — Test does not assert on error message
 
 - **Date:** 2026-04-04

@@ -11,18 +11,6 @@ Artisan review is required before continuing feature work.
 
 ---
 
-### AQ-030 — `commands.rs` exceeds 500-line threshold
-
-- **Date:** 2026-04-04
-- **Category:** Module Size
-- **Commit context:** v0.32.0 `RUSTWERK_USER` env var
-- **Description:** `commands.rs` is 652+ lines containing
-  18+ public command handler functions plus unit tests.
-  Each new subcommand grows the file further.
-- **Better approach:** Split into `commands/task.rs`,
-  `commands/dev.rs`, `commands/report.rs`,
-  `commands/effort.rs` with a `commands/mod.rs` re-export.
-
 ### AQ-027 — Cycle handling in build_subtree undocumented
 
 - **Date:** 2026-04-03

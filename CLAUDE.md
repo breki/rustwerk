@@ -1,3 +1,9 @@
+**IMPORTANT: The working directory is already set to the
+project root. NEVER use `cd` to the project root or
+`git -C <dir>` — blanket permission rules cannot be
+set for commands starting with `cd` or `git -C`, so
+they require manual approval every time.**
+
 # RustWerk
 
 Git-native, AI-agent-friendly project orchestration CLI.
@@ -20,12 +26,6 @@ cargo xtask fmt                  # format code
 
 Never use raw `cargo test` or `cargo clippy` — always
 go through `xtask`.
-
-**IMPORTANT: The working directory is already set to the
-project root. NEVER use `cd` to the project root or
-`git -C <dir>` — blanket permission rules cannot be
-set for commands starting with `cd` or `git -C`, so
-they require manual approval every time.**
 
 ## Coding Standards
 
