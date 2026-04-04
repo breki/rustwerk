@@ -69,6 +69,8 @@ reads the project file, mutates, and saves back.
 | CLI-DEV-REMOVE | CLI `dev remove` — remove a developer | 2 | DOM-DEV, STORE-FILE |
 | CLI-DEV-LIST | CLI `dev list` — list all developers | 1 | DOM-DEV, STORE-FILE |
 | DEV-ASSIGN | Link `task assign` to validated developer IDs instead of free-text strings | 3 | DOM-DEV, DOM-ASSIGN |
+| DOM-TAG | Add optional tags field to task model and serialization | 3 | DOM-TASK |
+| CLI-TAG-SET | Add `--tags` flag to `task add` and `task update` commands | 3 | DOM-TAG, CLI-TASK |
 
 ---
 
@@ -102,6 +104,7 @@ status summary.
 | VIZ-GANTT | ASCII Gantt chart (sequential/parallel lanes, critical path highlight) | 8 | DEP-CRIT |
 | QRY-SUMMARY | Project status summary (counts, %, effort totals) | 2 | DOM-ADD, DOM-LOG |
 | CLI-VIZ | CLI `list`, `tree`, `gantt`, `status` commands | 3 | QRY-LIST, QRY-BOTTLE, VIZ-TREE, VIZ-GANTT, QRY-SUMMARY |
+| CLI-TAG-FILTER | Add `--tag` filter to `task list` command | 3 | CLI-TAG-SET, QRY-LIST |
 | VIZ-UNICODE | Upgrade Gantt bars to Unicode blocks (█▓░) with bar caps (▐▌) | 3 | VIZ-GANTT |
 | VIZ-AXIS | Upgrade Gantt time axis to box-drawing chars (─│┬┴) | 2 | VIZ-GANTT |
 | VIZ-SCALE | Terminal-width-aware Gantt scaling (detect width, scale bars) | 5 | VIZ-GANTT |
@@ -214,11 +217,11 @@ Phase 1 (File Format + Init)
 | Phase | Tasks | Complexity | Deliverable |
 |-------|------:|-----------:|-------------|
 | 1 — File Format + Init | 8 | 23 | Project file schema, `init`, `show` |
-| 2 — Task CRUD CLI | 17 | 45 | Full task management via CLI + developer registry |
+| 2 — Task CRUD CLI | 19 | 51 | Full task management via CLI + developer registry |
 | 3 — Dependency Graph | 7 | 23 | DAG, cycle detection, critical path |
-| 4 — Querying + Viz | 11 | 49 | Filters, tree/Gantt, Unicode bars, TUI |
+| 4 — Querying + Viz | 12 | 52 | Filters, tree/Gantt, Unicode bars, TUI |
 | 5 — Git Operations | 5 | 24 | Dual-context, atomic commit+push |
 | 6 — Reporting | 8 | 31 | Dashboards, PM reports, HTML export |
 | 7 — Plugin Architecture | 6 | 20 | Plugin system + activity log |
 | 8 — AI Agent Integration | 6 | 27 | WBS ingestion, estimation, batch |
-| **Total** | **68** | **242** | |
+| **Total** | **71** | **251** | |

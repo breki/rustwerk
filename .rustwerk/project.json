@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-03T20:42:17.124155500Z"
+    "modified_at": "2026-04-04T03:28:57.294899500Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -150,6 +150,26 @@
         "STORE-FILE"
       ],
       "complexity": 2
+    },
+    "CLI-TAG-FILTER": {
+      "title": "Add --tag filter to task list",
+      "description": "Add --tag filter option to 'task list' command. Filter tasks that have the specified tag. Support multiple --tag flags for AND filtering.",
+      "status": "todo",
+      "dependencies": [
+        "CLI-TAG-SET"
+      ],
+      "effort_estimate": "2H",
+      "complexity": 3
+    },
+    "CLI-TAG-SET": {
+      "title": "Add --tags flag to task add and update",
+      "description": "Add --tags flag to 'task add' and 'task update' commands. Accept comma-separated tag list. Validate tag format (lowercase alphanumeric with hyphens).",
+      "status": "todo",
+      "dependencies": [
+        "DOM-TAG"
+      ],
+      "effort_estimate": "3H",
+      "complexity": 3
     },
     "CLI-TASK": {
       "title": "CLI task add / remove / update / status",
@@ -305,6 +325,13 @@
       "dependencies": [
         "DOM-TASK"
       ],
+      "complexity": 3
+    },
+    "DOM-TAG": {
+      "title": "Add tags field to task model",
+      "description": "Add an optional tags field (Vec<String>) to the Task domain model. Update serialization/deserialization to support tags in project.json. Tags should be lowercase, alphanumeric with hyphens.",
+      "status": "todo",
+      "effort_estimate": "2H",
       "complexity": 3
     },
     "DOM-TASK": {
