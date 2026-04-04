@@ -44,8 +44,7 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             let title = args["title"]
                 .as_str()
                 .context("task.add requires 'title'")?;
-            let mut task =
-                Task::new(title).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let mut task = Task::new(title)?;
             if let Some(d) = args.get("desc").and_then(|v| v.as_str()) {
                 task.description = Some(d.to_string());
             }
@@ -55,19 +54,15 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 let c = u32::try_from(c).map_err(|_| {
                     anyhow::anyhow!("complexity value too large: {c}")
                 })?;
-                task.set_complexity(c).map_err(|e| anyhow::anyhow!("{e}"))?;
+                task.set_complexity(c)?;
             }
             if let Some(e) = args.get("effort").and_then(|v| v.as_str()) {
-                task.effort_estimate =
-                    Some(Effort::parse(e).map_err(|e| anyhow::anyhow!("{e}"))?);
+                task.effort_estimate = Some(Effort::parse(e)?);
             }
             let task_id =
                 if let Some(id_str) = args.get("id").and_then(|v| v.as_str()) {
-                    let tid = TaskId::new(id_str)
-                        .map_err(|e| anyhow::anyhow!("{e}"))?;
-                    project
-                        .add_task(tid.clone(), task)
-                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let tid = TaskId::new(id_str)?;
+                    project.add_task(tid.clone(), task)?;
                     tid
                 } else {
                     project.add_task_auto(task)
@@ -77,18 +72,14 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
         "task.remove" => {
             let id =
                 args["id"].as_str().context("task.remove requires 'id'")?;
-            let task_id =
-                TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let task = project
-                .remove_task(&task_id)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let task_id = TaskId::new(id)?;
+            let task = project.remove_task(&task_id)?;
             Ok(format!("Removed {task_id}: {}", task.title))
         }
         "task.update" => {
             let id =
                 args["id"].as_str().context("task.update requires 'id'")?;
-            let task_id =
-                TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let task_id = TaskId::new(id)?;
             let title = args.get("title").and_then(|v| v.as_str());
             let desc = args.get("desc").and_then(|v| v.as_str());
             if title.is_none() && desc.is_none() {
@@ -99,9 +90,7 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             }
             let description =
                 desc.map(|d| if d.is_empty() { None } else { Some(d) });
-            project
-                .update_task(&task_id, title, description)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            project.update_task(&task_id, title, description)?;
             Ok(format!("Updated {task_id}"))
         }
         "task.status" => {
@@ -114,40 +103,29 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 .get("force")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false);
-            let task_id =
-                TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let task_id = TaskId::new(id)?;
             let new_status = parse_status(status)?;
-            project
-                .set_status(&task_id, new_status, force)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            project.set_status(&task_id, new_status, force)?;
             Ok(format!("{task_id}: {new_status}"))
         }
         // Batch commands are deterministic: all arguments
         // must be explicit in the JSON. No RUSTWERK_USER
         // fallback — the caller must always supply "to".
         "task.assign" => {
-
             let id =
                 args["id"].as_str().context("task.assign requires 'id'")?;
             let to =
                 args["to"].as_str().context("task.assign requires 'to'")?;
-            let task_id =
-                TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let dev_id =
-                DeveloperId::new(to).map_err(|e| anyhow::anyhow!("{e}"))?;
-            project
-                .assign(&task_id, &dev_id)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let task_id = TaskId::new(id)?;
+            let dev_id = DeveloperId::new(to)?;
+            project.assign(&task_id, &dev_id)?;
             Ok(format!("{task_id}: assigned to {dev_id}"))
         }
         "task.unassign" => {
             let id =
                 args["id"].as_str().context("task.unassign requires 'id'")?;
-            let task_id =
-                TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-            project
-                .unassign(&task_id)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let task_id = TaskId::new(id)?;
+            project.unassign(&task_id)?;
             Ok(format!("{task_id}: unassigned"))
         }
         "task.depend" => {
@@ -156,12 +134,9 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 .context("task.depend requires 'from'")?;
             let to =
                 args["to"].as_str().context("task.depend requires 'to'")?;
-            let from_id =
-                TaskId::new(from).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let to_id = TaskId::new(to).map_err(|e| anyhow::anyhow!("{e}"))?;
-            project
-                .add_dependency(&from_id, &to_id)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let from_id = TaskId::new(from)?;
+            let to_id = TaskId::new(to)?;
+            project.add_dependency(&from_id, &to_id)?;
             Ok(format!("{from_id} depends on {to_id}"))
         }
         "task.undepend" => {
@@ -170,12 +145,9 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 .context("task.undepend requires 'from'")?;
             let to =
                 args["to"].as_str().context("task.undepend requires 'to'")?;
-            let from_id =
-                TaskId::new(from).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let to_id = TaskId::new(to).map_err(|e| anyhow::anyhow!("{e}"))?;
-            project
-                .remove_dependency(&from_id, &to_id)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let from_id = TaskId::new(from)?;
+            let to_id = TaskId::new(to)?;
+            project.remove_dependency(&from_id, &to_id)?;
             Ok(format!("Removed: {from_id} depends on {to_id}"))
         }
         "effort.log" => {
@@ -186,19 +158,15 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             let dev =
                 args["dev"].as_str().context("effort.log requires 'dev'")?;
             let note = args.get("note").and_then(|v| v.as_str());
-            let task_id =
-                TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let effort =
-                Effort::parse(amount).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let task_id = TaskId::new(id)?;
+            let effort = Effort::parse(amount)?;
             let entry = EffortEntry {
                 effort,
                 developer: dev.to_string(),
                 timestamp: chrono::Utc::now(),
                 note: note.map(String::from),
             };
-            project
-                .log_effort(&task_id, entry)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            project.log_effort(&task_id, entry)?;
             Ok(format!("{task_id}: logged {amount}"))
         }
         "effort.estimate" => {
@@ -208,43 +176,28 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
             let amount = args["amount"]
                 .as_str()
                 .context("effort.estimate requires 'amount'")?;
-            let task_id =
-                TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let effort =
-                Effort::parse(amount).map_err(|e| anyhow::anyhow!("{e}"))?;
-            project
-                .set_effort_estimate(&task_id, effort)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let task_id = TaskId::new(id)?;
+            let effort = Effort::parse(amount)?;
+            project.set_effort_estimate(&task_id, effort)?;
             Ok(format!("{task_id}: estimate set to {amount}"))
         }
         "dev.add" => {
-
-            let id =
-                args["id"].as_str().context("dev.add requires 'id'")?;
+            let id = args["id"].as_str().context("dev.add requires 'id'")?;
             let name =
                 args["name"].as_str().context("dev.add requires 'name'")?;
-            let dev_id =
-                DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let mut dev =
-                Developer::new(name).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let dev_id = DeveloperId::new(id)?;
+            let mut dev = Developer::new(name)?;
             dev.email =
                 args.get("email").and_then(|v| v.as_str()).map(String::from);
             dev.role =
                 args.get("role").and_then(|v| v.as_str()).map(String::from);
-            project
-                .add_developer(dev_id.clone(), dev)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            project.add_developer(dev_id.clone(), dev)?;
             Ok(format!("Added developer {dev_id}"))
         }
         "dev.remove" => {
-
-            let id =
-                args["id"].as_str().context("dev.remove requires 'id'")?;
-            let dev_id =
-                DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let dev = project
-                .remove_developer(&dev_id)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let id = args["id"].as_str().context("dev.remove requires 'id'")?;
+            let dev_id = DeveloperId::new(id)?;
+            let dev = project.remove_developer(&dev_id)?;
             Ok(format!("Removed developer {dev_id}: {}", dev.name))
         }
         other => bail!("unknown command: {other}"),
@@ -505,7 +458,6 @@ mod tests {
         p.add_task(TaskId::new("A").unwrap(), Task::new("X").unwrap())
             .unwrap();
         {
-
             let dev = DeveloperId::new("bob").unwrap();
             p.assign(&TaskId::new("A").unwrap(), &dev).unwrap();
         }

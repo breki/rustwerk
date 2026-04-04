@@ -8,8 +8,7 @@ use crate::load_project;
 pub(crate) fn cmd_report_complete() -> Result<()> {
     let (_root, project) = load_project()?;
     let s = project.summary();
-    let (crit_path, crit_len) =
-        project.remaining_critical_path();
+    let (crit_path, crit_len) = project.remaining_critical_path();
 
     println!("Completion Report: {}", project.metadata.name);
     println!("{}", "=".repeat(40));
@@ -28,9 +27,8 @@ pub(crate) fn cmd_report_complete() -> Result<()> {
     println!();
     let bar_width = 30;
     let filled = if s.total > 0 {
-        (f64::from(s.done) / f64::from(s.total)
-            * bar_width as f64)
-            .round() as usize
+        (f64::from(s.done) / f64::from(s.total) * bar_width as f64).round()
+            as usize
     } else {
         0
     };
@@ -43,20 +41,13 @@ pub(crate) fn cmd_report_complete() -> Result<()> {
     );
 
     // Effort.
-    if s.total_estimated_hours > 0.0
-        || s.total_actual_hours > 0.0
-    {
+    if s.total_estimated_hours > 0.0 || s.total_actual_hours > 0.0 {
         println!();
         println!("Effort");
-        println!(
-            "  Estimated:   {:.1}H",
-            s.total_estimated_hours
-        );
+        println!("  Estimated:   {:.1}H", s.total_estimated_hours);
         println!("  Actual:      {:.1}H", s.total_actual_hours);
         if s.total_estimated_hours > 0.0 {
-            let pct = s.total_actual_hours
-                / s.total_estimated_hours
-                * 100.0;
+            let pct = s.total_actual_hours / s.total_estimated_hours * 100.0;
             println!("  Burn rate:   {pct:.0}%");
         }
     }
@@ -64,10 +55,7 @@ pub(crate) fn cmd_report_complete() -> Result<()> {
     // Complexity.
     if s.total_complexity > 0 {
         println!();
-        println!(
-            "Complexity:    {} total",
-            s.total_complexity
-        );
+        println!("Complexity:    {} total", s.total_complexity);
     }
 
     // Critical path.
@@ -116,9 +104,7 @@ pub(crate) fn cmd_report_effort() -> Result<()> {
     println!("{}", "=".repeat(40));
     for (dev, hours) in &by_dev {
         let pct = hours / total * 100.0;
-        println!(
-            "  {dev:<20} {hours:>7.1}H ({pct:.0}%)"
-        );
+        println!("  {dev:<20} {hours:>7.1}H ({pct:.0}%)");
     }
     println!("{}", "-".repeat(40));
     println!("  {:<20} {:>7.1}H", "Total", total);
@@ -145,22 +131,14 @@ pub(crate) fn cmd_report_bottlenecks() -> Result<()> {
         .max(2);
 
     println!("Bottleneck Report");
-    println!(
-        "  {:<iw$}  {:>6}  {:<13} Assignee",
-        "ID", "Blocks", "State",
-    );
+    println!("  {:<iw$}  {:>6}  {:<13} Assignee", "ID", "Blocks", "State",);
     println!("{}", "-".repeat(iw + 36));
 
     for bn in &bottlenecks {
-        let assignee =
-            bn.assignee.as_deref().unwrap_or("-");
-        let state = if bn.status
-            == rustwerk::domain::task::Status::InProgress
-        {
+        let assignee = bn.assignee.as_deref().unwrap_or("-");
+        let state = if bn.status == rustwerk::domain::task::Status::InProgress {
             "in progress"
-        } else if bn.status
-            == rustwerk::domain::task::Status::OnHold
-        {
+        } else if bn.status == rustwerk::domain::task::Status::OnHold {
             "on hold"
         } else if bn.ready {
             "ready"

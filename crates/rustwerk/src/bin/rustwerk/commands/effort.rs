@@ -11,19 +11,15 @@ pub(crate) fn cmd_effort_log(
     note: Option<&str>,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id =
-        TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-    let effort = Effort::parse(amount)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id)?;
+    let effort = Effort::parse(amount)?;
     let entry = EffortEntry {
         effort,
         developer: dev.to_string(),
         timestamp: chrono::Utc::now(),
         note: note.map(String::from),
     };
-    project
-        .log_effort(&task_id, entry)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    project.log_effort(&task_id, entry)?;
     save_project(&root, &project)?;
     let task = &project.tasks[&task_id];
     println!(
@@ -33,18 +29,11 @@ pub(crate) fn cmd_effort_log(
     Ok(())
 }
 
-pub(crate) fn cmd_effort_estimate(
-    id: &str,
-    amount: &str,
-) -> Result<()> {
+pub(crate) fn cmd_effort_estimate(id: &str, amount: &str) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id =
-        TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-    let effort = Effort::parse(amount)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    project
-        .set_effort_estimate(&task_id, effort)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id)?;
+    let effort = Effort::parse(amount)?;
+    project.set_effort_estimate(&task_id, effort)?;
     save_project(&root, &project)?;
     println!("{task_id}: estimate set to {amount}");
     Ok(())

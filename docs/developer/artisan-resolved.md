@@ -6,6 +6,19 @@ findings.
 
 ---
 
+### AQ-032 — Repetitive `.map_err` boilerplate across codebase
+
+- **Date:** 2026-04-04
+- **Category:** Error Handling
+- **Commit context:** v0.34.0 map_err removal
+- **Resolution:** Removed all 51 occurrences of
+  `.map_err(|e| anyhow::anyhow!("{e}"))` across the CLI,
+  replaced with plain `?`. `DomainError` already implements
+  `std::error::Error` via `thiserror`, so anyhow converts
+  automatically. One custom `.map_err` in `batch.rs`
+  (for `u32::try_from`) preserved — it has a meaningful
+  custom message.
+
 ### AQ-038 — File size: task.rs at 614 lines
 
 - **Date:** 2026-04-04

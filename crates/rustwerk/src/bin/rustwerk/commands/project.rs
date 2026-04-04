@@ -8,19 +8,13 @@ pub(crate) fn cmd_init(name: &str) -> Result<()> {
     use rustwerk::persistence::file_store;
     use std::env;
 
-    let root = env::current_dir()
-        .context("failed to get current directory")?;
+    let root = env::current_dir().context("failed to get current directory")?;
     let path = file_store::project_file_path(&root);
     if path.exists() {
-        bail!(
-            "project already exists: {}",
-            path.display()
-        );
+        bail!("project already exists: {}", path.display());
     }
-    let project = Project::new(name)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    file_store::save(&root, &project)
-        .context("failed to save project")?;
+    let project = Project::new(name)?;
+    file_store::save(&root, &project).context("failed to save project")?;
     println!("Initialized project: {name}");
     println!("  {}", path.display());
     Ok(())
@@ -38,19 +32,13 @@ pub(crate) fn cmd_show() -> Result<()> {
     println!(
         "Tasks:    {} total  ({} done, {} in-progress, \
          {} todo, {} blocked, {} on-hold)",
-        s.total, s.done, s.in_progress, s.todo, s.blocked,
-        s.on_hold
+        s.total, s.done, s.in_progress, s.todo, s.blocked, s.on_hold
     );
     println!("Complete: {:.0}%", s.pct_complete);
     if s.total_complexity > 0 {
-        println!(
-            "Complexity: {} total",
-            s.total_complexity
-        );
+        println!("Complexity: {} total", s.total_complexity);
     }
-    if s.total_estimated_hours > 0.0
-        || s.total_actual_hours > 0.0
-    {
+    if s.total_estimated_hours > 0.0 || s.total_actual_hours > 0.0 {
         println!(
             "Effort:   {:.1}H estimated, {:.1}H actual",
             s.total_estimated_hours, s.total_actual_hours
@@ -58,10 +46,7 @@ pub(crate) fn cmd_show() -> Result<()> {
     }
     println!(
         "Created:  {}",
-        project
-            .metadata
-            .created_at
-            .format("%Y-%m-%d %H:%M UTC")
+        project.metadata.created_at.format("%Y-%m-%d %H:%M UTC")
     );
     Ok(())
 }
@@ -74,9 +59,8 @@ pub(crate) fn cmd_status() -> Result<()> {
     // Completion bar.
     let bar_width = 20;
     let filled = if s.total > 0 {
-        (f64::from(s.done) / f64::from(s.total)
-            * bar_width as f64)
-            .round() as usize
+        (f64::from(s.done) / f64::from(s.total) * bar_width as f64).round()
+            as usize
     } else {
         0
     }
@@ -93,10 +77,7 @@ pub(crate) fn cmd_status() -> Result<()> {
     println!("{bar}");
     println!();
     println!("  {:<14} {:>3}", "done", s.done);
-    println!(
-        "  {:<14} {:>3}",
-        "in-progress", s.in_progress
-    );
+    println!("  {:<14} {:>3}", "in-progress", s.in_progress);
     println!("  {:<14} {:>3}", "todo", s.todo);
     println!("  {:<14} {:>3}", "blocked", s.blocked);
     if s.on_hold > 0 {
@@ -131,8 +112,7 @@ pub(crate) fn cmd_status() -> Result<()> {
     }
 
     // Remaining critical path.
-    let (crit, crit_len) =
-        project.remaining_critical_path();
+    let (crit, crit_len) = project.remaining_critical_path();
     if !crit.is_empty() {
         println!(
             "Critical path: {} tasks, {} complexity",

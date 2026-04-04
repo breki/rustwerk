@@ -12,15 +12,11 @@ pub(crate) fn cmd_dev_add(
     role: Option<&str>,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let dev_id =
-        DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-    let mut dev = Developer::new(name)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let dev_id = DeveloperId::new(id)?;
+    let mut dev = Developer::new(name)?;
     dev.email = email.map(String::from);
     dev.role = role.map(String::from);
-    project
-        .add_developer(dev_id.clone(), dev)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    project.add_developer(dev_id.clone(), dev)?;
     save_project(&root, &project)?;
     println!("Added developer {dev_id}");
     Ok(())
@@ -29,11 +25,8 @@ pub(crate) fn cmd_dev_add(
 /// Remove a developer from the project.
 pub(crate) fn cmd_dev_remove(id: &str) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let dev_id =
-        DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-    let dev = project
-        .remove_developer(&dev_id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let dev_id = DeveloperId::new(id)?;
+    let dev = project.remove_developer(&dev_id)?;
     save_project(&root, &project)?;
     println!("Removed developer {dev_id}: {}", dev.name);
     Ok(())

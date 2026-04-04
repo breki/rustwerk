@@ -84,8 +84,15 @@ fn show_displays_complexity_and_effort() {
     run(
         &dir,
         &[
-            "task", "add", "T", "--id", "A",
-            "--complexity", "5", "--effort", "2D",
+            "task",
+            "add",
+            "T",
+            "--id",
+            "A",
+            "--complexity",
+            "5",
+            "--effort",
+            "2D",
         ],
     );
     let (stdout, _, ok) = run(&dir, &["show"]);
@@ -519,8 +526,7 @@ fn effort_log_from_env_var() {
 fn effort_log_invalid_task_fails() {
     let dir = temp_dir("effort-bad-id");
     run(&dir, &["init", "P"]);
-    let (_, _, ok) =
-        run(&dir, &["effort", "log", "!!!", "1H", "--dev", "x"]);
+    let (_, _, ok) = run(&dir, &["effort", "log", "!!!", "1H", "--dev", "x"]);
     assert!(!ok, "invalid task ID should fail");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -531,8 +537,7 @@ fn effort_log_invalid_amount_fails() {
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
     run(&dir, &["task", "status", "A", "in-progress"]);
-    let (_, _, ok) =
-        run(&dir, &["effort", "log", "A", "abc", "--dev", "x"]);
+    let (_, _, ok) = run(&dir, &["effort", "log", "A", "abc", "--dev", "x"]);
     assert!(!ok, "invalid effort amount should fail");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -541,8 +546,7 @@ fn effort_log_invalid_amount_fails() {
 fn effort_estimate_invalid_task_fails() {
     let dir = temp_dir("est-bad-id");
     run(&dir, &["init", "P"]);
-    let (_, _, ok) =
-        run(&dir, &["effort", "estimate", "!!!", "1H"]);
+    let (_, _, ok) = run(&dir, &["effort", "estimate", "!!!", "1H"]);
     assert!(!ok, "invalid task ID should fail");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -552,8 +556,7 @@ fn effort_estimate_invalid_amount_fails() {
     let dir = temp_dir("est-bad-amt");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
-    let (_, _, ok) =
-        run(&dir, &["effort", "estimate", "A", "xyz"]);
+    let (_, _, ok) = run(&dir, &["effort", "estimate", "A", "xyz"]);
     assert!(!ok, "invalid effort amount should fail");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -562,8 +565,7 @@ fn effort_estimate_invalid_amount_fails() {
 fn effort_estimate_nonexistent_task_fails() {
     let dir = temp_dir("est-noent");
     run(&dir, &["init", "P"]);
-    let (_, _, ok) =
-        run(&dir, &["effort", "estimate", "NOPE", "1H"]);
+    let (_, _, ok) = run(&dir, &["effort", "estimate", "NOPE", "1H"]);
     assert!(!ok, "nonexistent task should fail");
     let _ = fs::remove_dir_all(&dir);
 }

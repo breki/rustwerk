@@ -11,19 +11,6 @@ Artisan review is required before continuing feature work.
 
 ---
 
-### AQ-032 — Repetitive `.map_err` boilerplate across codebase
-
-- **Date:** 2026-04-04
-- **Category:** Error Handling
-- **Commit context:** v0.33.0 batch dev commands
-- **Description:** `.map_err(|e| anyhow::anyhow!("{e}"))` appears
-  19 times in `batch.rs` alone and many more across the CLI.
-  Domain error types could implement `Into<anyhow::Error>`
-  or a helper could consolidate this.
-- **Better approach:** If domain errors implement
-  `std::error::Error`, the `?` operator works directly with
-  anyhow. Otherwise, add a `to_anyhow` helper function.
-
 ### AQ-031 — `batch.rs` exceeds 500-line threshold
 
 - **Date:** 2026-04-04

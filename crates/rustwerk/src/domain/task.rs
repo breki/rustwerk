@@ -233,9 +233,7 @@ pub struct EffortEntry {
 /// Tags are slug-like: lowercase ASCII alphanumeric with
 /// hyphens, max 50 characters. Stored sorted and
 /// deduplicated within a task.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tag(String);
 
 impl Tag {
@@ -254,26 +252,19 @@ impl Tag {
             ));
         }
         if tag.len() > Self::MAX_LEN {
-            return Err(DomainError::ValidationError(
-                format!(
-                    "tag must be at most {} characters \
+            return Err(DomainError::ValidationError(format!(
+                "tag must be at most {} characters \
                      (got {})",
-                    Self::MAX_LEN,
-                    tag.len()
-                ),
-            ));
+                Self::MAX_LEN,
+                tag.len()
+            )));
         }
-        if !tag
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-')
-        {
-            return Err(DomainError::ValidationError(
-                format!(
-                    "tag must contain only lowercase \
+        if !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(DomainError::ValidationError(format!(
+                "tag must contain only lowercase \
                      alphanumeric characters and hyphens: \
                      {tag}"
-                ),
-            ));
+            )));
         }
         Ok(Self(tag))
     }
@@ -361,21 +352,16 @@ impl Task {
 
     /// Add a tag to this task. Returns `Ok(true)` if the
     /// tag was added, `Ok(false)` if it was already present.
-    pub fn add_tag(
-        &mut self,
-        tag: &str,
-    ) -> Result<bool, DomainError> {
+    pub fn add_tag(&mut self, tag: &str) -> Result<bool, DomainError> {
         let tag = Tag::new(tag)?;
         match self.tags.binary_search(&tag) {
             Ok(_) => Ok(false),
             Err(pos) => {
                 if self.tags.len() >= Self::MAX_TAGS {
-                    return Err(DomainError::ValidationError(
-                        format!(
-                            "a task may have at most {} tags",
-                            Self::MAX_TAGS
-                        ),
-                    ));
+                    return Err(DomainError::ValidationError(format!(
+                        "a task may have at most {} tags",
+                        Self::MAX_TAGS
+                    )));
                 }
                 self.tags.insert(pos, tag);
                 Ok(true)
@@ -385,10 +371,7 @@ impl Task {
 
     /// Remove a tag from this task. Returns `Ok(true)` if
     /// the tag was removed, `Ok(false)` if not present.
-    pub fn remove_tag(
-        &mut self,
-        tag: &str,
-    ) -> Result<bool, DomainError> {
+    pub fn remove_tag(&mut self, tag: &str) -> Result<bool, DomainError> {
         let tag = Tag::new(tag)?;
         match self.tags.binary_search(&tag) {
             Ok(pos) => {
@@ -402,9 +385,7 @@ impl Task {
     /// Check whether this task has a given tag
     /// (case-insensitive).
     pub fn has_tag(&self, tag: &str) -> bool {
-        Tag::new(tag).is_ok_and(|t| {
-            self.tags.binary_search(&t).is_ok()
-        })
+        Tag::new(tag).is_ok_and(|t| self.tags.binary_search(&t).is_ok())
     }
 
     /// Total logged effort in hours across all entries.
@@ -663,10 +644,7 @@ mod tests {
     fn task_add_tag() {
         let mut t = Task::new("Test").unwrap();
         assert_eq!(t.add_tag("backend").unwrap(), true);
-        assert_eq!(
-            t.tags,
-            vec![Tag::new("backend").unwrap()]
-        );
+        assert_eq!(t.tags, vec![Tag::new("backend").unwrap()]);
     }
 
     #[test]
@@ -692,10 +670,7 @@ mod tests {
         t.add_tag("backend").unwrap();
         t.add_tag("urgent").unwrap();
         assert_eq!(t.remove_tag("backend").unwrap(), true);
-        assert_eq!(
-            t.tags,
-            vec![Tag::new("urgent").unwrap()]
-        );
+        assert_eq!(t.tags, vec![Tag::new("urgent").unwrap()]);
     }
 
     #[test]
@@ -725,8 +700,7 @@ mod tests {
         t.add_tag("zebra").unwrap();
         t.add_tag("alpha").unwrap();
         t.add_tag("middle").unwrap();
-        let names: Vec<&str> =
-            t.tags.iter().map(Tag::as_str).collect();
+        let names: Vec<&str> = t.tags.iter().map(Tag::as_str).collect();
         assert_eq!(names, vec!["alpha", "middle", "zebra"]);
     }
 
@@ -757,20 +731,15 @@ mod tests {
 
     #[test]
     fn task_tags_invalid_json_rejected() {
-        let json =
-            r#"{"title": "Test", "tags": ["has spaces"]}"#;
+        let json = r#"{"title": "Test", "tags": ["has spaces"]}"#;
         assert!(serde_json::from_str::<Task>(json).is_err());
     }
 
     #[test]
     fn task_tags_deserialized_normalized() {
-        let json =
-            r#"{"title": "Test", "tags": ["backend"]}"#;
+        let json = r#"{"title": "Test", "tags": ["backend"]}"#;
         let t: Task = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            t.tags,
-            vec![Tag::new("backend").unwrap()]
-        );
+        assert_eq!(t.tags, vec![Tag::new("backend").unwrap()]);
     }
 
     #[test]
