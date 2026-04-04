@@ -64,9 +64,7 @@ fn run_test(filter: Option<String>) -> Result<(), String> {
     let filter_owned;
     if let Some(f) = &filter {
         if f.is_empty() {
-            return Err(
-                "test filter must not be empty".into(),
-            );
+            return Err("test filter must not be empty".into());
         }
         filter_owned = f.clone();
         args.push("--");
@@ -98,60 +96,41 @@ fn run_coverage() -> Result<(), String> {
         })?;
 
     if !output.status.success() {
-        let stderr =
-            String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "cargo llvm-cov failed:\n{stderr}"
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("cargo llvm-cov failed:\n{stderr}"));
     }
 
-    let json: serde_json::Value =
-        serde_json::from_slice(&output.stdout).map_err(
-            |e| format!("failed to parse coverage JSON: {e}"),
-        )?;
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("failed to parse coverage JSON: {e}"))?;
 
     // Extract total line coverage percentage.
-    let line_pct = json["data"][0]["totals"]["lines"]
-        ["percent"]
+    let line_pct = json["data"][0]["totals"]["lines"]["percent"]
         .as_f64()
         .ok_or("missing lines.percent in coverage JSON")?;
 
-    let covered = json["data"][0]["totals"]["lines"]
-        ["covered"]
+    let covered = json["data"][0]["totals"]["lines"]["covered"]
         .as_u64()
-        .ok_or(
-            "missing lines.covered in coverage JSON",
-        )?;
+        .ok_or("missing lines.covered in coverage JSON")?;
     let total = json["data"][0]["totals"]["lines"]["count"]
         .as_u64()
-        .ok_or(
-            "missing lines.count in coverage JSON",
-        )?;
+        .ok_or("missing lines.count in coverage JSON")?;
 
-    println!(
-        "  lines: {covered}/{total} ({line_pct:.1}%)"
-    );
+    println!("  lines: {covered}/{total} ({line_pct:.1}%)");
 
     // Per-file summary.
     let mut below_threshold = Vec::new();
-    if let Some(files) =
-        json["data"][0]["files"].as_array()
-    {
+    if let Some(files) = json["data"][0]["files"].as_array() {
         for file in files {
-            let name = file["filename"]
-                .as_str()
-                .unwrap_or("?");
-            let pct = file["summary"]["lines"]["percent"]
-                .as_f64()
-                .unwrap_or(0.0);
+            let name = file["filename"].as_str().unwrap_or("?");
+            let pct =
+                file["summary"]["lines"]["percent"].as_f64().unwrap_or(0.0);
             // Show only the relative path from src/.
             let short = name
                 .rsplit_once("src\\")
                 .or_else(|| name.rsplit_once("src/"))
                 .map_or(name, |(_, rest)| rest);
             let marker = if pct < COVERAGE_THRESHOLD {
-                below_threshold
-                    .push((short.to_string(), pct));
+                below_threshold.push((short.to_string(), pct));
                 "!"
             } else {
                 " "
@@ -166,13 +145,9 @@ fn run_coverage() -> Result<(), String> {
              {COVERAGE_THRESHOLD}% threshold"
         ))
     } else if !below_threshold.is_empty() {
-        let mut msg = String::from(
-            "modules below coverage threshold:",
-        );
+        let mut msg = String::from("modules below coverage threshold:");
         for (name, pct) in &below_threshold {
-            msg.push_str(&format!(
-                "\n    {name}: {pct:.1}%"
-            ));
+            msg.push_str(&format!("\n    {name}: {pct:.1}%"));
         }
         Err(msg)
     } else {
@@ -201,25 +176,17 @@ fn run_dupes() -> Result<(), String> {
             &threshold,
         ],
     )
-    .map_err(|e| {
-        format!(
-            "{e}\n  Install with: cargo install code-dupes"
-        )
-    })
+    .map_err(|e| format!("{e}\n  Install with: cargo install code-dupes"))
 }
 
 /// Resolve the cargo binary path. Prefers the `CARGO`
 /// env var (set by cargo when running xtask) over a
 /// PATH lookup.
 fn cargo_bin() -> String {
-    std::env::var("CARGO")
-        .unwrap_or_else(|_| "cargo".into())
+    std::env::var("CARGO").unwrap_or_else(|_| "cargo".into())
 }
 
-fn run_cmd(
-    cmd: &str,
-    args: &[&str],
-) -> Result<(), String> {
+fn run_cmd(cmd: &str, args: &[&str]) -> Result<(), String> {
     println!("→ {cmd} {}", args.join(" "));
     let status = Command::new(cmd)
         .args(args)
@@ -230,12 +197,8 @@ fn run_cmd(
         Ok(())
     } else {
         match status.code() {
-            Some(code) => {
-                Err(format!("{cmd} exited with {code}"))
-            }
-            None => {
-                Err(format!("{cmd} terminated by signal"))
-            }
+            Some(code) => Err(format!("{cmd} exited with {code}")),
+            None => Err(format!("{cmd} terminated by signal")),
         }
     }
 }

@@ -43,10 +43,7 @@ pub struct WbsTaskEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// IDs of tasks this task depends on.
-    #[serde(
-        default,
-        skip_serializing_if = "Vec::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<String>,
     /// Complexity score (e.g. Fibonacci).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,9 +57,7 @@ pub struct WbsTaskEntry {
 }
 
 /// Parse a WBS JSON string into task entries.
-pub fn parse_wbs(
-    json: &str,
-) -> Result<Vec<WbsTaskEntry>, serde_json::Error> {
+pub fn parse_wbs(json: &str) -> Result<Vec<WbsTaskEntry>, serde_json::Error> {
     serde_json::from_str(json)
 }
 
@@ -74,9 +69,7 @@ pub fn serialize_wbs(
 }
 
 /// Export a project's tasks as WBS entries.
-pub fn export_from_project(
-    project: &Project,
-) -> Vec<WbsTaskEntry> {
+pub fn export_from_project(project: &Project) -> Vec<WbsTaskEntry> {
     project
         .tasks
         .iter()
@@ -115,13 +108,11 @@ pub fn import_into_project(
     entries: &[WbsTaskEntry],
 ) -> Result<usize, DomainError> {
     if entries.len() > MAX_WBS_ENTRIES {
-        return Err(DomainError::ValidationError(
-            format!(
-                "WBS import contains {} entries \
+        return Err(DomainError::ValidationError(format!(
+            "WBS import contains {} entries \
                  (max {MAX_WBS_ENTRIES})",
-                entries.len()
-            ),
-        ));
+            entries.len()
+        )));
     }
 
     // Clone the project for atomicity — restore on error.
@@ -154,12 +145,10 @@ fn import_inner(
                 .map(|d| TaskId::new(d))
                 .collect::<Result<Vec<_>, _>>()?;
             if existing.dependencies != expected_deps {
-                return Err(DomainError::ValidationError(
-                    format!(
-                        "task {id} already exists with \
+                return Err(DomainError::ValidationError(format!(
+                    "task {id} already exists with \
                          different dependencies"
-                    ),
-                ));
+                )));
             }
             continue;
         }
@@ -169,8 +158,7 @@ fn import_inner(
             task.set_complexity(c)?;
         }
         if let Some(e) = &entry.effort_estimate {
-            task.effort_estimate =
-                Some(Effort::parse(e)?);
+            task.effort_estimate = Some(Effort::parse(e)?);
         }
         task.assignee = entry.assignee.clone();
         project.add_task(id, task)?;
@@ -220,21 +208,14 @@ mod tests {
 
     #[test]
     fn parse_wbs_valid() {
-        let entries =
-            parse_wbs(sample_wbs_json()).unwrap();
+        let entries = parse_wbs(sample_wbs_json()).unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].id, "AUTH-DB");
         assert_eq!(entries[1].id, "AUTH-LOGIN");
         assert_eq!(entries[1].dependencies, vec!["AUTH-DB"]);
         assert_eq!(entries[1].complexity, Some(5));
-        assert_eq!(
-            entries[1].effort_estimate.as_deref(),
-            Some("8H")
-        );
-        assert_eq!(
-            entries[1].assignee.as_deref(),
-            Some("alice")
-        );
+        assert_eq!(entries[1].effort_estimate.as_deref(), Some("8H"));
+        assert_eq!(entries[1].assignee.as_deref(), Some("alice"));
     }
 
     #[test]
@@ -253,8 +234,7 @@ mod tests {
 
     #[test]
     fn serialize_and_parse_round_trip() {
-        let entries =
-            parse_wbs(sample_wbs_json()).unwrap();
+        let entries = parse_wbs(sample_wbs_json()).unwrap();
         let json = serialize_wbs(&entries).unwrap();
         let reparsed = parse_wbs(&json).unwrap();
         assert_eq!(reparsed.len(), entries.len());
@@ -264,34 +244,24 @@ mod tests {
 
     #[test]
     fn import_into_empty_project() {
-        let mut project =
-            Project::new("Test").unwrap();
-        let entries =
-            parse_wbs(sample_wbs_json()).unwrap();
-        let created =
-            import_into_project(&mut project, &entries)
-                .unwrap();
+        let mut project = Project::new("Test").unwrap();
+        let entries = parse_wbs(sample_wbs_json()).unwrap();
+        let created = import_into_project(&mut project, &entries).unwrap();
         assert_eq!(created, 2);
         assert_eq!(project.task_count(), 2);
 
         // Check dependencies were added.
-        let login_id =
-            TaskId::new("AUTH-LOGIN").unwrap();
+        let login_id = TaskId::new("AUTH-LOGIN").unwrap();
         let task = &project.tasks[&login_id];
         assert_eq!(task.dependencies.len(), 1);
     }
 
     #[test]
     fn import_is_idempotent() {
-        let mut project =
-            Project::new("Test").unwrap();
-        let entries =
-            parse_wbs(sample_wbs_json()).unwrap();
-        import_into_project(&mut project, &entries)
-            .unwrap();
-        let created =
-            import_into_project(&mut project, &entries)
-                .unwrap();
+        let mut project = Project::new("Test").unwrap();
+        let entries = parse_wbs(sample_wbs_json()).unwrap();
+        import_into_project(&mut project, &entries).unwrap();
+        let created = import_into_project(&mut project, &entries).unwrap();
         assert_eq!(created, 0);
         assert_eq!(project.task_count(), 2);
     }
@@ -302,11 +272,9 @@ mod tests {
             {"id": "A", "title": "A", "dependencies": ["B"]},
             {"id": "B", "title": "B", "dependencies": ["A"]}
         ]"#;
-        let mut project =
-            Project::new("Test").unwrap();
+        let mut project = Project::new("Test").unwrap();
         let entries = parse_wbs(json).unwrap();
-        let result =
-            import_into_project(&mut project, &entries);
+        let result = import_into_project(&mut project, &entries);
         assert!(result.is_err());
         // Atomicity: no tasks should remain.
         assert_eq!(
@@ -318,16 +286,14 @@ mod tests {
 
     #[test]
     fn import_existing_task_different_deps_fails() {
-        let mut project =
-            Project::new("Test").unwrap();
+        let mut project = Project::new("Test").unwrap();
         // First import: A depends on B.
         let json1 = r#"[
             {"id": "B", "title": "B"},
             {"id": "A", "title": "A", "dependencies": ["B"]}
         ]"#;
         let entries1 = parse_wbs(json1).unwrap();
-        import_into_project(&mut project, &entries1)
-            .unwrap();
+        import_into_project(&mut project, &entries1).unwrap();
 
         // Second import: A now depends on C (different).
         let json2 = r#"[
@@ -335,12 +301,8 @@ mod tests {
             {"id": "A", "title": "A", "dependencies": ["C"]}
         ]"#;
         let entries2 = parse_wbs(json2).unwrap();
-        let result =
-            import_into_project(&mut project, &entries2);
-        assert!(
-            result.is_err(),
-            "should fail: A has different deps"
-        );
+        let result = import_into_project(&mut project, &entries2);
+        assert!(result.is_err(), "should fail: A has different deps");
         // Atomicity: C should not have been added.
         assert_eq!(project.task_count(), 2);
     }
@@ -358,33 +320,23 @@ mod tests {
                 assignee: None,
             })
             .collect();
-        let mut project =
-            Project::new("Test").unwrap();
-        let result =
-            import_into_project(&mut project, &entries);
+        let mut project = Project::new("Test").unwrap();
+        let result = import_into_project(&mut project, &entries);
         assert!(result.is_err());
     }
 
     #[test]
     fn export_from_project_round_trip() {
-        let mut project =
-            Project::new("Test").unwrap();
-        let entries =
-            parse_wbs(sample_wbs_json()).unwrap();
-        import_into_project(&mut project, &entries)
-            .unwrap();
+        let mut project = Project::new("Test").unwrap();
+        let entries = parse_wbs(sample_wbs_json()).unwrap();
+        import_into_project(&mut project, &entries).unwrap();
 
         let exported = export_from_project(&project);
         assert_eq!(exported.len(), 2);
 
         // Re-import into fresh project.
-        let mut project2 =
-            Project::new("Test2").unwrap();
-        let created = import_into_project(
-            &mut project2,
-            &exported,
-        )
-        .unwrap();
+        let mut project2 = Project::new("Test2").unwrap();
+        let created = import_into_project(&mut project2, &exported).unwrap();
         assert_eq!(created, 2);
     }
 }

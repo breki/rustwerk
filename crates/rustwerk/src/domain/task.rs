@@ -8,15 +8,7 @@ use super::error::DomainError;
 /// Unique identifier for a task — either user-supplied
 /// mnemonic or auto-generated.
 #[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]
 pub struct TaskId(String);
 
@@ -34,13 +26,11 @@ impl TaskId {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
-            return Err(DomainError::ValidationError(
-                format!(
-                    "task ID must contain only alphanumeric \
+            return Err(DomainError::ValidationError(format!(
+                "task ID must contain only alphanumeric \
                      characters, hyphens, and underscores: \
                      {id}"
-                ),
-            ));
+            )));
         }
         Ok(Self(id.to_uppercase()))
     }
@@ -65,14 +55,7 @@ impl fmt::Display for TaskId {
 
 /// Task status in the workflow.
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    Default,
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
@@ -121,9 +104,7 @@ impl fmt::Display for Status {
 }
 
 /// Time unit for effort values.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffortUnit {
     /// Hours.
     H,
@@ -168,38 +149,29 @@ impl Effort {
         }
 
         let last_char = s.chars().last().unwrap_or(' ');
-        let num_str =
-            &s[..s.len() - last_char.len_utf8()];
-        let unit = match last_char
-            .to_uppercase()
-            .next()
-            .unwrap_or(' ')
-        {
+        let num_str = &s[..s.len() - last_char.len_utf8()];
+        let unit = match last_char.to_uppercase().next().unwrap_or(' ') {
             'H' => EffortUnit::H,
             'D' => EffortUnit::D,
             'W' => EffortUnit::W,
             'M' => EffortUnit::M,
             _ => {
-                return Err(DomainError::InvalidEffort(
-                    format!(
-                        "unknown effort unit: {last_char} \
+                return Err(DomainError::InvalidEffort(format!(
+                    "unknown effort unit: {last_char} \
                          (expected H, D, W, or M)"
-                    ),
-                ))
+                )))
             }
         };
 
-        let value: f64 =
-            num_str.parse().map_err(|_| {
-                DomainError::InvalidEffort(format!(
-                    "invalid effort number: {num_str}"
-                ))
-            })?;
+        let value: f64 = num_str.parse().map_err(|_| {
+            DomainError::InvalidEffort(format!(
+                "invalid effort number: {num_str}"
+            ))
+        })?;
 
         if !value.is_finite() || value <= 0.0 {
             return Err(DomainError::InvalidEffort(
-                "effort must be a finite positive number"
-                    .into(),
+                "effort must be a finite positive number".into(),
             ));
         }
 
@@ -294,18 +266,13 @@ impl Task {
     pub const MAX_COMPLEXITY: u32 = 1000;
 
     /// Set complexity, validating the range (1..=1000).
-    pub fn set_complexity(
-        &mut self,
-        value: u32,
-    ) -> Result<(), DomainError> {
+    pub fn set_complexity(&mut self, value: u32) -> Result<(), DomainError> {
         if value == 0 || value > Self::MAX_COMPLEXITY {
-            return Err(DomainError::ValidationError(
-                format!(
-                    "complexity must be between 1 and {} \
+            return Err(DomainError::ValidationError(format!(
+                "complexity must be between 1 and {} \
                      (got {value})",
-                    Self::MAX_COMPLEXITY
-                ),
-            ));
+                Self::MAX_COMPLEXITY
+            )));
         }
         self.complexity = Some(value);
         Ok(())
@@ -390,61 +357,26 @@ mod tests {
 
     #[test]
     fn status_valid_transitions() {
-        assert!(
-            Status::Todo.can_transition_to(Status::InProgress)
-        );
-        assert!(
-            Status::InProgress.can_transition_to(Status::Done)
-        );
-        assert!(
-            Status::InProgress
-                .can_transition_to(Status::Blocked)
-        );
-        assert!(
-            Status::Blocked
-                .can_transition_to(Status::InProgress)
-        );
-        assert!(
-            Status::Blocked.can_transition_to(Status::Todo)
-        );
+        assert!(Status::Todo.can_transition_to(Status::InProgress));
+        assert!(Status::InProgress.can_transition_to(Status::Done));
+        assert!(Status::InProgress.can_transition_to(Status::Blocked));
+        assert!(Status::Blocked.can_transition_to(Status::InProgress));
+        assert!(Status::Blocked.can_transition_to(Status::Todo));
         // On-hold transitions.
-        assert!(
-            Status::Todo.can_transition_to(Status::OnHold)
-        );
-        assert!(
-            Status::OnHold.can_transition_to(Status::Todo)
-        );
-        assert!(
-            Status::InProgress
-                .can_transition_to(Status::OnHold)
-        );
-        assert!(
-            Status::OnHold
-                .can_transition_to(Status::InProgress)
-        );
+        assert!(Status::Todo.can_transition_to(Status::OnHold));
+        assert!(Status::OnHold.can_transition_to(Status::Todo));
+        assert!(Status::InProgress.can_transition_to(Status::OnHold));
+        assert!(Status::OnHold.can_transition_to(Status::InProgress));
     }
 
     #[test]
     fn status_invalid_transitions() {
         assert!(!Status::Todo.can_transition_to(Status::Done));
-        assert!(
-            !Status::Todo.can_transition_to(Status::Blocked)
-        );
-        assert!(
-            !Status::Done.can_transition_to(Status::Todo)
-        );
-        assert!(
-            !Status::Done
-                .can_transition_to(Status::InProgress)
-        );
-        assert!(
-            !Status::OnHold
-                .can_transition_to(Status::Done)
-        );
-        assert!(
-            !Status::Done
-                .can_transition_to(Status::OnHold)
-        );
+        assert!(!Status::Todo.can_transition_to(Status::Blocked));
+        assert!(!Status::Done.can_transition_to(Status::Todo));
+        assert!(!Status::Done.can_transition_to(Status::InProgress));
+        assert!(!Status::OnHold.can_transition_to(Status::Done));
+        assert!(!Status::Done.can_transition_to(Status::OnHold));
     }
 
     #[test]

@@ -46,8 +46,8 @@ impl GanttRow {
     /// Fill character for the completed portion of the bar.
     pub fn fill_char(&self) -> char {
         match self.status {
-            Status::Done => '\u{2588}',    // █
-            Status::Blocked => '\u{2592}', // ▒
+            Status::Done => '\u{2588}',       // █
+            Status::Blocked => '\u{2592}',    // ▒
             Status::InProgress => '\u{2593}', // ▓
             // bar_fill() returns filled=0 for Todo/OnHold,
             // so this is only reached if bar_fill changes.
@@ -89,89 +89,56 @@ mod tests {
 
     #[test]
     fn bar_fill_done_all_filled() {
-        assert_eq!(
-            row(Status::Done, 10).bar_fill(),
-            (10, 0)
-        );
+        assert_eq!(row(Status::Done, 10).bar_fill(), (10, 0));
     }
 
     #[test]
     fn bar_fill_blocked_all_filled() {
-        assert_eq!(
-            row(Status::Blocked, 8).bar_fill(),
-            (8, 0)
-        );
+        assert_eq!(row(Status::Blocked, 8).bar_fill(), (8, 0));
     }
 
     #[test]
     fn bar_fill_in_progress_half() {
-        assert_eq!(
-            row(Status::InProgress, 10).bar_fill(),
-            (5, 5)
-        );
+        assert_eq!(row(Status::InProgress, 10).bar_fill(), (5, 5));
     }
 
     #[test]
     fn bar_fill_in_progress_odd_width() {
-        assert_eq!(
-            row(Status::InProgress, 11).bar_fill(),
-            (5, 6)
-        );
+        assert_eq!(row(Status::InProgress, 11).bar_fill(), (5, 6));
     }
 
     #[test]
     fn bar_fill_in_progress_width_1() {
-        assert_eq!(
-            row(Status::InProgress, 1).bar_fill(),
-            (0, 1)
-        );
+        assert_eq!(row(Status::InProgress, 1).bar_fill(), (0, 1));
     }
 
     #[test]
     fn bar_fill_todo_all_empty() {
-        assert_eq!(
-            row(Status::Todo, 10).bar_fill(),
-            (0, 10)
-        );
+        assert_eq!(row(Status::Todo, 10).bar_fill(), (0, 10));
     }
 
     #[test]
     fn fill_char_done() {
-        assert_eq!(
-            row(Status::Done, 1).fill_char(),
-            '\u{2588}'
-        );
+        assert_eq!(row(Status::Done, 1).fill_char(), '\u{2588}');
     }
 
     #[test]
     fn fill_char_blocked() {
-        assert_eq!(
-            row(Status::Blocked, 1).fill_char(),
-            '\u{2592}'
-        );
+        assert_eq!(row(Status::Blocked, 1).fill_char(), '\u{2592}');
     }
 
     #[test]
     fn fill_char_in_progress() {
-        assert_eq!(
-            row(Status::InProgress, 1).fill_char(),
-            '\u{2593}'
-        );
+        assert_eq!(row(Status::InProgress, 1).fill_char(), '\u{2593}');
     }
 
     #[test]
     fn fill_char_todo() {
-        assert_eq!(
-            row(Status::Todo, 1).fill_char(),
-            '\u{2591}'
-        );
+        assert_eq!(row(Status::Todo, 1).fill_char(), '\u{2591}');
     }
 
     #[test]
     fn empty_char_is_light_shade() {
-        assert_eq!(
-            row(Status::Todo, 1).empty_char(),
-            '\u{2591}'
-        );
+        assert_eq!(row(Status::Todo, 1).empty_char(), '\u{2591}');
     }
 }

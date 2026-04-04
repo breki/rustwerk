@@ -17,9 +17,7 @@ impl Project {
                     && task.dependencies.iter().any(|dep| {
                         self.tasks
                             .get(dep)
-                            .is_none_or(|t| {
-                                t.status != Status::Done
-                            })
+                            .is_none_or(|t| t.status != Status::Done)
                     })
             })
             .map(|(id, _)| id)
@@ -36,9 +34,7 @@ impl Project {
                     && task.dependencies.iter().all(|dep| {
                         self.tasks
                             .get(dep)
-                            .is_some_and(|t| {
-                                t.status == Status::Done
-                            })
+                            .is_some_and(|t| t.status == Status::Done)
                     })
             })
             .map(|(id, _)| id)
@@ -49,18 +45,13 @@ impl Project {
     pub fn active_tasks(&self) -> Vec<&TaskId> {
         self.tasks
             .iter()
-            .filter(|(_, task)| {
-                task.status == Status::InProgress
-            })
+            .filter(|(_, task)| task.status == Status::InProgress)
             .map(|(id, _)| id)
             .collect()
     }
 
     /// Return task IDs that match the given status.
-    pub fn tasks_by_status(
-        &self,
-        status: Status,
-    ) -> Vec<&TaskId> {
+    pub fn tasks_by_status(&self, status: Status) -> Vec<&TaskId> {
         self.tasks
             .iter()
             .filter(|(_, task)| task.status == status)
@@ -69,15 +60,10 @@ impl Project {
     }
 
     /// Return task IDs assigned to the given developer.
-    pub fn tasks_by_assignee(
-        &self,
-        assignee: &str,
-    ) -> Vec<&TaskId> {
+    pub fn tasks_by_assignee(&self, assignee: &str) -> Vec<&TaskId> {
         self.tasks
             .iter()
-            .filter(|(_, task)| {
-                task.assignee.as_deref() == Some(assignee)
-            })
+            .filter(|(_, task)| task.assignee.as_deref() == Some(assignee))
             .map(|(id, _)| id)
             .collect()
     }
@@ -92,9 +78,7 @@ impl Project {
         id: &'a TaskId,
     ) -> Result<Vec<&'a TaskId>, DomainError> {
         if !self.tasks.contains_key(id) {
-            return Err(DomainError::TaskNotFound(
-                id.to_string(),
-            ));
+            return Err(DomainError::TaskNotFound(id.to_string()));
         }
         let mut visited = HashSet::new();
         let mut stack = vec![id];
@@ -114,11 +98,7 @@ impl Project {
         // before dependents) without a full-graph topo sort.
         let mut ordered = Vec::new();
         let mut emitted = HashSet::new();
-        self.dfs_postorder(
-            id,
-            &mut emitted,
-            &mut ordered,
-        );
+        self.dfs_postorder(id, &mut emitted, &mut ordered);
         Ok(ordered)
     }
 
@@ -139,8 +119,7 @@ impl Project {
                 self.dfs_postorder(dep, emitted, result);
             }
         }
-        if let Some((k, _)) = self.tasks.get_key_value(id)
-        {
+        if let Some((k, _)) = self.tasks.get_key_value(id) {
             emitted.insert(k);
             result.push(k);
         }
@@ -152,9 +131,7 @@ mod tests {
     use super::*;
     use crate::domain::task::{Task, TaskId};
 
-    fn project_with_tasks(
-        ids: &[&str],
-    ) -> (Project, Vec<TaskId>) {
+    fn project_with_tasks(ids: &[&str]) -> (Project, Vec<TaskId>) {
         let mut p = Project::new("Test").unwrap();
         let task_ids: Vec<TaskId> = ids
             .iter()
@@ -162,8 +139,7 @@ mod tests {
                 let tid = TaskId::new(id).unwrap();
                 p.add_task(
                     tid.clone(),
-                    Task::new(&format!("Task {id}"))
-                        .unwrap(),
+                    Task::new(&format!("Task {id}")).unwrap(),
                 )
                 .unwrap();
                 tid
@@ -181,11 +157,10 @@ mod tests {
 
     #[test]
     fn available_tasks_with_deps() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
-        // Only A is available (no deps).
+                                                     // Only A is available (no deps).
         let avail = p.available_tasks();
         assert_eq!(avail.len(), 1);
         assert_eq!(avail[0].as_str(), "A");
@@ -193,12 +168,10 @@ mod tests {
 
     #[test]
     fn available_tasks_after_completing_dep() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
-        // Complete A.
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+                                                     // Complete A.
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         p.set_status(&ids[0], Status::Done, false).unwrap();
         // Now B is available.
         let avail = p.available_tasks();
@@ -209,8 +182,7 @@ mod tests {
     #[test]
     fn available_tasks_excludes_done() {
         let (mut p, ids) = project_with_tasks(&["A"]);
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         p.set_status(&ids[0], Status::Done, false).unwrap();
         let avail = p.available_tasks();
         assert!(avail.is_empty());
@@ -219,18 +191,15 @@ mod tests {
     #[test]
     fn available_tasks_excludes_in_progress() {
         let (mut p, ids) = project_with_tasks(&["A"]);
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         let avail = p.available_tasks();
         assert!(avail.is_empty());
     }
 
     #[test]
     fn active_tasks_returns_in_progress() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         let active = p.active_tasks();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].as_str(), "A");
@@ -244,13 +213,12 @@ mod tests {
 
     #[test]
     fn dep_blocked_with_incomplete_deps() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
-        // A has no deps -> not blocked.
-        // B depends on A (todo) -> blocked.
-        // C depends on B (todo) -> blocked.
+                                                     // A has no deps -> not blocked.
+                                                     // B depends on A (todo) -> blocked.
+                                                     // C depends on B (todo) -> blocked.
         let blocked = p.dep_blocked_tasks();
         assert_eq!(blocked.len(), 2);
         assert!(blocked.contains(&&ids[1]));
@@ -259,29 +227,24 @@ mod tests {
 
     #[test]
     fn dep_blocked_clears_when_dep_done() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         assert_eq!(p.dep_blocked_tasks().len(), 1);
 
         // Complete A.
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
-        p.set_status(&ids[0], Status::Done, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
+        p.set_status(&ids[0], Status::Done, false).unwrap();
         // B is no longer blocked.
         assert!(p.dep_blocked_tasks().is_empty());
     }
 
     #[test]
     fn dep_blocked_excludes_done_and_in_progress() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
-        // Move B to in-progress (force, bypassing
-        // normal transitions for test).
-        p.set_status(&ids[1], Status::InProgress, true)
-            .unwrap();
+                                                     // Move B to in-progress (force, bypassing
+                                                     // normal transitions for test).
+        p.set_status(&ids[1], Status::InProgress, true).unwrap();
         // B is in-progress, not blocked by deps.
         assert!(p.dep_blocked_tasks().is_empty());
     }
@@ -294,10 +257,8 @@ mod tests {
 
     #[test]
     fn tasks_by_status_filters_correctly() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         let todo = p.tasks_by_status(Status::Todo);
         assert_eq!(todo.len(), 2);
         let ip = p.tasks_by_status(Status::InProgress);
@@ -307,8 +268,7 @@ mod tests {
 
     #[test]
     fn tasks_by_assignee_filters_correctly() {
-        let (mut p, _) =
-            project_with_tasks(&["A", "B", "C"]);
+        let (mut p, _) = project_with_tasks(&["A", "B", "C"]);
         p.tasks
             .get_mut(&TaskId::new("A").unwrap())
             .unwrap()
@@ -317,8 +277,7 @@ mod tests {
             .get_mut(&TaskId::new("B").unwrap())
             .unwrap()
             .assignee = Some("bob".into());
-        let alice =
-            p.tasks_by_assignee("alice");
+        let alice = p.tasks_by_assignee("alice");
         assert_eq!(alice.len(), 1);
         assert_eq!(alice[0].as_str(), "A");
         let none = p.tasks_by_assignee("carol");
@@ -327,8 +286,7 @@ mod tests {
 
     #[test]
     fn dependency_chain_returns_transitive_deps() {
-        let (mut p, ids) =
-            project_with_tasks(&["R", "M", "L", "O"]);
+        let (mut p, ids) = project_with_tasks(&["R", "M", "L", "O"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // M->R
         p.add_dependency(&ids[2], &ids[1]).unwrap(); // L->M
         let lid = TaskId::new("L").unwrap();

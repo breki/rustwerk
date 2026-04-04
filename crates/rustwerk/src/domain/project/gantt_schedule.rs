@@ -10,8 +10,7 @@ impl Project {
     pub fn gantt_schedule(&self) -> Vec<GanttRow> {
         let order = self.topological_sort();
         let crit = self.critical_path_set();
-        let mut end_at: HashMap<&TaskId, u32> =
-            HashMap::new();
+        let mut end_at: HashMap<&TaskId, u32> = HashMap::new();
         let mut rows = Vec::new();
 
         for id in &order {
@@ -40,9 +39,7 @@ impl Project {
 
         // Sort by start position, then by ID.
         rows.sort_by(|a, b| {
-            a.start
-                .cmp(&b.start)
-                .then_with(|| a.id.cmp(&b.id))
+            a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id))
         });
 
         rows
@@ -52,20 +49,15 @@ impl Project {
     /// only. Done dependencies are treated as satisfied
     /// (start at 0), and the critical path is recalculated
     /// for remaining work.
-    pub fn gantt_schedule_remaining(
-        &self,
-    ) -> Vec<GanttRow> {
+    pub fn gantt_schedule_remaining(&self) -> Vec<GanttRow> {
         let order = self.topological_sort();
         let crit = self.remaining_critical_path_set();
-        let mut end_at: HashMap<&TaskId, u32> =
-            HashMap::new();
+        let mut end_at: HashMap<&TaskId, u32> = HashMap::new();
         let mut rows = Vec::new();
 
         for id in &order {
             let task = &self.tasks[id];
-            if task.status == Status::Done
-                || task.status == Status::OnHold
-            {
+            if task.status == Status::Done || task.status == Status::OnHold {
                 continue;
             }
             let width = task.complexity.unwrap_or(1);
@@ -77,13 +69,9 @@ impl Project {
                 .dependencies
                 .iter()
                 .filter(|dep| {
-                    self.tasks
-                        .get(*dep)
-                        .is_some_and(|t| {
-                            t.status != Status::Done
-                                && t.status
-                                    != Status::OnHold
-                        })
+                    self.tasks.get(*dep).is_some_and(|t| {
+                        t.status != Status::Done && t.status != Status::OnHold
+                    })
                 })
                 .filter_map(|dep| end_at.get(dep))
                 .copied()
@@ -102,9 +90,7 @@ impl Project {
         }
 
         rows.sort_by(|a, b| {
-            a.start
-                .cmp(&b.start)
-                .then_with(|| a.id.cmp(&b.id))
+            a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id))
         });
 
         rows
@@ -116,9 +102,7 @@ mod tests {
     use super::*;
     use crate::domain::task::{Task, TaskId};
 
-    fn project_with_tasks(
-        ids: &[&str],
-    ) -> (Project, Vec<TaskId>) {
+    fn project_with_tasks(ids: &[&str]) -> (Project, Vec<TaskId>) {
         let mut p = Project::new("Test").unwrap();
         let task_ids: Vec<TaskId> = ids
             .iter()
@@ -126,8 +110,7 @@ mod tests {
                 let tid = TaskId::new(id).unwrap();
                 p.add_task(
                     tid.clone(),
-                    Task::new(&format!("Task {id}"))
-                        .unwrap(),
+                    Task::new(&format!("Task {id}")).unwrap(),
                 )
                 .unwrap();
                 tid
@@ -147,12 +130,9 @@ mod tests {
 
     #[test]
     fn gantt_sequential_tasks() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
-        p.tasks.get_mut(&ids[0]).unwrap().complexity =
-            Some(3);
-        p.tasks.get_mut(&ids[1]).unwrap().complexity =
-            Some(2);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity = Some(3);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity = Some(2);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         let rows = p.gantt_schedule();
         let a = rows.iter().find(|r| r.id == ids[0]).unwrap();
@@ -165,12 +145,9 @@ mod tests {
 
     #[test]
     fn gantt_parallel_tasks() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
-        p.tasks.get_mut(&ids[0]).unwrap().complexity =
-            Some(5);
-        p.tasks.get_mut(&ids[1]).unwrap().complexity =
-            Some(3);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity = Some(5);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity = Some(3);
         // No dependencies — both start at 0.
         let rows = p.gantt_schedule();
         assert_eq!(rows[0].start, 0);
@@ -179,34 +156,24 @@ mod tests {
 
     #[test]
     fn gantt_diamond() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
-        p.tasks.get_mut(&ids[0]).unwrap().complexity =
-            Some(5);
-        p.tasks.get_mut(&ids[1]).unwrap().complexity =
-            Some(2);
-        p.tasks.get_mut(&ids[2]).unwrap().complexity =
-            Some(3);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity = Some(5);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity = Some(2);
+        p.tasks.get_mut(&ids[2]).unwrap().complexity = Some(3);
         // C depends on A and B.
         p.add_dependency(&ids[2], &ids[0]).unwrap();
         p.add_dependency(&ids[2], &ids[1]).unwrap();
         let rows = p.gantt_schedule();
-        let c = rows
-            .iter()
-            .find(|r| r.id == ids[2])
-            .unwrap();
+        let c = rows.iter().find(|r| r.id == ids[2]).unwrap();
         // C starts after the longer dep (A=5).
         assert_eq!(c.start, 5);
     }
 
     #[test]
     fn gantt_marks_critical_path() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
-        p.tasks.get_mut(&ids[0]).unwrap().complexity =
-            Some(5);
-        p.tasks.get_mut(&ids[1]).unwrap().complexity =
-            Some(3);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity = Some(5);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity = Some(3);
         p.add_dependency(&ids[1], &ids[0]).unwrap();
         let rows = p.gantt_schedule();
         // Both are on the critical path (only chain).
@@ -222,10 +189,7 @@ mod tests {
 
     // --- GanttRow Unicode rendering tests ---
 
-    fn gantt_row(
-        status: Status,
-        width: u32,
-    ) -> GanttRow {
+    fn gantt_row(status: Status, width: u32) -> GanttRow {
         GanttRow {
             id: TaskId::new("T").unwrap(),
             start: 0,

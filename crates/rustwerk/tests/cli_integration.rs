@@ -5,14 +5,12 @@ use std::process::Command;
 /// Path to the rustwerk binary built by cargo.
 fn rustwerk_bin() -> PathBuf {
     // Use the env var set by cargo for workspace binaries.
-    if let Ok(path) =
-        std::env::var("CARGO_BIN_EXE_rustwerk")
-    {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_rustwerk") {
         return PathBuf::from(path);
     }
     // Fallback: navigate from test binary location.
-    let mut path = std::env::current_exe()
-        .expect("failed to get current exe path");
+    let mut path =
+        std::env::current_exe().expect("failed to get current exe path");
     path.pop(); // remove test binary name
     path.pop(); // remove deps/
     path.push("rustwerk");
@@ -25,10 +23,8 @@ fn rustwerk_bin() -> PathBuf {
 /// Create a temp directory with a unique name for each
 /// test.
 fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "rustwerk-cli-test-{}-{name}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("rustwerk-cli-test-{}-{name}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     dir
@@ -41,10 +37,8 @@ fn run(dir: &PathBuf, args: &[&str]) -> (String, String, bool) {
         .current_dir(dir)
         .output()
         .expect("failed to run rustwerk");
-    let stdout =
-        String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr =
-        String::from_utf8_lossy(&output.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     (stdout, stderr, output.status.success())
 }
 
@@ -66,10 +60,7 @@ fn init_refuses_existing_project() {
     run(&dir, &["init", "First"]);
     let (_, stderr, ok) = run(&dir, &["init", "Second"]);
     assert!(!ok, "second init should fail");
-    assert!(
-        stderr.contains("already exists"),
-        "stderr: {stderr}"
-    );
+    assert!(stderr.contains("already exists"), "stderr: {stderr}");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -92,10 +83,7 @@ fn show_displays_project() {
 fn task_add_with_id() {
     let dir = temp_dir("add-id");
     run(&dir, &["init", "P"]);
-    let (stdout, _, ok) = run(
-        &dir,
-        &["task", "add", "My Task", "--id", "MT"],
-    );
+    let (stdout, _, ok) = run(&dir, &["task", "add", "My Task", "--id", "MT"]);
     assert!(ok);
     assert!(stdout.contains("Created task MT"));
     let _ = fs::remove_dir_all(&dir);
@@ -105,8 +93,7 @@ fn task_add_with_id() {
 fn task_add_auto_id() {
     let dir = temp_dir("add-auto");
     run(&dir, &["init", "P"]);
-    let (stdout, _, ok) =
-        run(&dir, &["task", "add", "Auto Task"]);
+    let (stdout, _, ok) = run(&dir, &["task", "add", "Auto Task"]);
     assert!(ok);
     assert!(stdout.contains("T0001"));
     let _ = fs::remove_dir_all(&dir);
@@ -144,8 +131,7 @@ fn task_status_valid_transition() {
     let dir = temp_dir("status-valid");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
-    let (stdout, _, ok) =
-        run(&dir, &["task", "status", "A", "in-progress"]);
+    let (stdout, _, ok) = run(&dir, &["task", "status", "A", "in-progress"]);
     assert!(ok);
     assert!(stdout.contains("IN_PROGRESS"));
     let _ = fs::remove_dir_all(&dir);
@@ -156,8 +142,7 @@ fn task_status_invalid_transition() {
     let dir = temp_dir("status-invalid");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
-    let (_, _, ok) =
-        run(&dir, &["task", "status", "A", "done"]);
+    let (_, _, ok) = run(&dir, &["task", "status", "A", "done"]);
     assert!(!ok, "TODO->DONE should fail");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -169,10 +154,8 @@ fn task_status_force() {
     run(&dir, &["task", "add", "T", "--id", "A"]);
     run(&dir, &["task", "status", "A", "in-progress"]);
     run(&dir, &["task", "status", "A", "done"]);
-    let (stdout, _, ok) = run(
-        &dir,
-        &["task", "status", "A", "todo", "--force"],
-    );
+    let (stdout, _, ok) =
+        run(&dir, &["task", "status", "A", "todo", "--force"]);
     assert!(ok, "force should bypass validation");
     assert!(stdout.contains("TODO"));
     let _ = fs::remove_dir_all(&dir);
@@ -185,8 +168,7 @@ fn task_remove() {
     let dir = temp_dir("remove");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
-    let (stdout, _, ok) =
-        run(&dir, &["task", "remove", "A"]);
+    let (stdout, _, ok) = run(&dir, &["task", "remove", "A"]);
     assert!(ok);
     assert!(stdout.contains("Removed"));
     let _ = fs::remove_dir_all(&dir);
@@ -199,10 +181,7 @@ fn task_update_title() {
     let dir = temp_dir("update");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "Old", "--id", "A"]);
-    let (stdout, _, ok) = run(
-        &dir,
-        &["task", "update", "A", "--title", "New"],
-    );
+    let (stdout, _, ok) = run(&dir, &["task", "update", "A", "--title", "New"]);
     assert!(ok);
     assert!(stdout.contains("New"));
     let _ = fs::remove_dir_all(&dir);
@@ -235,25 +214,18 @@ fn task_assign_and_unassign() {
         .expect("batch failed");
     assert!(output.status.success());
     // Hand-add the developer to the project file.
-    let proj_path =
-        dir.join(".rustwerk").join("project.json");
+    let proj_path = dir.join(".rustwerk").join("project.json");
     let json = fs::read_to_string(&proj_path).unwrap();
-    let mut proj: serde_json::Value =
-        serde_json::from_str(&json).unwrap();
+    let mut proj: serde_json::Value = serde_json::from_str(&json).unwrap();
     proj["developers"] = serde_json::json!({
         "alice": {"name": "Alice"}
     });
-    fs::write(
-        &proj_path,
-        serde_json::to_string_pretty(&proj).unwrap(),
-    )
-    .unwrap();
-    let (stdout, _, ok) =
-        run(&dir, &["task", "assign", "A", "alice"]);
+    fs::write(&proj_path, serde_json::to_string_pretty(&proj).unwrap())
+        .unwrap();
+    let (stdout, _, ok) = run(&dir, &["task", "assign", "A", "alice"]);
     assert!(ok, "assign should succeed");
     assert!(stdout.contains("alice"));
-    let (stdout, _, ok) =
-        run(&dir, &["task", "unassign", "A"]);
+    let (stdout, _, ok) = run(&dir, &["task", "unassign", "A"]);
     assert!(ok);
     assert!(stdout.contains("unassigned"));
     let _ = fs::remove_dir_all(&dir);
@@ -281,8 +253,7 @@ fn task_list_available() {
     run(&dir, &["task", "add", "A", "--id", "A"]);
     run(&dir, &["task", "add", "B", "--id", "B"]);
     run(&dir, &["task", "depend", "B", "A"]);
-    let (stdout, _, ok) =
-        run(&dir, &["task", "list", "--available"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--available"]);
     assert!(ok);
     // A is available (no deps), B is not (depends on A).
     assert!(stdout.contains("A"));
@@ -304,8 +275,7 @@ fn task_list_filter_by_status() {
     assert!(stdout.contains("A"));
     assert!(!stdout.contains("B"));
     // Filter for todo only.
-    let (stdout, _, ok) =
-        run(&dir, &["task", "list", "--status", "todo"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--status", "todo"]);
     assert!(ok);
     assert!(!stdout.contains(" A "));
     assert!(stdout.contains("B"));
@@ -322,8 +292,7 @@ fn task_list_filter_by_assignee() {
     run(&dir, &["task", "add", "Beta", "--id", "B"]);
     run(&dir, &["task", "assign", "A", "alice"]);
     run(&dir, &["task", "assign", "B", "bob"]);
-    let (stdout, _, ok) =
-        run(&dir, &["task", "list", "--assignee", "alice"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--assignee", "alice"]);
     assert!(ok);
     assert!(stdout.contains("Alpha"));
     assert!(!stdout.contains("Beta"));
@@ -341,8 +310,7 @@ fn task_list_filter_by_chain() {
     run(&dir, &["task", "depend", "M", "R"]);
     run(&dir, &["task", "depend", "L", "M"]);
     // Chain of L should include R, M, L (transitive deps + self).
-    let (stdout, _, ok) =
-        run(&dir, &["task", "list", "--chain", "L"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--chain", "L"]);
     assert!(ok);
     assert!(stdout.contains("Root"), "stdout: {stdout}");
     assert!(stdout.contains("Mid"), "stdout: {stdout}");
@@ -365,8 +333,12 @@ fn task_list_combined_filters() {
     let (stdout, _, ok) = run(
         &dir,
         &[
-            "task", "list", "--assignee", "alice",
-            "--status", "in-progress",
+            "task",
+            "list",
+            "--assignee",
+            "alice",
+            "--status",
+            "in-progress",
         ],
     );
     assert!(ok);
@@ -380,8 +352,7 @@ fn task_list_chain_unknown_task_fails() {
     let dir = temp_dir("list-chain-unknown");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "A", "--id", "A"]);
-    let (_, stderr, ok) =
-        run(&dir, &["task", "list", "--chain", "NOPE"]);
+    let (_, stderr, ok) = run(&dir, &["task", "list", "--chain", "NOPE"]);
     assert!(!ok, "should fail for unknown task");
     assert!(stderr.contains("not found"), "stderr: {stderr}");
     let _ = fs::remove_dir_all(&dir);
@@ -392,13 +363,9 @@ fn task_list_no_matching_tasks() {
     let dir = temp_dir("list-no-match");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "A", "--id", "A"]);
-    let (stdout, _, ok) =
-        run(&dir, &["task", "list", "--status", "done"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--status", "done"]);
     assert!(ok);
-    assert!(
-        stdout.contains("No matching tasks"),
-        "stdout: {stdout}"
-    );
+    assert!(stdout.contains("No matching tasks"), "stdout: {stdout}");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -406,17 +373,9 @@ fn task_list_no_matching_tasks() {
 fn task_list_status_conflicts_with_available() {
     let dir = temp_dir("list-conflict");
     run(&dir, &["init", "P"]);
-    let (_, _, ok) = run(
-        &dir,
-        &[
-            "task", "list", "--available",
-            "--status", "done",
-        ],
-    );
-    assert!(
-        !ok,
-        "--available and --status should conflict"
-    );
+    let (_, _, ok) =
+        run(&dir, &["task", "list", "--available", "--status", "done"]);
+    assert!(!ok, "--available and --status should conflict");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -428,12 +387,10 @@ fn depend_and_undepend() {
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "A", "--id", "A"]);
     run(&dir, &["task", "add", "B", "--id", "B"]);
-    let (stdout, _, ok) =
-        run(&dir, &["task", "depend", "B", "A"]);
+    let (stdout, _, ok) = run(&dir, &["task", "depend", "B", "A"]);
     assert!(ok);
     assert!(stdout.contains("depends on"));
-    let (stdout, _, ok) =
-        run(&dir, &["task", "undepend", "B", "A"]);
+    let (stdout, _, ok) = run(&dir, &["task", "undepend", "B", "A"]);
     assert!(ok);
     assert!(stdout.contains("Removed"));
     let _ = fs::remove_dir_all(&dir);
@@ -446,8 +403,7 @@ fn depend_cycle_rejected() {
     run(&dir, &["task", "add", "A", "--id", "A"]);
     run(&dir, &["task", "add", "B", "--id", "B"]);
     run(&dir, &["task", "depend", "A", "B"]);
-    let (_, _, ok) =
-        run(&dir, &["task", "depend", "B", "A"]);
+    let (_, _, ok) = run(&dir, &["task", "depend", "B", "A"]);
     assert!(!ok, "cycle should be rejected");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -460,14 +416,11 @@ fn effort_log_and_estimate() {
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
     run(&dir, &["task", "status", "A", "in-progress"]);
-    let (stdout, _, ok) = run(
-        &dir,
-        &["effort", "log", "A", "2.5H", "--dev", "alice"],
-    );
+    let (stdout, _, ok) =
+        run(&dir, &["effort", "log", "A", "2.5H", "--dev", "alice"]);
     assert!(ok);
     assert!(stdout.contains("2.5H"));
-    let (stdout, _, ok) =
-        run(&dir, &["effort", "estimate", "A", "8H"]);
+    let (stdout, _, ok) = run(&dir, &["effort", "estimate", "A", "8H"]);
     assert!(ok);
     assert!(stdout.contains("8H"));
     let _ = fs::remove_dir_all(&dir);
@@ -478,10 +431,7 @@ fn effort_log_requires_in_progress() {
     let dir = temp_dir("effort-fail");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "T", "--id", "A"]);
-    let (_, _, ok) = run(
-        &dir,
-        &["effort", "log", "A", "1H", "--dev", "bob"],
-    );
+    let (_, _, ok) = run(&dir, &["effort", "log", "A", "1H", "--dev", "bob"]);
     assert!(!ok, "should fail on TODO task");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -513,8 +463,7 @@ fn batch_from_stdin() {
         })
         .expect("batch failed");
     assert!(output.status.success());
-    let stdout =
-        String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("BT"));
     let _ = fs::remove_dir_all(&dir);
 }
@@ -549,10 +498,7 @@ fn batch_rollback_on_error() {
     assert!(!output.status.success());
     // Verify OK task was not persisted.
     let (stdout, _, _) = run(&dir, &["task", "list"]);
-    assert!(
-        !stdout.contains("OK"),
-        "rolled-back task should not exist"
-    );
+    assert!(!stdout.contains("OK"), "rolled-back task should not exist");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -569,8 +515,7 @@ fn show_without_project_fails() {
 #[test]
 fn task_add_without_project_fails() {
     let dir = temp_dir("no-project-add");
-    let (_, _, ok) =
-        run(&dir, &["task", "add", "X", "--id", "X"]);
+    let (_, _, ok) = run(&dir, &["task", "add", "X", "--id", "X"]);
     assert!(!ok);
     let _ = fs::remove_dir_all(&dir);
 }
@@ -744,11 +689,11 @@ fn gantt_consecutive_bars_dont_overlap() {
     // A's right cap ▌ must be at a column strictly before
     // B's left cap ▐ (bars must not overlap or touch with
     // no gap).
-    let a_end_col = last_char_col(bar_a, '\u{258C}')
-        .expect("A should have right cap ▌");
+    let a_end_col =
+        last_char_col(bar_a, '\u{258C}').expect("A should have right cap ▌");
 
-    let b_start_col = char_col(bar_b, '\u{2590}')
-        .expect("B should have left cap ▐");
+    let b_start_col =
+        char_col(bar_b, '\u{2590}').expect("B should have left cap ▐");
 
     assert!(
         a_end_col < b_start_col,
@@ -772,7 +717,15 @@ fn gantt_id_column_aligned() {
     };
     r(&["init", "P"]);
     r(&["task", "add", "Short", "--id", "AB", "--complexity", "3"]);
-    r(&["task", "add", "Longer name", "--id", "ABCDEFGHIJ", "--complexity", "3"]);
+    r(&[
+        "task",
+        "add",
+        "Longer name",
+        "--id",
+        "ABCDEFGHIJ",
+        "--complexity",
+        "3",
+    ]);
     let (stdout, _, ok) = run(&dir, &["gantt"]);
     assert!(ok);
 
@@ -783,10 +736,10 @@ fn gantt_id_column_aligned() {
 
     // Both bars' left caps should be in the same column
     // (IDs are padded to the same width).
-    let cap1_col = char_col(row1, '\u{2590}')
-        .expect("row1 should have left cap");
-    let cap2_col = char_col(row2, '\u{2590}')
-        .expect("row2 should have left cap");
+    let cap1_col =
+        char_col(row1, '\u{2590}').expect("row1 should have left cap");
+    let cap2_col =
+        char_col(row2, '\u{2590}').expect("row2 should have left cap");
 
     assert_eq!(
         cap1_col, cap2_col,
@@ -802,8 +755,7 @@ fn gantt_id_column_aligned() {
 fn gantt_remaining_excludes_done_tasks() {
     let dir = gantt_project_abc("gantt-remaining");
     // A is done, B and C are not.
-    let (stdout, _, ok) =
-        run(&dir, &["gantt", "--remaining"]);
+    let (stdout, _, ok) = run(&dir, &["gantt", "--remaining"]);
     assert!(ok, "gantt --remaining should succeed");
 
     // A should not appear (it's done).
@@ -824,8 +776,7 @@ fn gantt_remaining_excludes_done_tasks() {
         .iter()
         .find(|l| l.contains("B"))
         .expect("B should appear");
-    let b_cap = char_col(b_line, '\u{2590}')
-        .expect("B should have left cap");
+    let b_cap = char_col(b_line, '\u{2590}').expect("B should have left cap");
     assert_eq!(
         tick0_col, b_cap,
         "B should start at time 0 (done deps don't \
@@ -860,8 +811,7 @@ fn gantt_remaining_recalculates_critical_path() {
     r(&["task", "status", "A", "in-progress"]);
     r(&["task", "status", "A", "done"]);
 
-    let (stdout, _, ok) =
-        run(&dir, &["gantt", "--remaining"]);
+    let (stdout, _, ok) = run(&dir, &["gantt", "--remaining"]);
     assert!(ok);
 
     let lines: Vec<&str> = stdout.lines().collect();
@@ -911,16 +861,33 @@ fn report_complete_shows_summary() {
             .expect("failed to run rustwerk");
     };
     r(&["init", "P"]);
-    r(&["task", "add", "A", "--id", "A", "--complexity", "3",
-        "--effort", "8H"]);
-    r(&["task", "add", "B", "--id", "B", "--complexity", "5",
-        "--effort", "2D"]);
+    r(&[
+        "task",
+        "add",
+        "A",
+        "--id",
+        "A",
+        "--complexity",
+        "3",
+        "--effort",
+        "8H",
+    ]);
+    r(&[
+        "task",
+        "add",
+        "B",
+        "--id",
+        "B",
+        "--complexity",
+        "5",
+        "--effort",
+        "2D",
+    ]);
     r(&["task", "depend", "B", "A"]);
     r(&["task", "status", "A", "in-progress"]);
     r(&["task", "status", "A", "done"]);
 
-    let (stdout, _, ok) =
-        run(&dir, &["report", "complete"]);
+    let (stdout, _, ok) = run(&dir, &["report", "complete"]);
     assert!(ok, "report complete should succeed");
 
     // Should contain key summary fields.
@@ -966,8 +933,7 @@ fn dev_list_shows_developers() {
     // Inject developers directly into the project JSON.
     let path = dir.join(".rustwerk/project.json");
     let json = fs::read_to_string(&path).unwrap();
-    let mut project: serde_json::Value =
-        serde_json::from_str(&json).unwrap();
+    let mut project: serde_json::Value = serde_json::from_str(&json).unwrap();
     project["developers"] = serde_json::json!({
         "alice": {
             "name": "Alice Smith",
@@ -978,26 +944,13 @@ fn dev_list_shows_developers() {
             "name": "Bob Jones"
         }
     });
-    fs::write(
-        &path,
-        serde_json::to_string_pretty(&project).unwrap(),
-    )
-    .unwrap();
+    fs::write(&path, serde_json::to_string_pretty(&project).unwrap()).unwrap();
 
     let (stdout, _, ok) = run(&dir, &["dev", "list"]);
     assert!(ok, "dev list should succeed");
-    assert!(
-        stdout.contains("alice"),
-        "should list alice: {stdout}"
-    );
-    assert!(
-        stdout.contains("bob"),
-        "should list bob: {stdout}"
-    );
-    assert!(
-        stdout.contains("Alice Smith"),
-        "should show name: {stdout}"
-    );
+    assert!(stdout.contains("alice"), "should list alice: {stdout}");
+    assert!(stdout.contains("bob"), "should list bob: {stdout}");
+    assert!(stdout.contains("Alice Smith"), "should show name: {stdout}");
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1022,29 +975,16 @@ fn report_effort_shows_per_developer() {
     r(&["effort", "log", "A", "2H", "--dev", "bob"]);
     r(&["effort", "log", "A", "1.5H", "--dev", "alice"]);
 
-    let (stdout, _, ok) =
-        run(&dir, &["report", "effort"]);
+    let (stdout, _, ok) = run(&dir, &["report", "effort"]);
     assert!(ok, "report effort should succeed");
 
     // Should show per-developer totals.
-    assert!(
-        stdout.contains("alice"),
-        "should list alice: {stdout}"
-    );
-    assert!(
-        stdout.contains("bob"),
-        "should list bob: {stdout}"
-    );
+    assert!(stdout.contains("alice"), "should list alice: {stdout}");
+    assert!(stdout.contains("bob"), "should list bob: {stdout}");
     // alice: 3 + 1.5 = 4.5H
-    assert!(
-        stdout.contains("4.5"),
-        "alice should have 4.5H: {stdout}"
-    );
+    assert!(stdout.contains("4.5"), "alice should have 4.5H: {stdout}");
     // bob: 2H
-    assert!(
-        stdout.contains("2.0"),
-        "bob should have 2.0H: {stdout}"
-    );
+    assert!(stdout.contains("2.0"), "bob should have 2.0H: {stdout}");
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1053,8 +993,7 @@ fn report_effort_shows_per_developer() {
 fn report_effort_empty() {
     let dir = temp_dir("report-effort-empty");
     run(&dir, &["init", "P"]);
-    let (stdout, _, ok) =
-        run(&dir, &["report", "effort"]);
+    let (stdout, _, ok) = run(&dir, &["report", "effort"]);
     assert!(ok);
     assert!(
         stdout.contains("No effort"),
@@ -1085,28 +1024,18 @@ fn report_bottlenecks_shows_blocking_tasks() {
     r(&["task", "depend", "B", "A"]); // B depends on A
     r(&["task", "depend", "C", "B"]); // C depends on B
 
-    let (stdout, _, ok) =
-        run(&dir, &["report", "bottlenecks"]);
+    let (stdout, _, ok) = run(&dir, &["report", "bottlenecks"]);
     assert!(ok, "report bottlenecks should succeed");
 
     // A blocks B and C (2 downstream).
-    assert!(
-        stdout.contains("A"),
-        "should list task A: {stdout}"
-    );
+    assert!(stdout.contains("A"), "should list task A: {stdout}");
     assert!(
         stdout.contains("alice"),
         "should show assignee alice: {stdout}"
     );
-    assert!(
-        stdout.contains("2"),
-        "A should block 2 tasks: {stdout}"
-    );
+    assert!(stdout.contains("2"), "A should block 2 tasks: {stdout}");
     // A has no deps → ready.
-    assert!(
-        stdout.contains("ready"),
-        "A should be ready: {stdout}"
-    );
+    assert!(stdout.contains("ready"), "A should be ready: {stdout}");
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1116,8 +1045,7 @@ fn report_bottlenecks_empty() {
     let dir = temp_dir("report-bottlenecks-empty");
     run(&dir, &["init", "P"]);
     run(&dir, &["task", "add", "Solo", "--id", "A"]);
-    let (stdout, _, ok) =
-        run(&dir, &["report", "bottlenecks"]);
+    let (stdout, _, ok) = run(&dir, &["report", "bottlenecks"]);
     assert!(ok);
     assert!(
         stdout.contains("No bottlenecks"),
@@ -1134,8 +1062,16 @@ fn dev_add_and_list() {
     run(&dir, &["init", "P"]);
     let (stdout, _, ok) = run(
         &dir,
-        &["dev", "add", "alice", "Alice Smith",
-          "--email", "alice@example.com", "--role", "lead"],
+        &[
+            "dev",
+            "add",
+            "alice",
+            "Alice Smith",
+            "--email",
+            "alice@example.com",
+            "--role",
+            "lead",
+        ],
     );
     assert!(ok, "dev add should succeed: {stdout}");
     assert!(stdout.contains("alice"));
@@ -1155,8 +1091,7 @@ fn dev_add_duplicate_rejected() {
     let dir = temp_dir("dev-add-dup");
     run(&dir, &["init", "P"]);
     run(&dir, &["dev", "add", "alice", "Alice"]);
-    let (_, _, ok) =
-        run(&dir, &["dev", "add", "alice", "Alice 2"]);
+    let (_, _, ok) = run(&dir, &["dev", "add", "alice", "Alice 2"]);
     assert!(!ok, "duplicate dev add should fail");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1166,8 +1101,7 @@ fn dev_remove() {
     let dir = temp_dir("dev-remove");
     run(&dir, &["init", "P"]);
     run(&dir, &["dev", "add", "alice", "Alice"]);
-    let (stdout, _, ok) =
-        run(&dir, &["dev", "remove", "alice"]);
+    let (stdout, _, ok) = run(&dir, &["dev", "remove", "alice"]);
     assert!(ok, "dev remove should succeed: {stdout}");
 
     // Should no longer appear in dev list.
@@ -1183,8 +1117,7 @@ fn dev_remove() {
 fn dev_remove_nonexistent_fails() {
     let dir = temp_dir("dev-remove-nope");
     run(&dir, &["init", "P"]);
-    let (_, _, ok) =
-        run(&dir, &["dev", "remove", "ghost"]);
+    let (_, _, ok) = run(&dir, &["dev", "remove", "ghost"]);
     assert!(!ok, "removing nonexistent dev should fail");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1205,8 +1138,7 @@ fn tree_basic() {
     assert!(stdout.contains("C"), "child task: {stdout}");
     // Box-drawing chars present.
     assert!(
-        stdout.contains('\u{2514}')
-            || stdout.contains('\u{251C}'),
+        stdout.contains('\u{2514}') || stdout.contains('\u{251C}'),
         "box-drawing: {stdout}"
     );
     let _ = fs::remove_dir_all(&dir);
@@ -1221,8 +1153,7 @@ fn tree_remaining_excludes_done() {
     run(&dir, &["task", "depend", "C", "R"]);
     run(&dir, &["task", "status", "R", "in-progress"]);
     run(&dir, &["task", "status", "R", "done"]);
-    let (stdout, _, ok) =
-        run(&dir, &["tree", "--remaining"]);
+    let (stdout, _, ok) = run(&dir, &["tree", "--remaining"]);
     assert!(ok);
     // R is done, only C should appear.
     assert!(!stdout.contains(" R "), "R gone: {stdout}");
@@ -1247,17 +1178,11 @@ fn status_shows_dashboard() {
     assert!(stdout.contains('%'), "pct: {stdout}");
     // Should contain task counts.
     assert!(stdout.contains("done"), "done: {stdout}");
-    assert!(
-        stdout.contains("in-progress"),
-        "in-progress: {stdout}"
-    );
+    assert!(stdout.contains("in-progress"), "in-progress: {stdout}");
     // Should mention active tasks.
     assert!(stdout.contains("A"), "active task: {stdout}");
     // Should mention bottleneck count.
-    assert!(
-        stdout.contains("bottleneck"),
-        "bottleneck: {stdout}"
-    );
+    assert!(stdout.contains("bottleneck"), "bottleneck: {stdout}");
     let _ = fs::remove_dir_all(&dir);
 }
 

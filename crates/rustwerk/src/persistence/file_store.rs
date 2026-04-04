@@ -31,10 +31,7 @@ pub fn project_file_path(root: &Path) -> PathBuf {
 /// Save a project to `.rustwerk/project.json` under the
 /// given root directory. Creates the directory if it does
 /// not exist.
-pub fn save(
-    root: &Path,
-    project: &Project,
-) -> Result<(), StoreError> {
+pub fn save(root: &Path, project: &Project) -> Result<(), StoreError> {
     let path = project_file_path(root);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -59,10 +56,8 @@ mod tests {
     use std::fs;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "rustwerk-test-{}-{name}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir()
+            .join(format!("rustwerk-test-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
     }

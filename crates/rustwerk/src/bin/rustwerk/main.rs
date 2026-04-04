@@ -15,13 +15,11 @@ use rustwerk::persistence::file_store;
 
 use batch::cmd_batch;
 use commands::{
-    cmd_depend, cmd_dev_list, cmd_effort_estimate,
-    cmd_dev_add, cmd_dev_remove, cmd_effort_log,
-    cmd_init, cmd_report_bottlenecks, cmd_report_complete,
-    cmd_report_effort,
-    cmd_show, cmd_status, cmd_task_add, cmd_task_assign,
-    cmd_task_list, cmd_task_remove, cmd_task_status,
-    cmd_task_unassign, cmd_task_update, cmd_undepend,
+    cmd_depend, cmd_dev_add, cmd_dev_list, cmd_dev_remove, cmd_effort_estimate,
+    cmd_effort_log, cmd_init, cmd_report_bottlenecks, cmd_report_complete,
+    cmd_report_effort, cmd_show, cmd_status, cmd_task_add, cmd_task_assign,
+    cmd_task_list, cmd_task_remove, cmd_task_status, cmd_task_unassign,
+    cmd_task_update, cmd_undepend,
 };
 use gantt::cmd_gantt;
 
@@ -247,8 +245,8 @@ enum TaskAction {
 /// Find the project root by looking for `.rustwerk/`
 /// starting from the current directory and walking up.
 fn find_project_root() -> Result<PathBuf> {
-    let mut dir = env::current_dir()
-        .context("failed to get current directory")?;
+    let mut dir =
+        env::current_dir().context("failed to get current directory")?;
     loop {
         if dir.join(".rustwerk").is_dir() {
             return Ok(dir);
@@ -265,8 +263,7 @@ fn find_project_root() -> Result<PathBuf> {
 /// Load the project from the nearest root.
 pub(crate) fn load_project() -> Result<(PathBuf, Project)> {
     let root = find_project_root()?;
-    let project = file_store::load(&root)
-        .context("failed to load project")?;
+    let project = file_store::load(&root).context("failed to load project")?;
     Ok((root, project))
 }
 
@@ -275,22 +272,17 @@ pub(crate) fn save_project(
     root: &std::path::Path,
     project: &Project,
 ) -> Result<()> {
-    file_store::save(root, project)
-        .context("failed to save project")
+    file_store::save(root, project).context("failed to save project")
 }
 
 /// Parse a status string into a `Status` enum.
 pub(crate) fn parse_status(s: &str) -> Result<Status> {
     match s.to_lowercase().as_str() {
         "todo" => Ok(Status::Todo),
-        "in-progress" | "in_progress" | "inprogress" => {
-            Ok(Status::InProgress)
-        }
+        "in-progress" | "in_progress" | "inprogress" => Ok(Status::InProgress),
         "blocked" => Ok(Status::Blocked),
         "done" => Ok(Status::Done),
-        "on-hold" | "on_hold" | "onhold" => {
-            Ok(Status::OnHold)
-        }
+        "on-hold" | "on_hold" | "onhold" => Ok(Status::OnHold),
         _ => bail!(
             "unknown status: {s} (expected: todo, \
              in-progress, blocked, done, on-hold)"
@@ -320,21 +312,11 @@ fn main() -> Result<()> {
             TaskAction::Status { id, status, force } => {
                 cmd_task_status(&id, &status, force)
             }
-            TaskAction::Remove { id } => {
-                cmd_task_remove(&id)
-            }
-            TaskAction::Assign { id, to } => {
-                cmd_task_assign(&id, &to)
-            }
-            TaskAction::Unassign { id } => {
-                cmd_task_unassign(&id)
-            }
+            TaskAction::Remove { id } => cmd_task_remove(&id),
+            TaskAction::Assign { id, to } => cmd_task_assign(&id, &to),
+            TaskAction::Unassign { id } => cmd_task_unassign(&id),
             TaskAction::Update { id, title, desc } => {
-                cmd_task_update(
-                    &id,
-                    title.as_deref(),
-                    desc.as_deref(),
-                )
+                cmd_task_update(&id, title.as_deref(), desc.as_deref())
             }
             TaskAction::List {
                 available,
@@ -349,12 +331,8 @@ fn main() -> Result<()> {
                 assignee.as_deref(),
                 chain.as_deref(),
             ),
-            TaskAction::Depend { from, to } => {
-                cmd_depend(&from, &to)
-            }
-            TaskAction::Undepend { from, to } => {
-                cmd_undepend(&from, &to)
-            }
+            TaskAction::Depend { from, to } => cmd_depend(&from, &to),
+            TaskAction::Undepend { from, to } => cmd_undepend(&from, &to),
         },
         Commands::Dev { action } => match action {
             DevAction::Add {
@@ -362,50 +340,26 @@ fn main() -> Result<()> {
                 name,
                 email,
                 role,
-            } => cmd_dev_add(
-                &id,
-                &name,
-                email.as_deref(),
-                role.as_deref(),
-            ),
-            DevAction::Remove { id } => {
-                cmd_dev_remove(&id)
-            }
+            } => cmd_dev_add(&id, &name, email.as_deref(), role.as_deref()),
+            DevAction::Remove { id } => cmd_dev_remove(&id),
             DevAction::List => cmd_dev_list(),
         },
         Commands::Report { action } => match action {
-            ReportAction::Complete => {
-                cmd_report_complete()
-            }
-            ReportAction::Effort => {
-                cmd_report_effort()
-            }
-            ReportAction::Bottlenecks => {
-                cmd_report_bottlenecks()
-            }
+            ReportAction::Complete => cmd_report_complete(),
+            ReportAction::Effort => cmd_report_effort(),
+            ReportAction::Bottlenecks => cmd_report_bottlenecks(),
         },
-        Commands::Batch { file } => {
-            cmd_batch(file.as_deref())
-        }
-        Commands::Gantt { remaining } => {
-            cmd_gantt(remaining)
-        }
+        Commands::Batch { file } => cmd_batch(file.as_deref()),
+        Commands::Gantt { remaining } => cmd_gantt(remaining),
         Commands::Status => cmd_status(),
-        Commands::Tree { remaining } => {
-            tree::cmd_tree(remaining)
-        }
+        Commands::Tree { remaining } => tree::cmd_tree(remaining),
         Commands::Effort { action } => match action {
             EffortAction::Log {
                 id,
                 amount,
                 dev,
                 note,
-            } => cmd_effort_log(
-                &id,
-                &amount,
-                &dev,
-                note.as_deref(),
-            ),
+            } => cmd_effort_log(&id, &amount, &dev, note.as_deref()),
             EffortAction::Estimate { id, amount } => {
                 cmd_effort_estimate(&id, &amount)
             }

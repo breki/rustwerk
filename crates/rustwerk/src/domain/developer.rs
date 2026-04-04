@@ -7,15 +7,7 @@ use super::error::DomainError;
 /// Unique identifier for a developer — a short
 /// alphanumeric username (lowercase).
 #[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]
 pub struct DeveloperId(String);
 
@@ -30,18 +22,15 @@ impl DeveloperId {
                 "developer ID must not be empty".into(),
             ));
         }
-        if !id.chars().all(|c| {
-            c.is_ascii_alphanumeric()
-                || c == '-'
-                || c == '_'
-        }) {
-            return Err(DomainError::ValidationError(
-                format!(
-                    "developer ID must contain only \
+        if !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(DomainError::ValidationError(format!(
+                "developer ID must contain only \
                      ASCII alphanumeric characters, \
                      hyphens, and underscores: {id}"
-                ),
-            ));
+            )));
         }
         Ok(Self(id.to_lowercase()))
     }
@@ -53,10 +42,7 @@ impl DeveloperId {
 }
 
 impl fmt::Display for DeveloperId {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
@@ -74,18 +60,13 @@ pub struct Developer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     /// Areas of expertise (optional).
-    #[serde(
-        default,
-        skip_serializing_if = "Vec::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub specialties: Vec<String>,
 }
 
 impl Developer {
     /// Create a new developer with the given name.
-    pub fn new(
-        name: &str,
-    ) -> Result<Self, DomainError> {
+    pub fn new(name: &str) -> Result<Self, DomainError> {
         let name = name.trim();
         if name.is_empty() {
             return Err(DomainError::ValidationError(
@@ -119,8 +100,7 @@ mod tests {
 
     #[test]
     fn developer_id_with_hyphens() {
-        let id =
-            DeveloperId::new("john-doe").unwrap();
+        let id = DeveloperId::new("john-doe").unwrap();
         assert_eq!(id.as_str(), "john-doe");
     }
 
@@ -151,8 +131,7 @@ mod tests {
 
     #[test]
     fn developer_new_trims_name() {
-        let dev =
-            Developer::new("  Alice  ").unwrap();
+        let dev = Developer::new("  Alice  ").unwrap();
         assert_eq!(dev.name, "Alice");
     }
 

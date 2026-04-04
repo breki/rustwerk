@@ -19,8 +19,7 @@ impl Project {
     /// excluded become new roots.
     pub fn task_tree_remaining(&self) -> Vec<TreeNode> {
         self.build_tree(|t| {
-            t.status != Status::Done
-                && t.status != Status::OnHold
+            t.status != Status::Done && t.status != Status::OnHold
         })
     }
 
@@ -28,10 +27,7 @@ impl Project {
     /// `reverse_dependents` to map each task to the tasks
     /// that depend on it, then DFS from roots to build
     /// the tree.
-    fn build_tree(
-        &self,
-        include: impl Fn(&Task) -> bool,
-    ) -> Vec<TreeNode> {
+    fn build_tree(&self, include: impl Fn(&Task) -> bool) -> Vec<TreeNode> {
         let included: HashSet<&TaskId> = self
             .tasks
             .iter()
@@ -73,12 +69,7 @@ impl Project {
         roots
             .into_iter()
             .map(|id| {
-                Self::build_subtree(
-                    &self.tasks,
-                    id,
-                    &children_of,
-                    &mut seen,
-                )
+                Self::build_subtree(&self.tasks, id, &children_of, &mut seen)
             })
             .collect()
     }
@@ -104,12 +95,7 @@ impl Project {
             .map(|kids| {
                 kids.iter()
                     .map(|kid| {
-                        Self::build_subtree(
-                            tasks,
-                            kid,
-                            children_of,
-                            seen,
-                        )
+                        Self::build_subtree(tasks, kid, children_of, seen)
                     })
                     .collect()
             })
@@ -127,9 +113,7 @@ impl Project {
 mod tests {
     use super::*;
 
-    fn project_with_tasks(
-        ids: &[&str],
-    ) -> (Project, Vec<TaskId>) {
+    fn project_with_tasks(ids: &[&str]) -> (Project, Vec<TaskId>) {
         let mut p = Project::new("Test").unwrap();
         let task_ids: Vec<TaskId> = ids
             .iter()
@@ -137,8 +121,7 @@ mod tests {
                 let tid = TaskId::new(id).unwrap();
                 p.add_task(
                     tid.clone(),
-                    Task::new(&format!("Task {id}"))
-                        .unwrap(),
+                    Task::new(&format!("Task {id}")).unwrap(),
                 )
                 .unwrap();
                 tid
@@ -169,32 +152,22 @@ mod tests {
 
     #[test]
     fn tree_linear_chain() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap();
         p.add_dependency(&ids[2], &ids[1]).unwrap();
         let tree = p.task_tree();
         assert_eq!(tree.len(), 1);
         match &tree[0] {
-            TreeNode::Task {
-                id, children, ..
-            } => {
+            TreeNode::Task { id, children, .. } => {
                 assert_eq!(id.as_str(), "A");
                 assert_eq!(children.len(), 1);
                 match &children[0] {
-                    TreeNode::Task {
-                        id, children, ..
-                    } => {
+                    TreeNode::Task { id, children, .. } => {
                         assert_eq!(id.as_str(), "B");
                         assert_eq!(children.len(), 1);
                         match &children[0] {
-                            TreeNode::Task {
-                                id, ..
-                            } => {
-                                assert_eq!(
-                                    id.as_str(),
-                                    "C"
-                                );
+                            TreeNode::Task { id, .. } => {
+                                assert_eq!(id.as_str(), "C");
                             }
                             _ => panic!("expected Task"),
                         }
@@ -208,8 +181,7 @@ mod tests {
 
     #[test]
     fn tree_diamond_dag() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C", "D"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C", "D"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap();
         p.add_dependency(&ids[2], &ids[0]).unwrap();
         p.add_dependency(&ids[3], &ids[1]).unwrap();
@@ -221,9 +193,7 @@ mod tests {
                 assert_eq!(children.len(), 2);
                 // B's child D: Task
                 match &children[0] {
-                    TreeNode::Task {
-                        id, children, ..
-                    } => {
+                    TreeNode::Task { id, children, .. } => {
                         assert_eq!(id.as_str(), "B");
                         assert_eq!(children.len(), 1);
                         assert!(matches!(
@@ -236,9 +206,7 @@ mod tests {
                 }
                 // C's child D: Reference
                 match &children[1] {
-                    TreeNode::Task {
-                        id, children, ..
-                    } => {
+                    TreeNode::Task { id, children, .. } => {
                         assert_eq!(id.as_str(), "C");
                         assert_eq!(children.len(), 1);
                         assert!(matches!(
@@ -263,12 +231,10 @@ mod tests {
 
     #[test]
     fn tree_remaining_excludes_done() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap();
         p.add_dependency(&ids[2], &ids[1]).unwrap();
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         p.set_status(&ids[0], Status::Done, false).unwrap();
         let tree = p.task_tree_remaining();
         assert_eq!(tree.len(), 1);
@@ -283,8 +249,7 @@ mod tests {
     #[test]
     fn tree_remaining_all_done_empty() {
         let (mut p, ids) = project_with_tasks(&["A"]);
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         p.set_status(&ids[0], Status::Done, false).unwrap();
         assert!(p.task_tree_remaining().is_empty());
     }

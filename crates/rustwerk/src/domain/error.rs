@@ -65,10 +65,7 @@ mod tests {
             from: "todo".into(),
             to: "done".into(),
         };
-        assert_eq!(
-            err.to_string(),
-            "invalid status transition: todo -> done"
-        );
+        assert_eq!(err.to_string(), "invalid status transition: todo -> done");
     }
 
     #[test]
@@ -79,19 +76,14 @@ mod tests {
 
     #[test]
     fn error_display_cycle_detected() {
-        let err =
-            DomainError::CycleDetected("A -> B -> A".into());
-        assert_eq!(
-            err.to_string(),
-            "dependency cycle detected: A -> B -> A"
-        );
+        let err = DomainError::CycleDetected("A -> B -> A".into());
+        assert_eq!(err.to_string(), "dependency cycle detected: A -> B -> A");
     }
 
     #[test]
     fn error_display_project_already_exists() {
-        let err = DomainError::ProjectAlreadyExists(
-            ".rustwerk/project.json".into(),
-        );
+        let err =
+            DomainError::ProjectAlreadyExists(".rustwerk/project.json".into());
         assert_eq!(
             err.to_string(),
             "project already exists: .rustwerk/project.json"
@@ -100,9 +92,8 @@ mod tests {
 
     #[test]
     fn error_display_validation_error() {
-        let err = DomainError::ValidationError(
-            "title must not be empty".into(),
-        );
+        let err =
+            DomainError::ValidationError("title must not be empty".into());
         assert_eq!(
             err.to_string(),
             "validation error: title must not be empty"
@@ -111,22 +102,13 @@ mod tests {
 
     #[test]
     fn error_display_developer_not_found() {
-        let err =
-            DomainError::DeveloperNotFound("igor".into());
-        assert_eq!(
-            err.to_string(),
-            "developer not found: igor"
-        );
+        let err = DomainError::DeveloperNotFound("igor".into());
+        assert_eq!(err.to_string(), "developer not found: igor");
     }
 
     #[test]
     fn error_display_developer_already_exists() {
-        let err = DomainError::DeveloperAlreadyExists(
-            "igor".into(),
-        );
-        assert_eq!(
-            err.to_string(),
-            "developer already exists: igor"
-        );
+        let err = DomainError::DeveloperAlreadyExists("igor".into());
+        assert_eq!(err.to_string(), "developer already exists: igor");
     }
 }

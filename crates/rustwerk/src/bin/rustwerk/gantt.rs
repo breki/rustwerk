@@ -35,8 +35,7 @@ fn scale_pos(value: u32, factor: f64) -> usize {
 /// Colors are on if stdout is a terminal, unless
 /// `NO_COLOR` env var is set.
 fn use_color() -> bool {
-    std::io::stdout().is_terminal()
-        && env::var_os("NO_COLOR").is_none()
+    std::io::stdout().is_terminal() && env::var_os("NO_COLOR").is_none()
 }
 
 /// ANSI color codes.
@@ -53,18 +52,13 @@ mod ansi {
 /// and whether the task is on the critical path.
 /// Critical path tasks render the entire line in red.
 /// Returns `(bar_color, id_style)`.
-fn bar_style(
-    status: Status,
-    critical: bool,
-) -> (&'static str, &'static str) {
+fn bar_style(status: Status, critical: bool) -> (&'static str, &'static str) {
     if critical {
         (ansi::RED, ansi::RED)
     } else {
         match status {
             Status::Done => (ansi::GREEN, ""),
-            Status::InProgress => {
-                (ansi::YELLOW, ansi::BOLD)
-            }
+            Status::InProgress => (ansi::YELLOW, ansi::BOLD),
             Status::Blocked => (ansi::RED, ansi::RED),
             Status::Todo | Status::OnHold => (ansi::DIM, ""),
         }
@@ -86,21 +80,13 @@ pub(super) fn cmd_gantt(remaining: bool) -> Result<()> {
 
 /// Render a Gantt chart to stdout. Separated from
 /// `cmd_gantt` for testability.
-fn render_gantt(
-    rows: &[GanttRow],
-    terminal_width: usize,
-    color: bool,
-) {
+fn render_gantt(rows: &[GanttRow], terminal_width: usize, color: bool) {
     if rows.is_empty() {
         println!("No tasks.");
         return;
     }
 
-    let max_end = rows
-        .iter()
-        .map(|r| r.end())
-        .max()
-        .unwrap_or(0);
+    let max_end = rows.iter().map(|r| r.end()).max().unwrap_or(0);
 
     // Find the longest ID for padding.
     let id_width = rows
@@ -113,9 +99,7 @@ fn render_gantt(
     // Compute scale factor for terminal width.
     let label_width = id_width + 2; // marker + id + space
     let tw = terminal_width;
-    let bar_area = tw
-        .saturating_sub(label_width)
-        .saturating_sub(1); // trailing newline margin
+    let bar_area = tw.saturating_sub(label_width).saturating_sub(1); // trailing newline margin
     let scale_factor = if max_end == 0 {
         1.0
     } else {
@@ -130,19 +114,13 @@ fn render_gantt(
 
     // Tick interval: every 5 unscaled units, but widen
     // if they'd overlap when scaled.
-    let tick_interval = if scale_factor < 0.5 {
-        10
-    } else {
-        5
-    };
+    let tick_interval = if scale_factor < 0.5 { 10 } else { 5 };
 
     print!("{dim}{:width$}", "", width = label_width);
     for i in (0..max_end).step_by(tick_interval as usize) {
         let col = scale_pos(i, scale_factor);
-        let next_col = scale_pos(
-            (i + tick_interval).min(max_end),
-            scale_factor,
-        );
+        let next_col =
+            scale_pos((i + tick_interval).min(max_end), scale_factor);
         let gap = next_col.saturating_sub(col);
         if gap > 0 {
             print!("{i:<gap$}");
@@ -165,8 +143,7 @@ fn render_gantt(
 
     // Rows — bar rendering uses domain methods.
     for row in rows {
-        let marker =
-            if row.critical { "*" } else { " " };
+        let marker = if row.critical { "*" } else { " " };
         let (filled, empty) = row.bar_fill();
         let fill_ch = row.fill_char();
         let empty_ch = row.empty_char();
@@ -175,8 +152,7 @@ fn render_gantt(
         // left and right caps (2 chars), so the body is
         // the remainder.
         let s_start = scale_pos(row.start, scale_factor);
-        let s_total =
-            scale_min1(row.width, scale_factor).max(2);
+        let s_total = scale_min1(row.width, scale_factor).max(2);
         let s_body = s_total - 2; // room for caps
         let (s_filled, s_empty) = if s_body == 0 {
             (0, 0)
@@ -185,8 +161,7 @@ fn render_gantt(
         } else if empty == 0 {
             (s_body, 0)
         } else {
-            let sf = (f64::from(filled)
-                / f64::from(filled + empty)
+            let sf = (f64::from(filled) / f64::from(filled + empty)
                 * s_body as f64)
                 .round() as usize;
             let sf = sf.clamp(1, s_body - 1);
@@ -200,18 +175,12 @@ fn render_gantt(
             ("", "")
         };
 
-        let crit_style = if color && row.critical {
-            ansi::RED
-        } else {
-            ""
-        };
+        let crit_style = if color && row.critical { ansi::RED } else { "" };
 
         let filled_str: String =
-            std::iter::repeat_n(fill_ch, s_filled)
-                .collect();
+            std::iter::repeat_n(fill_ch, s_filled).collect();
         let empty_str: String =
-            std::iter::repeat_n(empty_ch, s_empty)
-                .collect();
+            std::iter::repeat_n(empty_ch, s_empty).collect();
         let left_cap = GanttRow::LEFT_CAP;
         let right_cap = GanttRow::RIGHT_CAP;
 
@@ -261,8 +230,7 @@ mod tests {
 
     #[test]
     fn non_critical_in_progress_uses_yellow_bold() {
-        let (bar, id) =
-            bar_style(Status::InProgress, false);
+        let (bar, id) = bar_style(Status::InProgress, false);
         assert_eq!(bar, ansi::YELLOW);
         assert_eq!(id, ansi::BOLD);
     }
@@ -313,8 +281,7 @@ mod tests {
 
     #[test]
     fn render_gantt_single_task_no_color() {
-        let rows =
-            vec![make_row("A", 0, 5, Status::Todo, false)];
+        let rows = vec![make_row("A", 0, 5, Status::Todo, false)];
         render_gantt(&rows, 80, false);
     }
 

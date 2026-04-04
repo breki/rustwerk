@@ -28,8 +28,7 @@ impl Project {
         &self,
         include: impl Fn(&Task) -> bool,
     ) -> HashMap<&TaskId, Vec<&TaskId>> {
-        let mut map: HashMap<&TaskId, Vec<&TaskId>> =
-            HashMap::new();
+        let mut map: HashMap<&TaskId, Vec<&TaskId>> = HashMap::new();
         for (id, task) in &self.tasks {
             if !include(task) {
                 continue;
@@ -49,24 +48,20 @@ impl Project {
     /// then by ID ascending. Only includes non-done tasks
     /// with at least one non-done downstream dependent.
     pub fn bottlenecks(&self) -> Vec<Bottleneck> {
-        let direct_dependents = self
-            .reverse_dependents(|t| t.status != Status::Done);
+        let direct_dependents =
+            self.reverse_dependents(|t| t.status != Status::Done);
 
         // For each non-done task, DFS to count all
         // transitive downstream dependents.
         let mut results: Vec<Bottleneck> = self
             .tasks
             .keys()
-            .filter(|id| {
-                self.tasks[*id].status != Status::Done
-            })
+            .filter(|id| self.tasks[*id].status != Status::Done)
             .filter_map(|id| {
                 let mut visited = HashSet::new();
                 let mut stack = vec![id];
                 while let Some(current) = stack.pop() {
-                    if let Some(deps) =
-                        direct_dependents.get(current)
-                    {
+                    if let Some(deps) = direct_dependents.get(current) {
                         for &dep in deps {
                             if visited.insert(dep) {
                                 stack.push(dep);
@@ -77,23 +72,16 @@ impl Project {
                 let count = visited.len();
                 if count > 0 {
                     let task = &self.tasks[id];
-                    let ready = task
-                        .dependencies
-                        .iter()
-                        .all(|dep| {
-                            self.tasks
-                                .get(dep)
-                                .is_some_and(|t| {
-                                    t.status == Status::Done
-                                })
-                        });
+                    let ready = task.dependencies.iter().all(|dep| {
+                        self.tasks
+                            .get(dep)
+                            .is_some_and(|t| t.status == Status::Done)
+                    });
                     Some(Bottleneck {
                         id: id.clone(),
                         downstream_count: count,
                         status: task.status,
-                        assignee: task
-                            .assignee
-                            .clone(),
+                        assignee: task.assignee.clone(),
                         ready,
                     })
                 } else {
@@ -116,9 +104,7 @@ mod tests {
     use super::*;
     use crate::domain::task::{Task, TaskId};
 
-    fn project_with_tasks(
-        ids: &[&str],
-    ) -> (Project, Vec<TaskId>) {
+    fn project_with_tasks(ids: &[&str]) -> (Project, Vec<TaskId>) {
         let mut p = Project::new("Test").unwrap();
         let task_ids: Vec<TaskId> = ids
             .iter()
@@ -126,8 +112,7 @@ mod tests {
                 let tid = TaskId::new(id).unwrap();
                 p.add_task(
                     tid.clone(),
-                    Task::new(&format!("Task {id}"))
-                        .unwrap(),
+                    Task::new(&format!("Task {id}")).unwrap(),
                 )
                 .unwrap();
                 tid
@@ -157,8 +142,7 @@ mod tests {
         // A blocks B and C (2 downstream).
         // B blocks C (1 downstream).
         // C blocks nothing (0).
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
         let bn = p.bottlenecks();
@@ -175,8 +159,7 @@ mod tests {
     fn bottlenecks_fan_out() {
         // B, C, D all depend on A.
         // A blocks 3 downstream tasks.
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C", "D"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C", "D"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         p.add_dependency(&ids[2], &ids[0]).unwrap(); // C->A
         p.add_dependency(&ids[3], &ids[0]).unwrap(); // D->A
@@ -192,8 +175,7 @@ mod tests {
         // A blocks B, C, D = 3 downstream.
         // B blocks D = 1 downstream.
         // C blocks D = 1 downstream.
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C", "D"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C", "D"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         p.add_dependency(&ids[2], &ids[0]).unwrap(); // C->A
         p.add_dependency(&ids[3], &ids[1]).unwrap(); // D->B
@@ -213,12 +195,10 @@ mod tests {
     fn bottlenecks_ready_after_dep_done() {
         // C depends on B, B depends on A.
         // Complete A -> B becomes ready.
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
         p.add_dependency(&ids[2], &ids[1]).unwrap(); // C->B
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         p.set_status(&ids[0], Status::Done, false).unwrap();
         let bn = p.bottlenecks();
         // Only B is a bottleneck (A is done).
@@ -229,11 +209,9 @@ mod tests {
 
     #[test]
     fn bottlenecks_includes_status_and_assignee() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         let bn = p.bottlenecks();
         assert_eq!(bn.len(), 1);
         assert_eq!(bn[0].id.as_str(), "A");
@@ -244,11 +222,9 @@ mod tests {
     #[test]
     fn bottlenecks_excludes_done_tasks() {
         // B depends on A. A is done -> not a bottleneck.
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B"]);
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
         p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
-        p.set_status(&ids[0], Status::InProgress, false)
-            .unwrap();
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
         p.set_status(&ids[0], Status::Done, false).unwrap();
         let bn = p.bottlenecks();
         // A is done, so excluded.

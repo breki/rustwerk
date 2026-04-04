@@ -20,14 +20,13 @@ mod ansi {
 
 /// Check whether color output is enabled.
 fn use_color() -> bool {
-    io::stdout().is_terminal()
-        && env::var_os("NO_COLOR").is_none()
+    io::stdout().is_terminal() && env::var_os("NO_COLOR").is_none()
 }
 
 /// Status indicator character.
 fn status_char(status: Status) -> char {
     match status {
-        Status::Done => '\u{2713}',     // ✓
+        Status::Done => '\u{2713}', // ✓
         Status::InProgress => '>',
         Status::Blocked => '!',
         Status::OnHold => '~',
@@ -54,22 +53,12 @@ pub(super) fn cmd_tree(remaining: bool) -> Result<()> {
         project.task_tree()
     };
     let mut out = io::stdout().lock();
-    render_tree(
-        &mut out,
-        &project.metadata.name,
-        &nodes,
-        use_color(),
-    );
+    render_tree(&mut out, &project.metadata.name, &nodes, use_color());
     Ok(())
 }
 
 /// Render the dependency tree to a writer.
-fn render_tree(
-    w: &mut dyn Write,
-    name: &str,
-    nodes: &[TreeNode],
-    color: bool,
-) {
+fn render_tree(w: &mut dyn Write, name: &str, nodes: &[TreeNode], color: bool) {
     let bold = if color { ansi::BOLD } else { "" };
     let rst = if color { ansi::RESET } else { "" };
     let _ = writeln!(w, "{bold}{name}{rst}");
@@ -104,11 +93,7 @@ fn render_node(
     match node {
         TreeNode::Reference { id, status } => {
             let ch = status_char(*status);
-            let style = if color {
-                status_style(*status)
-            } else {
-                ""
-            };
+            let style = if color { status_style(*status) } else { "" };
             let dim = if color { ansi::DIM } else { "" };
             let _ = writeln!(
                 w,
@@ -123,11 +108,7 @@ fn render_node(
             children,
         } => {
             let ch = status_char(*status);
-            let style = if color {
-                status_style(*status)
-            } else {
-                ""
-            };
+            let style = if color { status_style(*status) } else { "" };
             let _ = writeln!(
                 w,
                 "{prefix}{connector}\
@@ -141,15 +122,8 @@ fn render_node(
             };
 
             for (j, child) in children.iter().enumerate() {
-                let child_is_last =
-                    j == children.len() - 1;
-                render_node(
-                    w,
-                    child,
-                    &child_prefix,
-                    child_is_last,
-                    color,
-                );
+                let child_is_last = j == children.len() - 1;
+                render_node(w, child, &child_prefix, child_is_last, color);
             }
         }
     }
@@ -190,16 +164,12 @@ mod tests {
 
     #[test]
     fn render_single_task() {
-        let nodes =
-            vec![task_node("A", Status::Todo, vec![])];
+        let nodes = vec![task_node("A", Status::Todo, vec![])];
         let mut buf = Vec::new();
         render_tree(&mut buf, "Test", &nodes, false);
         let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("A"), "output: {out}");
-        assert!(
-            out.contains("[ ]"),
-            "todo indicator: {out}"
-        );
+        assert!(out.contains("[ ]"), "todo indicator: {out}");
     }
 
     #[test]
@@ -212,10 +182,7 @@ mod tests {
         let mut buf = Vec::new();
         render_tree(&mut buf, "Test", &nodes, false);
         let out = String::from_utf8(buf).unwrap();
-        assert!(
-            out.contains("see above"),
-            "reference: {out}"
-        );
+        assert!(out.contains("see above"), "reference: {out}");
     }
 
     #[test]
@@ -224,25 +191,15 @@ mod tests {
             task_node(
                 "A",
                 Status::Done,
-                vec![task_node(
-                    "B",
-                    Status::InProgress,
-                    vec![],
-                )],
+                vec![task_node("B", Status::InProgress, vec![])],
             ),
             task_node("C", Status::Blocked, vec![]),
         ];
         let mut buf = Vec::new();
         render_tree(&mut buf, "Test", &nodes, true);
         let out = String::from_utf8(buf).unwrap();
-        assert!(
-            out.contains(ansi::GREEN),
-            "green for done: {out}"
-        );
-        assert!(
-            out.contains(ansi::RED),
-            "red for blocked: {out}"
-        );
+        assert!(out.contains(ansi::GREEN), "green for done: {out}");
+        assert!(out.contains(ansi::RED), "red for blocked: {out}");
     }
 
     #[test]
@@ -251,11 +208,7 @@ mod tests {
             task_node(
                 "A",
                 Status::Todo,
-                vec![task_node(
-                    "B",
-                    Status::Todo,
-                    vec![],
-                )],
+                vec![task_node("B", Status::Todo, vec![])],
             ),
             task_node("C", Status::Todo, vec![]),
         ];
@@ -263,19 +216,10 @@ mod tests {
         render_tree(&mut buf, "P", &nodes, false);
         let out = String::from_utf8(buf).unwrap();
         // ├── for non-last, └── for last
-        assert!(
-            out.contains('\u{251C}'),
-            "branch: {out}"
-        );
-        assert!(
-            out.contains('\u{2514}'),
-            "corner: {out}"
-        );
+        assert!(out.contains('\u{251C}'), "branch: {out}");
+        assert!(out.contains('\u{2514}'), "corner: {out}");
         // │ for continuation
-        assert!(
-            out.contains('\u{2502}'),
-            "vertical: {out}"
-        );
+        assert!(out.contains('\u{2502}'), "vertical: {out}");
     }
 
     #[test]

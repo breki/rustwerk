@@ -1,29 +1,21 @@
 use anyhow::{bail, Context, Result};
 
 use rustwerk::domain::project::Project;
-use rustwerk::domain::task::{
-    Effort, EffortEntry, Task, TaskId,
-};
+use rustwerk::domain::task::{Effort, EffortEntry, Task, TaskId};
 
 use crate::{load_project, parse_status, save_project};
 
 pub(super) fn cmd_init(name: &str) -> Result<()> {
-    use std::env;
     use rustwerk::persistence::file_store;
+    use std::env;
 
-    let root = env::current_dir()
-        .context("failed to get current directory")?;
+    let root = env::current_dir().context("failed to get current directory")?;
     let path = file_store::project_file_path(&root);
     if path.exists() {
-        bail!(
-            "project already exists: {}",
-            path.display()
-        );
+        bail!("project already exists: {}", path.display());
     }
-    let project = Project::new(name)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    file_store::save(&root, &project)
-        .context("failed to save project")?;
+    let project = Project::new(name).map_err(|e| anyhow::anyhow!("{e}"))?;
+    file_store::save(&root, &project).context("failed to save project")?;
     println!("Initialized project: {name}");
     println!("  {}", path.display());
     Ok(())
@@ -41,16 +33,13 @@ pub(super) fn cmd_show() -> Result<()> {
     println!(
         "Tasks:    {} total  ({} done, {} in-progress, \
          {} todo, {} blocked, {} on-hold)",
-        s.total, s.done, s.in_progress, s.todo, s.blocked,
-        s.on_hold
+        s.total, s.done, s.in_progress, s.todo, s.blocked, s.on_hold
     );
     println!("Complete: {:.0}%", s.pct_complete);
     if s.total_complexity > 0 {
         println!("Complexity: {} total", s.total_complexity);
     }
-    if s.total_estimated_hours > 0.0
-        || s.total_actual_hours > 0.0
-    {
+    if s.total_estimated_hours > 0.0 || s.total_actual_hours > 0.0 {
         println!(
             "Effort:   {:.1}H estimated, {:.1}H actual",
             s.total_estimated_hours, s.total_actual_hours
@@ -58,10 +47,7 @@ pub(super) fn cmd_show() -> Result<()> {
     }
     println!(
         "Created:  {}",
-        project
-            .metadata
-            .created_at
-            .format("%Y-%m-%d %H:%M UTC")
+        project.metadata.created_at.format("%Y-%m-%d %H:%M UTC")
     );
     Ok(())
 }
@@ -74,9 +60,8 @@ pub(super) fn cmd_status() -> Result<()> {
     // Completion bar.
     let bar_width = 20;
     let filled = if s.total > 0 {
-        (f64::from(s.done) / f64::from(s.total)
-            * bar_width as f64)
-            .round() as usize
+        (f64::from(s.done) / f64::from(s.total) * bar_width as f64).round()
+            as usize
     } else {
         0
     }
@@ -92,32 +77,14 @@ pub(super) fn cmd_status() -> Result<()> {
     println!("{}", project.metadata.name);
     println!("{bar}");
     println!();
-    println!(
-        "  {:<14} {:>3}",
-        "done", s.done
-    );
-    println!(
-        "  {:<14} {:>3}",
-        "in-progress", s.in_progress
-    );
-    println!(
-        "  {:<14} {:>3}",
-        "todo", s.todo
-    );
-    println!(
-        "  {:<14} {:>3}",
-        "blocked", s.blocked
-    );
+    println!("  {:<14} {:>3}", "done", s.done);
+    println!("  {:<14} {:>3}", "in-progress", s.in_progress);
+    println!("  {:<14} {:>3}", "todo", s.todo);
+    println!("  {:<14} {:>3}", "blocked", s.blocked);
     if s.on_hold > 0 {
-        println!(
-            "  {:<14} {:>3}",
-            "on-hold", s.on_hold
-        );
+        println!("  {:<14} {:>3}", "on-hold", s.on_hold);
     }
-    println!(
-        "  {:<14} {:>3}",
-        "total", s.total
-    );
+    println!("  {:<14} {:>3}", "total", s.total);
 
     // Active tasks.
     let active = project.active_tasks();
@@ -146,8 +113,7 @@ pub(super) fn cmd_status() -> Result<()> {
     }
 
     // Remaining critical path.
-    let (crit, crit_len) =
-        project.remaining_critical_path();
+    let (crit, crit_len) = project.remaining_critical_path();
     if !crit.is_empty() {
         println!(
             "Critical path: {} tasks, {} complexity",
@@ -167,23 +133,18 @@ pub(super) fn cmd_task_add(
     effort: Option<&str>,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let mut task = Task::new(title)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let mut task = Task::new(title).map_err(|e| anyhow::anyhow!("{e}"))?;
     task.description = desc.map(String::from);
     if let Some(c) = complexity {
-        task.set_complexity(c)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        task.set_complexity(c).map_err(|e| anyhow::anyhow!("{e}"))?;
     }
     if let Some(e) = effort {
-        task.effort_estimate = Some(
-            Effort::parse(e)
-                .map_err(|e| anyhow::anyhow!("{e}"))?,
-        );
+        task.effort_estimate =
+            Some(Effort::parse(e).map_err(|e| anyhow::anyhow!("{e}"))?);
     }
 
     let task_id = if let Some(id_str) = id {
-        let tid = TaskId::new(id_str)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let tid = TaskId::new(id_str).map_err(|e| anyhow::anyhow!("{e}"))?;
         project
             .add_task(tid.clone(), task)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -197,16 +158,11 @@ pub(super) fn cmd_task_add(
     Ok(())
 }
 
-pub(super) fn cmd_task_assign(
-    id: &str,
-    to: &str,
-) -> Result<()> {
+pub(super) fn cmd_task_assign(id: &str, to: &str) -> Result<()> {
     use rustwerk::domain::developer::DeveloperId;
     let (root, mut project) = load_project()?;
-    let task_id = TaskId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    let dev_id = DeveloperId::new(to)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let dev_id = DeveloperId::new(to).map_err(|e| anyhow::anyhow!("{e}"))?;
     project
         .assign(&task_id, &dev_id)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -215,12 +171,9 @@ pub(super) fn cmd_task_assign(
     Ok(())
 }
 
-pub(super) fn cmd_task_unassign(
-    id: &str,
-) -> Result<()> {
+pub(super) fn cmd_task_unassign(id: &str) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id = TaskId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     project
         .unassign(&task_id)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -236,10 +189,8 @@ pub(super) fn cmd_effort_log(
     note: Option<&str>,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id = TaskId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    let effort = Effort::parse(amount)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let effort = Effort::parse(amount).map_err(|e| anyhow::anyhow!("{e}"))?;
     let entry = EffortEntry {
         effort,
         developer: dev.to_string(),
@@ -258,15 +209,10 @@ pub(super) fn cmd_effort_log(
     Ok(())
 }
 
-pub(super) fn cmd_effort_estimate(
-    id: &str,
-    amount: &str,
-) -> Result<()> {
+pub(super) fn cmd_effort_estimate(id: &str, amount: &str) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id = TaskId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    let effort = Effort::parse(amount)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let effort = Effort::parse(amount).map_err(|e| anyhow::anyhow!("{e}"))?;
     project
         .set_effort_estimate(&task_id, effort)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -277,8 +223,7 @@ pub(super) fn cmd_effort_estimate(
 
 pub(super) fn cmd_task_remove(id: &str) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id = TaskId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     let task = project
         .remove_task(&task_id)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -293,16 +238,9 @@ pub(super) fn cmd_task_update(
     desc: Option<&str>,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id = TaskId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     // Empty string for desc means clear it.
-    let description = desc.map(|d| {
-        if d.is_empty() {
-            None
-        } else {
-            Some(d)
-        }
-    });
+    let description = desc.map(|d| if d.is_empty() { None } else { Some(d) });
     project
         .update_task(&task_id, title, description)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -318,8 +256,7 @@ pub(super) fn cmd_task_status(
     force: bool,
 ) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let task_id = TaskId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_id = TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     let new_status = parse_status(status)?;
     project
         .set_status(&task_id, new_status, force)
@@ -352,14 +289,9 @@ pub(super) fn cmd_task_list(
     let crit = project.remaining_critical_path_set();
 
     // Parse filters early so we fail fast.
-    let status = status_filter
-        .map(parse_status)
-        .transpose()?;
+    let status = status_filter.map(parse_status).transpose()?;
     let chain_tid = chain_filter
-        .map(|id| {
-            TaskId::new(id)
-                .map_err(|e| anyhow::anyhow!("{e}"))
-        })
+        .map(|id| TaskId::new(id).map_err(|e| anyhow::anyhow!("{e}")))
         .transpose()?;
 
     // Build the base set of task IDs to display.
@@ -370,8 +302,7 @@ pub(super) fn cmd_task_list(
         || chain_tid.is_some();
 
     // Collect all task IDs, then narrow down.
-    let all_ids: Vec<&TaskId> =
-        project.tasks.keys().collect();
+    let all_ids: Vec<&TaskId> = project.tasks.keys().collect();
 
     // Start with base set.
     let mut ids: HashSet<&TaskId> = if available_only {
@@ -393,12 +324,9 @@ pub(super) fn cmd_task_list(
     // normalization).
     if let Some(assignee) = assignee_filter {
         let normalized = assignee.to_lowercase();
-        let by_assignee: HashSet<&TaskId> = project
-            .tasks_by_assignee(&normalized)
-            .into_iter()
-            .collect();
-        ids =
-            ids.intersection(&by_assignee).copied().collect();
+        let by_assignee: HashSet<&TaskId> =
+            project.tasks_by_assignee(&normalized).into_iter().collect();
+        ids = ids.intersection(&by_assignee).copied().collect();
     }
 
     // Apply chain filter.
@@ -431,18 +359,15 @@ pub(super) fn cmd_task_list(
 
     // Show status column only when not pre-filtered to a
     // specific subset (available/active/status).
-    let show_status =
-        !available_only && !active_only && status.is_none();
+    let show_status = !available_only && !active_only && status.is_none();
 
     for (id, task) in &project.tasks {
         if !ids.contains(id) {
             continue;
         }
-        let complexity = task
-            .complexity
-            .map_or(String::new(), |c| format!(" [{c}]"));
-        let marker =
-            if crit.contains(id) { "*" } else { " " };
+        let complexity =
+            task.complexity.map_or(String::new(), |c| format!(" [{c}]"));
+        let marker = if crit.contains(id) { "*" } else { " " };
         if show_status {
             println!(
                 " {marker}{:<iw$} {:<14} {}{complexity}",
@@ -464,16 +389,10 @@ pub(super) fn cmd_task_list(
 }
 
 /// Shared logic for depend/undepend commands.
-fn modify_dependency(
-    from: &str,
-    to: &str,
-    add: bool,
-) -> Result<()> {
+fn modify_dependency(from: &str, to: &str, add: bool) -> Result<()> {
     let (root, mut project) = load_project()?;
-    let from_id = TaskId::new(from)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    let to_id = TaskId::new(to)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let from_id = TaskId::new(from).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let to_id = TaskId::new(to).map_err(|e| anyhow::anyhow!("{e}"))?;
     if add {
         project
             .add_dependency(&from_id, &to_id)
@@ -490,17 +409,11 @@ fn modify_dependency(
     Ok(())
 }
 
-pub(super) fn cmd_depend(
-    from: &str,
-    to: &str,
-) -> Result<()> {
+pub(super) fn cmd_depend(from: &str, to: &str) -> Result<()> {
     modify_dependency(from, to, true)
 }
 
-pub(super) fn cmd_undepend(
-    from: &str,
-    to: &str,
-) -> Result<()> {
+pub(super) fn cmd_undepend(from: &str, to: &str) -> Result<()> {
     modify_dependency(from, to, false)
 }
 
@@ -511,14 +424,10 @@ pub(super) fn cmd_dev_add(
     email: Option<&str>,
     role: Option<&str>,
 ) -> Result<()> {
-    use rustwerk::domain::developer::{
-        Developer, DeveloperId,
-    };
+    use rustwerk::domain::developer::{Developer, DeveloperId};
     let (root, mut project) = load_project()?;
-    let dev_id = DeveloperId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    let mut dev = Developer::new(name)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let dev_id = DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let mut dev = Developer::new(name).map_err(|e| anyhow::anyhow!("{e}"))?;
     dev.email = email.map(String::from);
     dev.role = role.map(String::from);
     project
@@ -533,8 +442,7 @@ pub(super) fn cmd_dev_add(
 pub(super) fn cmd_dev_remove(id: &str) -> Result<()> {
     use rustwerk::domain::developer::DeveloperId;
     let (root, mut project) = load_project()?;
-    let dev_id = DeveloperId::new(id)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let dev_id = DeveloperId::new(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     let dev = project
         .remove_developer(&dev_id)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -568,13 +476,9 @@ pub(super) fn cmd_dev_list() -> Result<()> {
 pub(super) fn cmd_report_complete() -> Result<()> {
     let (_root, project) = load_project()?;
     let s = project.summary();
-    let (crit_path, crit_len) =
-        project.remaining_critical_path();
+    let (crit_path, crit_len) = project.remaining_critical_path();
 
-    println!(
-        "Completion Report: {}",
-        project.metadata.name
-    );
+    println!("Completion Report: {}", project.metadata.name);
     println!("{}", "=".repeat(40));
 
     // Status breakdown.
@@ -591,9 +495,8 @@ pub(super) fn cmd_report_complete() -> Result<()> {
     println!();
     let bar_width = 30;
     let filled = if s.total > 0 {
-        (f64::from(s.done) / f64::from(s.total)
-            * bar_width as f64)
-            .round() as usize
+        (f64::from(s.done) / f64::from(s.total) * bar_width as f64).round()
+            as usize
     } else {
         0
     };
@@ -606,23 +509,13 @@ pub(super) fn cmd_report_complete() -> Result<()> {
     );
 
     // Effort.
-    if s.total_estimated_hours > 0.0
-        || s.total_actual_hours > 0.0
-    {
+    if s.total_estimated_hours > 0.0 || s.total_actual_hours > 0.0 {
         println!();
         println!("Effort");
-        println!(
-            "  Estimated:   {:.1}H",
-            s.total_estimated_hours
-        );
-        println!(
-            "  Actual:      {:.1}H",
-            s.total_actual_hours
-        );
+        println!("  Estimated:   {:.1}H", s.total_estimated_hours);
+        println!("  Actual:      {:.1}H", s.total_actual_hours);
         if s.total_estimated_hours > 0.0 {
-            let pct = s.total_actual_hours
-                / s.total_estimated_hours
-                * 100.0;
+            let pct = s.total_actual_hours / s.total_estimated_hours * 100.0;
             println!("  Burn rate:   {pct:.0}%");
         }
     }
@@ -630,10 +523,7 @@ pub(super) fn cmd_report_complete() -> Result<()> {
     // Complexity.
     if s.total_complexity > 0 {
         println!();
-        println!(
-            "Complexity:    {} total",
-            s.total_complexity
-        );
+        println!("Complexity:    {} total", s.total_complexity);
     }
 
     // Critical path.
@@ -669,9 +559,8 @@ pub(super) fn cmd_report_effort() -> Result<()> {
     let mut by_dev: BTreeMap<&str, f64> = BTreeMap::new();
     for task in project.tasks.values() {
         for entry in &task.effort_entries {
-            *by_dev
-                .entry(&entry.developer)
-                .or_insert(0.0) += entry.effort.to_hours();
+            *by_dev.entry(&entry.developer).or_insert(0.0) +=
+                entry.effort.to_hours();
         }
     }
 
@@ -712,22 +601,14 @@ pub(super) fn cmd_report_bottlenecks() -> Result<()> {
         .max(2);
 
     println!("Bottleneck Report");
-    println!(
-        "  {:<iw$}  {:>6}  {:<13} Assignee",
-        "ID", "Blocks", "State",
-    );
+    println!("  {:<iw$}  {:>6}  {:<13} Assignee", "ID", "Blocks", "State",);
     println!("{}", "-".repeat(iw + 36));
 
     for bn in &bottlenecks {
-        let assignee =
-            bn.assignee.as_deref().unwrap_or("-");
-        let state = if bn.status
-            == rustwerk::domain::task::Status::InProgress
-        {
+        let assignee = bn.assignee.as_deref().unwrap_or("-");
+        let state = if bn.status == rustwerk::domain::task::Status::InProgress {
             "in progress"
-        } else if bn.status
-            == rustwerk::domain::task::Status::OnHold
-        {
+        } else if bn.status == rustwerk::domain::task::Status::OnHold {
             "on hold"
         } else if bn.ready {
             "ready"
@@ -752,46 +633,16 @@ mod tests {
 
     #[test]
     fn parse_status_all_variants() {
-        assert_eq!(
-            parse_status("todo").unwrap(),
-            Status::Todo
-        );
-        assert_eq!(
-            parse_status("in-progress").unwrap(),
-            Status::InProgress
-        );
-        assert_eq!(
-            parse_status("in_progress").unwrap(),
-            Status::InProgress
-        );
-        assert_eq!(
-            parse_status("inprogress").unwrap(),
-            Status::InProgress
-        );
-        assert_eq!(
-            parse_status("blocked").unwrap(),
-            Status::Blocked
-        );
-        assert_eq!(
-            parse_status("done").unwrap(),
-            Status::Done
-        );
-        assert_eq!(
-            parse_status("TODO").unwrap(),
-            Status::Todo
-        );
-        assert_eq!(
-            parse_status("on-hold").unwrap(),
-            Status::OnHold
-        );
-        assert_eq!(
-            parse_status("on_hold").unwrap(),
-            Status::OnHold
-        );
-        assert_eq!(
-            parse_status("onhold").unwrap(),
-            Status::OnHold
-        );
+        assert_eq!(parse_status("todo").unwrap(), Status::Todo);
+        assert_eq!(parse_status("in-progress").unwrap(), Status::InProgress);
+        assert_eq!(parse_status("in_progress").unwrap(), Status::InProgress);
+        assert_eq!(parse_status("inprogress").unwrap(), Status::InProgress);
+        assert_eq!(parse_status("blocked").unwrap(), Status::Blocked);
+        assert_eq!(parse_status("done").unwrap(), Status::Done);
+        assert_eq!(parse_status("TODO").unwrap(), Status::Todo);
+        assert_eq!(parse_status("on-hold").unwrap(), Status::OnHold);
+        assert_eq!(parse_status("on_hold").unwrap(), Status::OnHold);
+        assert_eq!(parse_status("onhold").unwrap(), Status::OnHold);
     }
 
     #[test]

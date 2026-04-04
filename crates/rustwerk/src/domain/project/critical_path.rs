@@ -17,8 +17,7 @@ impl Project {
         // dist[id] = longest path ending at id.
         // prev[id] = predecessor on that path.
         let mut dist: HashMap<&TaskId, u32> = HashMap::new();
-        let mut prev: HashMap<&TaskId, Option<&TaskId>> =
-            HashMap::new();
+        let mut prev: HashMap<&TaskId, Option<&TaskId>> = HashMap::new();
 
         for id in &order {
             let task = &self.tasks[id];
@@ -34,23 +33,18 @@ impl Project {
             // going through `id` gives a longer path.
             for (other_id, other_task) in &self.tasks {
                 if other_task.dependencies.contains(id) {
-                    let other_weight =
-                        other_task.complexity.unwrap_or(1);
+                    let other_weight = other_task.complexity.unwrap_or(1);
                     let candidate = id_dist + other_weight;
                     if candidate > dist[other_id] {
                         dist.insert(other_id, candidate);
-                        prev.insert(
-                            other_id,
-                            Some(id),
-                        );
+                        prev.insert(other_id, Some(id));
                     }
                 }
             }
         }
 
         // Find the task with the maximum distance.
-        let (&end, &max_dist) =
-            dist.iter().max_by_key(|(_, &d)| d).unwrap();
+        let (&end, &max_dist) = dist.iter().max_by_key(|(_, &d)| d).unwrap();
 
         // Trace back the path.
         let mut path = vec![end.clone()];
@@ -67,18 +61,15 @@ impl Project {
     /// Compute the critical path considering only active
     /// tasks (excludes Done and OnHold). This shows the
     /// longest remaining chain of work.
-    pub fn remaining_critical_path(
-        &self,
-    ) -> (Vec<TaskId>, u32) {
+    pub fn remaining_critical_path(&self) -> (Vec<TaskId>, u32) {
         // Filter to active tasks (not done, not on hold).
-        let undone: std::collections::BTreeMap<&TaskId, _> =
-            self.tasks
-                .iter()
-                .filter(|(_, t)| {
-                    t.status != Status::Done
-                        && t.status != Status::OnHold
-                })
-                .collect();
+        let undone: std::collections::BTreeMap<&TaskId, _> = self
+            .tasks
+            .iter()
+            .filter(|(_, t)| {
+                t.status != Status::Done && t.status != Status::OnHold
+            })
+            .collect();
 
         if undone.is_empty() {
             return (Vec::new(), 0);
@@ -88,32 +79,24 @@ impl Project {
         // deps that are also undone).
         let mut in_degree: HashMap<&TaskId, usize> =
             undone.keys().map(|&id| (id, 0)).collect();
-        let mut dependents: HashMap<
-            &TaskId,
-            Vec<&TaskId>,
-        > = HashMap::new();
+        let mut dependents: HashMap<&TaskId, Vec<&TaskId>> = HashMap::new();
 
         for (&id, task) in &undone {
             for dep in &task.dependencies {
                 if undone.contains_key(dep) {
                     *in_degree.entry(id).or_insert(0) += 1;
-                    dependents
-                        .entry(dep)
-                        .or_default()
-                        .push(id);
+                    dependents.entry(dep).or_default().push(id);
                 }
             }
         }
 
         // Kahn's topological sort on undone tasks.
-        let mut queue: std::collections::VecDeque<&TaskId> =
-            in_degree
-                .iter()
-                .filter(|(_, &deg)| deg == 0)
-                .map(|(&id, _)| id)
-                .collect();
-        let mut sorted_queue: Vec<&TaskId> =
-            queue.drain(..).collect();
+        let mut queue: std::collections::VecDeque<&TaskId> = in_degree
+            .iter()
+            .filter(|(_, &deg)| deg == 0)
+            .map(|(&id, _)| id)
+            .collect();
+        let mut sorted_queue: Vec<&TaskId> = queue.drain(..).collect();
         sorted_queue.sort();
         queue.extend(sorted_queue);
 
@@ -123,8 +106,7 @@ impl Project {
             if let Some(deps) = dependents.get(id) {
                 let mut next = Vec::new();
                 for &dep_id in deps {
-                    let deg =
-                        in_degree.get_mut(dep_id).unwrap();
+                    let deg = in_degree.get_mut(dep_id).unwrap();
                     *deg -= 1;
                     if *deg == 0 {
                         next.push(dep_id);
@@ -140,14 +122,11 @@ impl Project {
         }
 
         // DP longest path on undone tasks.
-        let mut dist: HashMap<&TaskId, u32> =
-            HashMap::new();
-        let mut prev: HashMap<&TaskId, Option<&TaskId>> =
-            HashMap::new();
+        let mut dist: HashMap<&TaskId, u32> = HashMap::new();
+        let mut prev: HashMap<&TaskId, Option<&TaskId>> = HashMap::new();
 
         for &id in &order {
-            let weight =
-                undone[id].complexity.unwrap_or(1);
+            let weight = undone[id].complexity.unwrap_or(1);
             dist.insert(id, weight);
             prev.insert(id, None);
         }
@@ -156,8 +135,7 @@ impl Project {
             let id_dist = dist[id];
             if let Some(deps) = dependents.get(id) {
                 for &dep_id in deps {
-                    let dep_weight =
-                        undone[dep_id].complexity.unwrap_or(1);
+                    let dep_weight = undone[dep_id].complexity.unwrap_or(1);
                     let candidate = id_dist + dep_weight;
                     if candidate > dist[dep_id] {
                         dist.insert(dep_id, candidate);
@@ -167,8 +145,7 @@ impl Project {
             }
         }
 
-        let (&end, &max_dist) =
-            dist.iter().max_by_key(|(_, &d)| d).unwrap();
+        let (&end, &max_dist) = dist.iter().max_by_key(|(_, &d)| d).unwrap();
 
         let mut path = vec![end.clone()];
         let mut current = end;
@@ -183,9 +160,7 @@ impl Project {
 
     /// Return the set of task IDs on the critical path
     /// (all tasks, including done).
-    pub fn critical_path_set(
-        &self,
-    ) -> std::collections::HashSet<TaskId> {
+    pub fn critical_path_set(&self) -> std::collections::HashSet<TaskId> {
         let (path, _) = self.critical_path();
         path.into_iter().collect()
     }
@@ -205,9 +180,7 @@ mod tests {
     use super::*;
     use crate::domain::task::{Task, TaskId};
 
-    fn project_with_tasks(
-        ids: &[&str],
-    ) -> (Project, Vec<TaskId>) {
+    fn project_with_tasks(ids: &[&str]) -> (Project, Vec<TaskId>) {
         let mut p = Project::new("Test").unwrap();
         let task_ids: Vec<TaskId> = ids
             .iter()
@@ -215,8 +188,7 @@ mod tests {
                 let tid = TaskId::new(id).unwrap();
                 p.add_task(
                     tid.clone(),
-                    Task::new(&format!("Task {id}"))
-                        .unwrap(),
+                    Task::new(&format!("Task {id}")).unwrap(),
                 )
                 .unwrap();
                 tid
@@ -227,54 +199,35 @@ mod tests {
 
     #[test]
     fn critical_path_linear() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
-        p.tasks.get_mut(&ids[0]).unwrap().complexity =
-            Some(3);
-        p.tasks.get_mut(&ids[1]).unwrap().complexity =
-            Some(2);
-        p.tasks.get_mut(&ids[2]).unwrap().complexity =
-            Some(1);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity = Some(3);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity = Some(2);
+        p.tasks.get_mut(&ids[2]).unwrap().complexity = Some(1);
         p.add_dependency(&ids[0], &ids[1]).unwrap(); // A->B
         p.add_dependency(&ids[1], &ids[2]).unwrap(); // B->C
         let (path, total) = p.critical_path();
-        let names: Vec<&str> =
-            path.iter().map(TaskId::as_str).collect();
+        let names: Vec<&str> = path.iter().map(TaskId::as_str).collect();
         assert_eq!(names, vec!["C", "B", "A"]);
         assert_eq!(total, 6);
     }
 
     #[test]
     fn critical_path_parallel_branches() {
-        let (mut p, ids) = project_with_tasks(
-            &["END", "LONG", "SHORT", "START"],
-        );
+        let (mut p, ids) =
+            project_with_tasks(&["END", "LONG", "SHORT", "START"]);
         // END depends on LONG and SHORT.
         // LONG depends on START (weight 5).
         // SHORT depends on START (weight 1).
-        p.tasks
-            .get_mut(&ids[0])
-            .unwrap()
-            .complexity = Some(1); // END
-        p.tasks
-            .get_mut(&ids[1])
-            .unwrap()
-            .complexity = Some(5); // LONG
-        p.tasks
-            .get_mut(&ids[2])
-            .unwrap()
-            .complexity = Some(1); // SHORT
-        p.tasks
-            .get_mut(&ids[3])
-            .unwrap()
-            .complexity = Some(1); // START
+        p.tasks.get_mut(&ids[0]).unwrap().complexity = Some(1); // END
+        p.tasks.get_mut(&ids[1]).unwrap().complexity = Some(5); // LONG
+        p.tasks.get_mut(&ids[2]).unwrap().complexity = Some(1); // SHORT
+        p.tasks.get_mut(&ids[3]).unwrap().complexity = Some(1); // START
         p.add_dependency(&ids[0], &ids[1]).unwrap(); // END->LONG
         p.add_dependency(&ids[0], &ids[2]).unwrap(); // END->SHORT
         p.add_dependency(&ids[1], &ids[3]).unwrap(); // LONG->START
         p.add_dependency(&ids[2], &ids[3]).unwrap(); // SHORT->START
         let (path, total) = p.critical_path();
-        let names: Vec<&str> =
-            path.iter().map(TaskId::as_str).collect();
+        let names: Vec<&str> = path.iter().map(TaskId::as_str).collect();
         // Critical path goes through LONG, not SHORT.
         assert_eq!(names, vec!["START", "LONG", "END"]);
         assert_eq!(total, 7);
@@ -290,14 +243,10 @@ mod tests {
 
     #[test]
     fn critical_path_set_contains_correct_ids() {
-        let (mut p, ids) =
-            project_with_tasks(&["A", "B", "C"]);
-        p.tasks.get_mut(&ids[0]).unwrap().complexity =
-            Some(3);
-        p.tasks.get_mut(&ids[1]).unwrap().complexity =
-            Some(2);
-        p.tasks.get_mut(&ids[2]).unwrap().complexity =
-            Some(1);
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
+        p.tasks.get_mut(&ids[0]).unwrap().complexity = Some(3);
+        p.tasks.get_mut(&ids[1]).unwrap().complexity = Some(2);
+        p.tasks.get_mut(&ids[2]).unwrap().complexity = Some(1);
         p.add_dependency(&ids[0], &ids[1]).unwrap();
         p.add_dependency(&ids[1], &ids[2]).unwrap();
         let crit = p.critical_path_set();
