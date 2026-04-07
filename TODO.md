@@ -7,6 +7,7 @@
 
 ## Done
 
+- Add --version flag to CLI (2026-04-07)
 - Add batch commands dev.add and dev.remove (2026-04-04)
 - Add project file format specification to docs (2026-04-04)
 - Add GitHub Actions and config review to red team in /commit (2026-04-04)

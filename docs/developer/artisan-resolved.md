@@ -6,6 +6,23 @@ findings.
 
 ---
 
+### AQ-044 — Redundant directory creation in version test
+
+- **Date:** 2026-04-07
+- **Category:** API Design
+- **Commit context:** v0.38.0 `--version` flag
+- **Resolution:** Removed redundant `fs::create_dir_all`
+  call since `temp_dir()` already creates the directory.
+
+### AQ-045 — Weak version format assertion
+
+- **Date:** 2026-04-07
+- **Category:** Type Safety
+- **Commit context:** v0.38.0 `--version` flag
+- **Resolution:** Replaced `contains('.')` with structured
+  assertion that splits on space and verifies 3
+  dot-separated version components.
+
 ### AQ-041 — Hand-rolled "task not found" in `cmd_task_describe`
 
 - **Date:** 2026-04-04

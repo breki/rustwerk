@@ -40,6 +40,7 @@ use gantt::cmd_gantt;
 #[derive(Parser)]
 #[command(
     name = "rustwerk",
+    version,
     about = "Git-native, AI-agent-friendly project \
              orchestration CLI"
 )]

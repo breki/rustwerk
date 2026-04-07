@@ -1567,3 +1567,22 @@ fn task_describe_nonexistent_task_fails() {
     assert!(!ok, "describe should fail for unknown task");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- version ---
+
+#[test]
+fn version_flag_prints_version() {
+    let dir = temp_dir("version-flag");
+    let (stdout, _, ok) = run(&dir, &["--version"]);
+    assert!(ok, "--version should succeed");
+    // Output format: "rustwerk X.Y.Z\n"
+    let trimmed = stdout.trim();
+    let parts: Vec<&str> = trimmed.split(' ').collect();
+    assert_eq!(parts[0], "rustwerk", "should start with binary name");
+    assert_eq!(
+        parts[1].split('.').count(),
+        3,
+        "version should have 3 dot-separated components"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

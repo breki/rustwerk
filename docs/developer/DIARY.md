@@ -5,6 +5,14 @@ reverse chronological order.
 
 ---
 
+### 2026-04-07
+
+- Add `--version` flag to CLI (v0.38.0)
+
+    `rustwerk --version` prints `rustwerk X.Y.Z`.
+    Uses clap's built-in `version` attribute which pulls
+    from `Cargo.toml` automatically.
+
 ### 2026-04-04
 
 - Add `task describe` command for task description files (v0.37.0)
