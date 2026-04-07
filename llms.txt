@@ -1,0 +1,140 @@
+# RustWerk
+
+> Git-native, AI-agent-friendly project orchestration
+> CLI. Single binary, zero config, JSON-native.
+
+RustWerk manages tasks, dependencies, effort tracking,
+and schedule visualization from the command line. All
+project state lives in `.rustwerk/project.json` —
+committed alongside your code.
+
+## Quickstart
+
+```
+rustwerk init "My Project"
+rustwerk task add "Task title" --id TASK-ID \
+  --complexity 5 --effort 2D
+rustwerk task list --available
+rustwerk task status TASK-ID in-progress
+rustwerk task status TASK-ID done
+```
+
+## Core Concepts
+
+- **Tasks** have an ID, title, status, dependencies,
+  complexity, effort estimate, assignee, and tags
+- **Dependencies** form a DAG (cycles rejected). Task B
+  depends on A means A must finish before B starts
+- **Status workflow**: todo -> in-progress -> done (also
+  blocked, on-hold). Use `--force` to bypass
+- **Critical path**: longest chain of remaining work,
+  marked with `*` in listings
+- **Batch commands**: atomic JSON operations via stdin
+  or file — all succeed or none are applied
+
+## Task Management
+
+```
+rustwerk task add "Title" [--id ID] [--desc DESC] \
+  [--complexity N] [--effort AMT] [--tags TAGS]
+rustwerk task update <ID> [--title T] [--desc D] \
+  [--tags T]
+rustwerk task remove <ID>
+rustwerk task status <ID> <STATUS> [--force]
+rustwerk task list [--available] [--active] \
+  [--status S] [--assignee DEV] [--chain ID] \
+  [--tag TAG]
+rustwerk task assign <ID> [DEV_ID]
+rustwerk task unassign <ID>
+rustwerk task depend <FROM> <TO>
+rustwerk task undepend <FROM> <TO>
+rustwerk task describe <ID>
+```
+
+## Effort Tracking
+
+```
+rustwerk effort estimate <ID> <AMOUNT>
+rustwerk effort log <ID> <AMOUNT> [--dev DEV] \
+  [--note NOTE]
+```
+
+Units: H (hours), D (days=8H), W (weeks=40H),
+M (months=160H). Fractional values supported.
+Task must be in-progress to log effort.
+
+## Developer Management
+
+```
+rustwerk dev add <ID> <NAME> [--email E] [--role R]
+rustwerk dev remove <ID>
+rustwerk dev list
+```
+
+## Visualization and Reports
+
+```
+rustwerk show                  # project summary
+rustwerk status                # compact dashboard
+rustwerk tree [--remaining]    # dependency tree
+rustwerk gantt [--remaining]   # ASCII Gantt chart
+rustwerk report complete       # completion summary
+rustwerk report effort         # effort by developer
+rustwerk report bottlenecks    # blocking tasks
+```
+
+## Batch Commands (Atomic JSON)
+
+```
+echo '[
+  {"command": "task.add", "args": {
+    "title": "A", "id": "A", "complexity": 3
+  }},
+  {"command": "task.add", "args": {
+    "title": "B", "id": "B"
+  }},
+  {"command": "task.depend", "args": {
+    "from": "B", "to": "A"
+  }}
+]' | rustwerk batch
+```
+
+Available commands: task.add, task.remove, task.update,
+task.status, task.assign, task.unassign, task.depend,
+task.undepend, effort.log, effort.estimate, dev.add,
+dev.remove.
+
+Limits: 10 MB input, 1000 commands per batch.
+
+## Task ID Conventions
+
+IDs are uppercase alphanumeric with hyphens/underscores.
+Use mnemonic prefixes by area (e.g. DOM-, CLI-, API-).
+Auto-generated if omitted: T0001, T0002, etc.
+
+## Status Values
+
+todo, in-progress, blocked, done, on-hold.
+
+Valid transitions:
+- todo -> in-progress, on-hold
+- in-progress -> done, blocked, on-hold
+- blocked -> in-progress, todo
+- on-hold -> todo, in-progress
+
+## Environment Variables
+
+- `RUSTWERK_USER`: default developer ID for assign
+  and effort log commands
+
+## Project Detection
+
+RustWerk looks for `.rustwerk/` starting from the
+current directory and walking up, similar to git.
+
+## Optional: docs
+
+- [User Manual](docs/manual.md): complete reference
+  with examples
+- [Project File Spec](docs/project-file-spec.md):
+  JSON schema for .rustwerk/project.json

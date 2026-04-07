@@ -49,6 +49,13 @@ it when a `feat` or `fix` commit changes CLI behavior.
 Skip updates for internal refactors or non-user-facing
 work.
 
+## LLM Agent Reference
+
+The file `llms.txt` is the AI-agent-facing reference
+following the llmstxt.org convention. It must reflect the
+latest CLI state before any release. Update it alongside
+`docs/manual.md` when CLI behavior changes.
+
 ## Skills
 
 Project-specific skills available as slash commands:
