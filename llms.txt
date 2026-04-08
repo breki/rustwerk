@@ -19,20 +19,54 @@ rustwerk task status TASK-ID in-progress
 rustwerk task status TASK-ID done
 ```
 
-## Core Concepts
+## Value Constraints
 
-- **Tasks** have an ID, title, status, dependencies,
-  complexity, effort estimate, assignee, and tags
-- **Dependencies** form a DAG (cycles rejected). Task B
-  depends on A means A must finish before B starts
-- **Status workflow**: todo -> in-progress -> done (also
-  blocked, on-hold). Use `--force` to bypass
-- **Critical path**: longest chain of remaining work,
-  marked with `*` in listings
-- **Batch commands**: atomic JSON operations via stdin
-  or file — all succeed or none are applied
+### Task IDs
 
-## Task Management
+Pattern: `[A-Za-z0-9_-]+` (non-empty, stored
+uppercase). Auto-generated if omitted: T0001, T0002,
+etc. Use mnemonic prefixes by area (e.g. DOM-, CLI-).
+
+### Developer IDs
+
+Pattern: `[a-z0-9_-]+` (non-empty, stored lowercase).
+
+### Status Values
+
+`todo`, `in-progress`, `blocked`, `done`, `on-hold`.
+Parser also accepts underscore and concatenated forms
+(e.g. `in_progress`, `inprogress`).
+
+Valid transitions (without `--force`):
+
+```
+todo        → in-progress, on-hold
+in-progress → done, blocked
+blocked     → in-progress, todo
+on-hold     → todo, in-progress
+done        → (terminal)
+```
+
+### Effort Format
+
+Grammar: `<positive-number><unit>` where unit is
+`H` (hours), `D` (days=8H), `W` (weeks=40H),
+`M` (months=160H). Case-insensitive. Fractional
+values allowed. Examples: `5H`, `2.5D`, `0.5W`, `1M`.
+
+### Tags
+
+Pattern per tag: `[a-z0-9-]+`, max 50 chars. Max 20
+tags per task. Input is trimmed, lowercased, sorted,
+and deduplicated.
+
+### Complexity
+
+Integer, range 1–1000.
+
+## CLI Commands
+
+### Task Management
 
 ```
 rustwerk task add "Title" [--id ID] [--desc DESC] \
@@ -51,7 +85,7 @@ rustwerk task undepend <FROM> <TO>
 rustwerk task describe <ID>
 ```
 
-## Effort Tracking
+### Effort Tracking
 
 ```
 rustwerk effort estimate <ID> <AMOUNT>
@@ -59,11 +93,9 @@ rustwerk effort log <ID> <AMOUNT> [--dev DEV] \
   [--note NOTE]
 ```
 
-Units: H (hours), D (days=8H), W (weeks=40H),
-M (months=160H). Fractional values supported.
 Task must be in-progress to log effort.
 
-## Developer Management
+### Developer Management
 
 ```
 rustwerk dev add <ID> <NAME> [--email E] [--role R]
@@ -71,7 +103,7 @@ rustwerk dev remove <ID>
 rustwerk dev list
 ```
 
-## Visualization and Reports
+### Visualization and Reports
 
 ```
 rustwerk show                  # project summary
@@ -85,47 +117,271 @@ rustwerk report bottlenecks    # blocking tasks
 
 ## Batch Commands (Atomic JSON)
 
-```
-echo '[
-  {"command": "task.add", "args": {
-    "title": "A", "id": "A", "complexity": 3
-  }},
-  {"command": "task.add", "args": {
-    "title": "B", "id": "B"
-  }},
-  {"command": "task.depend", "args": {
-    "from": "B", "to": "A"
-  }}
-]' | rustwerk batch
-```
-
-Available commands: task.add, task.remove, task.update,
-task.status, task.assign, task.unassign, task.depend,
-task.undepend, effort.log, effort.estimate, dev.add,
-dev.remove.
+Pipe a JSON array to `rustwerk batch`. All commands
+execute atomically — all succeed or none are applied.
+Environment variable defaults (e.g. `RUSTWERK_USER`)
+do NOT apply inside batch; all values must be explicit.
 
 Limits: 10 MB input, 1000 commands per batch.
 
-## Task ID Conventions
+### Schema
 
-IDs are uppercase alphanumeric with hyphens/underscores.
-Use mnemonic prefixes by area (e.g. DOM-, CLI-, API-).
-Auto-generated if omitted: T0001, T0002, etc.
+```json
+[
+  {
+    "command": "<command-name>",
+    "args": { ... }
+  }
+]
+```
 
-## Status Values
+### Command Reference
 
-todo, in-progress, blocked, done, on-hold.
+#### task.add
 
-Valid transitions:
-- todo -> in-progress, on-hold
-- in-progress -> done, blocked, on-hold
-- blocked -> in-progress, todo
-- on-hold -> todo, in-progress
+Create a new task.
+
+- **Required:** `title` (string)
+- **Optional:** `id` (string), `desc` (string),
+  `complexity` (integer), `effort` (string),
+  `tags` (array of strings)
+
+```json
+{"command": "task.add", "args": {
+  "title": "Implement auth",
+  "id": "AUTH-01",
+  "complexity": 5,
+  "effort": "2D",
+  "tags": ["backend", "security"]
+}}
+```
+
+#### task.remove
+
+- **Required:** `id` (string)
+
+```json
+{"command": "task.remove", "args": {"id": "AUTH-01"}}
+```
+
+#### task.update
+
+Update an existing task. At least one optional field
+must be provided.
+
+- **Required:** `id` (string)
+- **Optional:** `title` (string), `desc` (string;
+  empty string clears description),
+  `tags` (array of strings)
+
+```json
+{"command": "task.update", "args": {
+  "id": "AUTH-01",
+  "title": "Implement OAuth2",
+  "tags": ["backend", "security", "oauth"]
+}}
+```
+
+#### task.status
+
+- **Required:** `id` (string), `status` (string)
+- **Optional:** `force` (boolean, default false)
+
+```json
+{"command": "task.status", "args": {
+  "id": "AUTH-01", "status": "in-progress"
+}}
+```
+
+#### task.assign
+
+- **Required:** `id` (string), `to` (string —
+  must be a registered developer ID)
+
+```json
+{"command": "task.assign", "args": {
+  "id": "AUTH-01", "to": "alice"
+}}
+```
+
+#### task.unassign
+
+- **Required:** `id` (string)
+
+```json
+{"command": "task.unassign", "args": {"id": "AUTH-01"}}
+```
+
+#### task.depend
+
+Declare that `from` depends on `to` (i.e. `to` must
+finish before `from` can start). No cycles allowed.
+
+- **Required:** `from` (string), `to` (string)
+
+```json
+{"command": "task.depend", "args": {
+  "from": "AUTH-02", "to": "AUTH-01"
+}}
+```
+
+#### task.undepend
+
+- **Required:** `from` (string), `to` (string)
+
+```json
+{"command": "task.undepend", "args": {
+  "from": "AUTH-02", "to": "AUTH-01"
+}}
+```
+
+#### effort.estimate
+
+- **Required:** `id` (string), `amount` (string)
+
+```json
+{"command": "effort.estimate", "args": {
+  "id": "AUTH-01", "amount": "3D"
+}}
+```
+
+#### effort.log
+
+- **Required:** `id` (string), `amount` (string),
+  `dev` (string — developer ID)
+- **Optional:** `note` (string)
+
+```json
+{"command": "effort.log", "args": {
+  "id": "AUTH-01", "amount": "4H",
+  "dev": "alice", "note": "JWT integration"
+}}
+```
+
+#### dev.add
+
+- **Required:** `id` (string), `name` (string)
+- **Optional:** `email` (string), `role` (string)
+
+```json
+{"command": "dev.add", "args": {
+  "id": "alice", "name": "Alice Chen",
+  "email": "alice@example.com", "role": "backend"
+}}
+```
+
+#### dev.remove
+
+- **Required:** `id` (string)
+
+```json
+{"command": "dev.remove", "args": {"id": "alice"}}
+```
+
+### Batch Output
+
+On success, stdout returns a JSON array:
+
+```json
+[
+  {"index": 0, "ok": true, "message": "..."},
+  {"index": 1, "ok": true, "message": "..."}
+]
+```
+
+On failure, stderr returns:
+
+```json
+{"error": "...", "applied": 0}
+```
+
+No commands are applied on failure.
+
+### Common Workflows
+
+**Create tasks with dependencies:**
+
+```json
+[
+  {"command": "task.add", "args": {
+    "title": "Design schema", "id": "DB-01",
+    "complexity": 3, "effort": "1D",
+    "tags": ["database"]
+  }},
+  {"command": "task.add", "args": {
+    "title": "Implement models", "id": "DB-02",
+    "complexity": 5, "effort": "2D",
+    "tags": ["database"]
+  }},
+  {"command": "task.add", "args": {
+    "title": "Write migrations", "id": "DB-03",
+    "complexity": 3, "effort": "1D",
+    "tags": ["database"]
+  }},
+  {"command": "task.depend", "args": {
+    "from": "DB-02", "to": "DB-01"
+  }},
+  {"command": "task.depend", "args": {
+    "from": "DB-03", "to": "DB-02"
+  }}
+]
+```
+
+**Set up a team and assign work:**
+
+```json
+[
+  {"command": "dev.add", "args": {
+    "id": "alice", "name": "Alice Chen",
+    "role": "backend"
+  }},
+  {"command": "dev.add", "args": {
+    "id": "bob", "name": "Bob Park",
+    "role": "frontend"
+  }},
+  {"command": "task.assign", "args": {
+    "id": "DB-01", "to": "alice"
+  }},
+  {"command": "task.assign", "args": {
+    "id": "UI-01", "to": "bob"
+  }}
+]
+```
+
+**Progress a task through its lifecycle:**
+
+```json
+[
+  {"command": "task.status", "args": {
+    "id": "DB-01", "status": "in-progress"
+  }},
+  {"command": "effort.log", "args": {
+    "id": "DB-01", "amount": "4H",
+    "dev": "alice", "note": "initial schema draft"
+  }},
+  {"command": "effort.log", "args": {
+    "id": "DB-01", "amount": "2H",
+    "dev": "alice", "note": "review feedback"
+  }},
+  {"command": "task.status", "args": {
+    "id": "DB-01", "status": "done"
+  }}
+]
+```
+
+## Core Concepts
+
+- **Dependencies** form a DAG (cycles rejected).
+  "B depends on A" means A must finish before B starts
+- **Critical path**: longest chain of remaining work,
+  marked with `*` in listings
+- **Batch commands**: atomic JSON operations via stdin
+  — all succeed or none are applied
 
 ## Environment Variables
 
 - `RUSTWERK_USER`: default developer ID for assign
-  and effort log commands
+  and effort log commands (CLI only, not batch)
 
 ## Project Detection
 
