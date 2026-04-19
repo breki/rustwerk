@@ -317,7 +317,7 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "rustwerk"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -325,6 +325,15 @@ dependencies = [
  "serde",
  "serde_json",
  "terminal_size",
+ "thiserror",
+]
+
+[[package]]
+name = "rustwerk-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 

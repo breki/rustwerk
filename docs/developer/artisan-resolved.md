@@ -6,6 +6,60 @@ findings.
 
 ---
 
+### AQ-049..054 — `rustwerk-plugin-api` code quality fixes (bundle)
+
+- **Date:** 2026-04-19
+- **Category:** Error Handling + API Design + Type Safety
+- **Commit context:** feat: add `rustwerk-plugin-api` crate
+  (v0.40.0)
+- **Resolution:** Six Artisan findings from the initial
+  review of the new plugin API crate were addressed in the
+  same commit:
+  - **AQ-049** — `HelperError` exposed concrete upstream
+    error types (`serde_json::Error`, `NulError`) in
+    public variants, making any upstream major bump a
+    breaking change to the plugin API. Inner types are
+    now held as `#[source]` only; variant fields are not
+    named (tuple variants with `#[source]`), so the
+    public surface is stable.
+  - **AQ-050** — Hand-rolled `Display` / `Error` /
+    `From` impls drifted from the `thiserror` workspace
+    convention. `HelperError` now derives via
+    `#[derive(thiserror::Error)]`; `thiserror = "2"` was
+    added as a direct dependency.
+  - **AQ-051** — Error messages had redundant category
+    prefixes (`"json error: ..."`) that duplicated
+    through `anyhow` chains. Messages now describe the
+    failing operation (`"failed to (de)serialize plugin
+    payload as JSON"`, `"plugin payload contained an
+    interior null byte"`, `"plugin payload exceeds the
+    {limit}-byte size cap"`) instead of naming the
+    category.
+  - **AQ-052** — `TaskDto.status` was stringly-typed.
+    Replaced with `TaskStatusDto` enum with
+    snake_case wire format covering all five host
+    `Status` variants. (Also listed as RT-076; the
+    Artisan angle was the API Guidelines C-CUSTOM-TYPE
+    violation.) `effort_estimate` remains a string —
+    see open AQ-055.
+  - **AQ-053** — `PluginApiVersionFn` was typed as
+    `unsafe extern "C" fn() -> u32` despite having no
+    pointer arguments and a scalar return, forcing
+    callers into no-op `unsafe { }` blocks. The alias
+    is now `extern "C" fn() -> u32`; the three FFI
+    functions that genuinely cross safety boundaries
+    (`PluginInfoFn`, `PluginPushTasksFn`,
+    `PluginFreeStringFn`) retain `unsafe`.
+  - **AQ-054** — `PluginResult.task_results: Vec<_>`
+    could not distinguish "operation produced zero task
+    results" from "operation doesn't produce per-task
+    output". Changed to `Option<Vec<TaskPushResult>>`
+    with `#[serde(default, skip_serializing_if =
+    "Option::is_none")]`. Tests cover both forms and
+    confirm the JSON representations are distinct.
+
+---
+
 ### AQ-rename-bundle — `task rename` code quality fixes
 
 - **Date:** 2026-04-19

@@ -4,10 +4,42 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-049
+**Next ID:** AQ-056
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.
+
+---
+
+### AQ-055 — `TaskDto.effort_estimate` remains stringly-typed
+
+- **Date:** 2026-04-19
+- **Category:** Type Safety (Low)
+- **Commit context:** feat: add `rustwerk-plugin-api` crate
+  (v0.40.0)
+- **Description:** `TaskDto.status` was lifted to a
+  `TaskStatusDto` enum in this commit, but
+  `effort_estimate: Option<String>` still carries the
+  host's serialized effort form (e.g. `"2d"`, `"4h"`).
+  The host domain models effort as a structured
+  `Effort { value: f64, unit: EffortUnit }`. Mirroring
+  that in the DTO layer would remove the last
+  stringly-typed field and let plugins parse effort
+  without replicating the host's grammar.
+- **Why deferred:** Mirroring `Effort` requires copying
+  the host's `EffortUnit` enum and its grammar into the
+  plugin-api crate, which couples the "plain strings for
+  portability" DTO layer to host-internal value types.
+  Kept deferred until a concrete plugin use case shows
+  that parsing the string form is painful, at which
+  point the right shape (enum? newtype? parser helper?)
+  will be clearer.
+- **Better approach when resolved:** Add an
+  `EffortDto { value: f64, unit: EffortUnitDto }` pair
+  to `rustwerk-plugin-api` with `#[serde(rename_all =
+  "snake_case")]` on the unit enum; convert at the host
+  boundary; provide a `Display` impl so the current
+  string form is still obtainable for logging.
 
 ---
 

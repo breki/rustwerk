@@ -7,6 +7,27 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Add `rustwerk-plugin-api` crate (v0.40.0)
+
+    New workspace member `crates/rustwerk-plugin-api`
+    defines the stable contract between the rustwerk host
+    and plugin dynamic libraries. Provides serde DTOs
+    (`PluginInfo`, `PluginResult`, `TaskPushResult`,
+    `TaskDto`), the `API_VERSION = 1` constant, and
+    `unsafe extern "C" fn` type aliases for the four FFI
+    entry points a plugin must export
+    (`rustwerk_plugin_api_version`,
+    `rustwerk_plugin_info`,
+    `rustwerk_plugin_push_tasks`,
+    `rustwerk_plugin_free_string`). Safe helper
+    functions `serialize_to_cstring` and
+    `deserialize_from_cstr` reduce plugin-author
+    boilerplate without requiring unsafe code inside the
+    API crate itself — pointer conversions remain the
+    caller's responsibility in their `extern "C"`
+    wrappers. Depends only on `serde` and `serde_json`
+    so plugins do not pull in the full rustwerk tree.
+
 - Add `task rename` command (v0.39.0)
 
     New `rustwerk task rename <OLD> <NEW>` changes a

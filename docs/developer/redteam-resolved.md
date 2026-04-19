@@ -5,6 +5,62 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-073..081 — `rustwerk-plugin-api` FFI contract hardening (bundle)
+
+- **Date:** 2026-04-19
+- **Category:** Correctness + Security + Project Config
+- **Commit context:** feat: add `rustwerk-plugin-api` crate
+  (v0.40.0)
+- **Resolution:** Nine findings surfaced in the initial
+  red-team review of the new plugin API crate were
+  addressed in the same commit:
+  - **RT-073** — FFI out-pointer ownership on error was
+    under-specified. Crate-level docs now mandate that
+    the host initializes `*out = null` before each call,
+    the plugin must leave `*out` null or pointing at a
+    plugin-allocated string regardless of return code,
+    and the host must always call
+    `rustwerk_plugin_free_string(*out)` (null-safe) even
+    on error. This removes the leak / UB ambiguity on
+    error paths.
+  - **RT-074** — "non-zero on error" had no enumerated
+    meaning. Added `ERR_OK`, `ERR_GENERIC`,
+    `ERR_INVALID_INPUT`, `ERR_VERSION_MISMATCH` constants;
+    doc specifies hosts must treat unknown non-zero codes
+    as `ERR_GENERIC`.
+  - **RT-075** — `rustwerk_plugin_api_version` call order
+    was not mandated. Docs now require it to be the first
+    export invoked, and require the host to unload without
+    calling any other export on mismatch.
+  - **RT-076** — `TaskDto.status` was a free-form string.
+    Replaced with `TaskStatusDto` enum (`#[serde(rename_all
+    = "snake_case")]`) mirroring all five host `Status`
+    variants (`todo`, `in_progress`, `blocked`, `done`,
+    `on_hold`) with a round-trip test covering every
+    variant.
+  - **RT-077** — Capability matching case-sensitivity
+    ambiguity. Docs now specify lowercase-ASCII matching
+    and that plugins should emit only lowercase identifiers
+    to avoid silent mismatches.
+  - **RT-078** — `deserialize_from_cstr` was size-unbounded.
+    Added `deserialize_from_cstr_bounded(s, max_bytes)`
+    that rejects inputs exceeding the caller-supplied cap
+    before parsing; original helper retained with a doc
+    note pointing to the bounded variant for less-trusted
+    boundaries.
+  - **RT-079** — Plugin-controlled strings could contain
+    terminal-escape sequences. Docs now require the host
+    to sanitize plugin-returned strings before writing to
+    a terminal.
+  - **RT-080** — Crate was publishable by default despite
+    API_VERSION=1 being brand-new and subject to churn.
+    Added `publish = false` to `Cargo.toml`.
+  - **RT-081** — `serde_json = "1"` pinned no minimum
+    patch. Pinned to `serde_json = "1.0.140"` so plugins
+    built against this crate have a known-good floor.
+
+---
+
 ### RT-071(rename) — `task rename` JSON-vs-filesystem divergence
 
 - **Date:** 2026-04-19

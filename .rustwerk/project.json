@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-04T14:05:59.082517600Z"
+    "modified_at": "2026-04-19T17:15:35.701607Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -430,7 +430,7 @@
     "PLG-API": {
       "title": "Plugin API crate with DTOs and FFI contract",
       "description": "Create rustwerk-plugin-api crate: PluginInfo, PluginResult, TaskPushResult, TaskDto structs. Define 4 extern C function signatures (api_version, plugin_info, push_tasks, free_string). API_VERSION constant. Helper functions for plugin authors.",
-      "status": "todo",
+      "status": "done",
       "effort_estimate": "4H",
       "complexity": 5,
       "tags": [

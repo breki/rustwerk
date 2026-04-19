@@ -4,10 +4,39 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-073
+**Next ID:** RT-083
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
+
+---
+
+### RT-082 — `rustwerk` 0.40.0 bumped without plugin loader consumer
+
+- **Date:** 2026-04-19
+- **Category:** Project Configuration (Low)
+- **Commit context:** feat: add `rustwerk-plugin-api` crate
+  (v0.40.0)
+- **Description:** The host crate was minor-bumped to
+  0.40.0 alongside the introduction of
+  `rustwerk-plugin-api`, but `crates/rustwerk/Cargo.toml`
+  does not yet depend on the new crate — no loader,
+  no capability surface, no user-visible change. A user
+  upgrading to 0.40.0 gets only a larger workspace and
+  no functional delta. Decision was to keep the bump
+  (new workspace crate is a forward-facing feature and
+  the DIARY entry explicitly notes "API-only, no
+  loader"), but the ambiguity is worth tracking so the
+  next integration commit can revisit whether a
+  CHANGELOG clarification is warranted.
+- **Impact if not resolved:** Users may expect a plugin
+  system to work in 0.40.0 when it does not.
+- **Suggested resolution:** Either add a CHANGELOG
+  entry under 0.40.0 explicitly labeling it as
+  "plugin-api crate only; loader lands in a future
+  release", or defer the next host-crate version bump
+  until the loader actually lands and let the integration
+  commit take credit for 0.41.0.
 
 ---
 
