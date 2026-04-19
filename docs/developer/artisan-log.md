@@ -4,10 +4,41 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-074
+**Next ID:** AQ-075
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.
+
+---
+
+### AQ-074 — Plugin-response size cap does not bound `CStr::from_ptr` walk
+
+- **Date:** 2026-04-19
+- **Category:** Correctness / defensive coding (deferred — inherent)
+- **Commit context:** feat: add dynamic plugin host
+  (v0.43.0)
+- **Description:** `parse_plugin_response` in
+  `plugin_host.rs` calls `CStr::from_ptr(ptr)` to
+  measure the plugin-returned string before applying
+  `MAX_PLUGIN_RESPONSE_BYTES`. `CStr::from_ptr` does
+  an unbounded `strlen` walk first; the cap limits
+  parse memory but not the walk itself.
+- **Impact:** A malicious plugin returning a
+  multi-GB NUL-terminated buffer consumes host CPU
+  and memory during the strlen walk, defeating the
+  cap's DoS-prevention intent.
+- **Better approach:** Use `libc::strnlen(ptr, MAX)`
+  or a manual bounded scan. Both still require
+  trusting the plugin's allocation to contain at
+  least `MAX` bytes if scanning that far — reading
+  past an allocation is UB regardless. True bounded
+  reads require a protocol change (plugin returns
+  `(ptr, len)` pair).
+- **Deferred rationale:** The FFI contract already
+  trusts the plugin to NUL-terminate its buffer;
+  adding `strnlen` would bound CPU but not remove
+  the underlying trust requirement. Revisit when
+  the plugin API is revved.
 
 ---
 

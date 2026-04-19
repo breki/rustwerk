@@ -1,6 +1,6 @@
 [package]
 name = "rustwerk"
-version = "0.42.0"
+version = "0.43.0"
 edition = "2021"
 description = "Git-native, AI-agent-friendly project orchestration CLI"
 license = "MIT"
@@ -10,8 +10,30 @@ default-run = "rustwerk"
 keywords = ["project-management", "wbs", "cli", "git-native"]
 categories = ["command-line-utilities"]
 
-[lints]
-workspace = true
+# The rustwerk binary contains a single `unsafe`
+# module (`plugin_host.rs`) for dynamic library
+# loading; the workspace uses `unsafe_code = "forbid"`
+# which cannot be relaxed per-module. We redeclare the
+# lints here with `deny` so `plugin_host.rs` can opt in
+# via `#![allow(unsafe_code)]`. Keep this block in sync
+# with the workspace-root `Cargo.toml`.
+[lints.rust]
+warnings = "deny"
+unsafe_code = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "deny", priority = -1 }
+cargo_common_metadata = "deny"
+multiple_crate_versions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+module_name_repetitions = "allow"
+wildcard_imports = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
 
 [[bin]]
 name = "rustwerk"

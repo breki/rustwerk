@@ -1,6 +1,8 @@
 mod batch;
 mod commands;
 mod gantt;
+#[cfg(feature = "plugins")]
+mod plugin_host;
 mod render;
 mod tree;
 

@@ -4,10 +4,72 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-091
+**Next ID:** RT-093
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
+
+---
+
+### RT-092 — Failed plugin loads are only surfaced via `eprintln!`
+
+- **Date:** 2026-04-19
+- **Category:** Incident detection (deferred)
+- **Commit context:** feat: add dynamic plugin host
+  (v0.43.0)
+- **Description:** When
+  `plugin_host::discover_plugins` encounters a plugin
+  that fails to load (malicious DLL, architecture
+  mismatch, missing symbol, version mismatch), the
+  failure is reported as a single line on stderr and
+  scan continues. There is no structured log, no
+  persistent record, and nothing surfaces in normal
+  CLI output.
+- **Impact:** A user who unknowingly has a malicious
+  `.so`/`.dll` in a plugin dir gets a one-line
+  warning easy to miss in CLI noise. Incident
+  detection is weak.
+- **Fix options:** Once PLG-CLI lands, add `rustwerk
+  plugin list` that surfaces both loaded and failed
+  plugins with full paths, errors, and (ideally)
+  SHA256 hashes. Consider persisting a structured log
+  file in `.rustwerk/plugins-failed.log`.
+- **Deferred rationale:** Requires the PLG-CLI
+  surface and a broader decision on where structured
+  logging lives; not worth retrofitting in PLG-HOST.
+
+---
+
+### RT-091 — Library constructors run before API-version check
+
+- **Date:** 2026-04-19
+- **Category:** Trust model (documented, inherent)
+- **Commit context:** feat: add dynamic plugin host
+  (v0.43.0)
+- **Description:** `Library::new(path)` executes the
+  shared object's initializers (ELF `.init_array`,
+  Windows `DllMain`) before the plugin host can call
+  `rustwerk_plugin_api_version`. A malicious library
+  in a discovery directory has already executed
+  arbitrary code by the time the host is in a
+  position to "reject" it. This is inherent to
+  dynamic loading on all supported platforms.
+- **Impact:** The version-check guarantee is
+  cosmetic for security purposes — it prevents API
+  misuse after the fact, not compromise. Every file
+  in a discovery directory is implicitly trusted to
+  run code as the current user.
+- **Fix options:** (a) sign plugins and verify
+  signatures *before* `Library::new`; (b) maintain a
+  user-scoped allowlist of plugin hashes; (c) both.
+  All require new infrastructure.
+- **Deferred rationale:** Addressed through trust
+  narrowing for now — `target/*` dirs are no longer
+  scanned by default (gated behind
+  `RUSTWERK_PLUGIN_DEV=1`); only
+  `<project>/.rustwerk/plugins/` and
+  `~/.rustwerk/plugins/` are scanned. Documented
+  explicitly in the module's trust-model section.
 
 ---
 

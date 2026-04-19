@@ -37,6 +37,29 @@ const COVERAGE_THRESHOLD: f64 = 90.0;
 /// failures to trigger may fall below the main threshold.
 const MODULE_COVERAGE_THRESHOLD: f64 = 85.0;
 
+/// Path suffixes excluded from the per-module coverage
+/// floor. FFI host code that requires a loaded dynamic
+/// library to exercise, and doc-comment-only crate
+/// stubs awaiting implementation, are reported but do
+/// not fail the check. Entries use forward slashes;
+/// the match site normalises file paths before
+/// comparison so the same list works on Windows and
+/// Unix.
+const MODULE_COVERAGE_EXEMPT: &[&str] = &[
+    // Plugin host: most unsafe FFI paths need a real
+    // cdylib to exercise. Covered by integration tests
+    // once PLG-JIRA lands.
+    "bin/rustwerk/plugin_host.rs",
+    // Jira plugin: empty stub until PLG-JIRA.
+    "rustwerk-jira-plugin/src/lib.rs",
+    // Main rustwerk lib.rs is module re-exports only.
+    "rustwerk/src/lib.rs",
+    // Plugin API is covered by its own package's unit
+    // tests; the `rustwerk` binary only uses a handful
+    // of constants from it.
+    "rustwerk-plugin-api/src/lib.rs",
+];
+
 /// Maximum allowed exact duplication percentage
 /// (production code only, tests excluded).
 const DUPLICATION_THRESHOLD: f64 = 6.0;
@@ -174,7 +197,16 @@ fn run_coverage() -> Result<(), String> {
                 .rsplit_once("src\\")
                 .or_else(|| name.rsplit_once("src/"))
                 .map_or(name, |(_, rest)| rest);
-            let marker = if pct < MODULE_COVERAGE_THRESHOLD {
+            // Normalize path separators once so the
+            // forward-slash exemption list matches on
+            // Windows too.
+            let norm = name.replace('\\', "/");
+            let exempt = MODULE_COVERAGE_EXEMPT
+                .iter()
+                .any(|suffix| norm.ends_with(suffix));
+            let marker = if exempt {
+                "~"
+            } else if pct < MODULE_COVERAGE_THRESHOLD {
                 below_threshold.push((short.to_string(), pct));
                 "!"
             } else {

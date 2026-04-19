@@ -5,6 +5,41 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### Plugin host trust-model hardening (bundle)
+
+- **Date:** 2026-04-19
+- **Category:** Trust model / code execution
+- **Commit context:** feat: add dynamic plugin host
+  (v0.43.0)
+- **Resolution:** Three findings from the PLG-HOST
+  red-team review were addressed in the same commit:
+  - **Default `target/debug` + `target/release`
+    discovery dropped.** Original design auto-loaded
+    any cdylib cargo dropped into `target/*` —
+    build-script artifacts, dep cdylibs, proc-macros
+    on some platforms — *before* the API-version
+    check runs (dynamic loading executes
+    initializers first). Now gated behind
+    `RUSTWERK_PLUGIN_DEV=1` env var. End-user
+    installs only scan
+    `<project>/.rustwerk/plugins/` and
+    `~/.rustwerk/plugins/`.
+  - **Empty `HOME`/`USERPROFILE` no longer causes
+    CWD-relative scan.** `env::var_os` only filters
+    *unset* values; an empty string yielded
+    `PathBuf::from("")` which joined to the relative
+    `.rustwerk/plugins` path, scanned against the
+    process CWD. An attacker in a shared tmp dir
+    could drop plugins and get code exec on `HOME=
+    rustwerk …`. `home_dir()` now treats empty as
+    absent.
+  - **Shadowed plugins logged instead of silently
+    skipped.** When a less-trusted directory has a
+    plugin of the same name as an already-loaded
+    one, `discover_plugins` now writes a stderr
+    warning naming both paths so users can spot
+    shadow attacks and name collisions.
+
 ### RT-091 — `task describe --json` leaked absolute filesystem path
 
 - **Date:** 2026-04-19

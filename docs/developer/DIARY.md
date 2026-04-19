@@ -7,6 +7,71 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Add dynamic plugin host (v0.43.0)
+
+    PLG-HOST. The main binary can now discover and
+    load plugin cdylibs at runtime via `libloading`.
+    New module
+    `crates/rustwerk/src/bin/rustwerk/plugin_host.rs`
+    is the only place in the binary with `unsafe`
+    code, gated behind `#[cfg(feature = "plugins")]`
+    and `#![allow(unsafe_code)]` at module level.
+    The workspace enforces `unsafe_code = "forbid"`
+    which Cargo cannot relax per-module, so
+    `crates/rustwerk/Cargo.toml` redeclares the
+    lints block with `unsafe_code = "deny"` and the
+    full clippy config duplicated from the
+    workspace — the only way to grant one module an
+    `#[allow]` while keeping the rest of the binary
+    unsafe-free.
+
+    `discover_plugins(project_root)` scans
+    `<project>/.rustwerk/plugins/` then
+    `~/.rustwerk/plugins/`. The original design also
+    scanned `target/debug` and `target/release` for
+    dev convenience, but the red-team review
+    correctly flagged this as a code-execution
+    vector — every cdylib cargo drops into
+    `target/*` (build-script artifacts, transitive
+    dep cdylibs, proc-macros on some platforms) is
+    executed via `Library::new`'s DLL-constructor
+    call *before* the API-version check runs. The
+    path is now gated behind `RUSTWERK_PLUGIN_DEV=1`
+    and end users never see it. `home_dir()` also
+    treats empty `HOME`/`USERPROFILE` as absent so a
+    `HOME=` invocation can't turn the plugin scan
+    into a CWD-relative scan.
+
+    Each load: `libloading::Library::new` → call
+    `rustwerk_plugin_api_version` (reject mismatch)
+    → cache the remaining three FFI entry points as
+    plain fn pointers alongside the live `Library`.
+    `LoadedPlugin::push_tasks(config_json,
+    tasks_json)` passes two `CString` inputs plus an
+    out-pointer, enforces a 10 MiB size cap on the
+    response, and frees the plugin-owned pointer on
+    both success and error paths. Parse and free are
+    sequenced through a `parse_plugin_response<T>`
+    helper that owns the byte buffer before
+    returning, so the `CStr` borrow is statically
+    dropped before the plugin's allocator reclaims
+    the pointer — eliminating a future
+    use-after-free regression surface. See RT-091,
+    RT-092 in `redteam-log.md` for the remaining
+    deferred items (library constructors run before
+    version check; structured incident logging
+    needs PLG-CLI).
+
+    `xtask/src/main.rs` gains a
+    `MODULE_COVERAGE_EXEMPT` list. FFI host paths
+    need a real cdylib to exercise (covered by
+    integration tests once PLG-JIRA lands), and
+    three `lib.rs` files are re-exports/stubs only.
+    Exempt files show with a `~` marker; path
+    separators normalised once so one
+    forward-slash entry works on both Windows and
+    Unix.
+
 - Add global `--json` output flag (v0.42.0)
 
     CLI-JSON. Every command now accepts a global

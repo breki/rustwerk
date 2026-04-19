@@ -6,6 +6,50 @@ findings.
 
 ---
 
+### PLG-HOST craftsmanship bundle
+
+- **Date:** 2026-04-19
+- **Category:** API design / correctness / documentation
+- **Commit context:** feat: add dynamic plugin host
+  (v0.43.0)
+- **Resolution:** Four findings from the Artisan
+  review were addressed in the same commit:
+  - **Fragile `CStr` borrow + free ordering** in
+    `push_tasks` and `call_info`. Extracted
+    `parse_plugin_response<T>` helper that takes
+    ownership of the byte buffer (via
+    `CStr::from_ptr().to_bytes().to_vec()`) before
+    returning, so the `CStr` borrow is statically
+    dropped before the caller frees the plugin
+    pointer. Eliminates the class of
+    use-after-free regressions when adding future
+    error messages that reference buffer contents.
+  - **Missing `LoadedPlugin` invariant doc.** Added
+    an explicit `# Invariant` section to the struct
+    docs stating `push_tasks` and `free_string`
+    must originate from `_library`, and that only
+    `load_plugin` should construct the type.
+  - **Silent duplicate-name skip.** Shadowed
+    plugins now print `"plugin '<name>' at <path>
+    shadowed by <higher-path>"` to stderr instead
+    of being dropped quietly.
+  - **Contradictory field-order comment.** The
+    struct had two comments about drop order: one
+    asserting fields drop in declaration order so
+    `_library` must go last, the other saying
+    order is moot. Replaced with a single accurate
+    note that fn pointers are `Copy`/no-`Drop`,
+    the `Library` outlives them for the struct's
+    lifetime, and field order is readability
+    only.
+
+- **Also resolved**: `MODULE_COVERAGE_EXEMPT` in
+  `xtask/src/main.rs` originally listed both
+  forward- and backslash variants per entry (6
+  entries for 3 files). Collapsed to forward-slash
+  only; the match site normalises the JSON-reported
+  path once before comparing.
+
 ### AQ-063..072 — CLI-JSON craftsmanship bundle
 
 - **Date:** 2026-04-19

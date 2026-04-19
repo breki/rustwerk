@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-19T18:23:40.982239100Z"
+    "modified_at": "2026-04-19T19:54:54.568277300Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -454,7 +454,7 @@
     "PLG-HOST": {
       "title": "Plugin host with libloading dynamic loader",
       "description": "Add plugin_host.rs to binary with #[allow(unsafe_code)]. LoadedPlugin struct wrapping libloading::Library. Plugin discovery in .rustwerk/plugins/, ~/.rustwerk/plugins/, and target/. Platform-specific extension filter (.dll/.so/.dylib). API version check. String memory management via plugin's free_string.",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "PLG-API",
         "PLG-WORKSPACE"
