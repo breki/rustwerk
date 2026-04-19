@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-19T17:15:35.701607Z"
+    "modified_at": "2026-04-19T18:16:16.251411800Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -497,7 +497,7 @@
     "PLG-WORKSPACE": {
       "title": "Wire plugin crates into workspace",
       "description": "Add rustwerk-plugin-api and rustwerk-jira-plugin to workspace members. Add libloading (optional, behind plugins feature) and rustwerk-plugin-api deps to main crate. Crate-level unsafe_code overrides for plugin crates.",
-      "status": "todo",
+      "status": "done",
       "effort_estimate": "1H",
       "complexity": 2,
       "tags": [

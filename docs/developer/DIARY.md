@@ -7,6 +7,25 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Wire plugin crates into workspace (v0.41.0)
+
+    PLG-WORKSPACE scaffolding for the plugin architecture.
+    `crates/rustwerk-jira-plugin` is added as a new
+    workspace member with `crate-type = ["cdylib"]` and
+    `unsafe_code = "allow"` (needed once FFI exports land;
+    Cargo cannot override a single workspace lint, so the
+    full lint block is inlined). The main `rustwerk` crate
+    picks up two new deps: `rustwerk-plugin-api` (path dep,
+    non-optional) and `libloading = "0.8"` (optional,
+    gated behind a new default `plugins` feature). Current
+    jira-plugin contents are a doc-comment stub — actual
+    FFI entry points arrive with PLG-JIRA, and dynamic
+    loading arrives with PLG-HOST. Reviewer flagged the
+    half-wired feature and lint duplication — both logged
+    as deferred in `redteam-log.md` (RT-089, RT-090) and
+    `artisan-log.md` (AQ-062) until PLG-HOST lands and the
+    consumption pattern is visible.
+
 - Add cross-platform install scripts (v0.40.0)
 
     `scripts/install.sh` (POSIX) and `scripts/install.ps1`

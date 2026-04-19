@@ -4,10 +4,33 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-062
+**Next ID:** AQ-063
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.
+
+---
+
+### AQ-062 — `rustwerk-plugin-api` non-optional while `libloading` is gated
+
+- **Date:** 2026-04-19
+- **Category:** API Design (Low, deferred)
+- **Commit context:** feat: wire plugin crates into
+  workspace (v0.41.0)
+- **Description:** `crates/rustwerk/Cargo.toml:22,28-29`
+  — the `plugins` feature gates `libloading` (the
+  dynamic-loading primitive) but `rustwerk-plugin-api`
+  (the FFI types) is pulled in unconditionally.
+  Asymmetric: disabling `plugins` still compiles the
+  API crate.
+- **Better approach:** Either mark `rustwerk-plugin-api`
+  as `optional = true` and add it to `plugins =
+  ["dep:libloading", "dep:rustwerk-plugin-api"]`, or
+  document why the API crate must always be present
+  (e.g. types used in non-plugin serialization paths).
+- **Deferred rationale:** Same as RT-089 — scaffolding
+  by design. Revisit when PLG-HOST lands and the
+  actual consumption pattern is visible.
 
 ---
 

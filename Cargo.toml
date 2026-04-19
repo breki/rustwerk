@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/rustwerk", "crates/rustwerk-plugin-api", "xtask"]
+members = ["crates/rustwerk", "crates/rustwerk-plugin-api", "crates/rustwerk-jira-plugin", "xtask"]
 resolver = "2"
 
 [workspace.lints.rust]

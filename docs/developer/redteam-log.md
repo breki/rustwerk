@@ -4,10 +4,72 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-089
+**Next ID:** RT-091
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
+
+---
+
+### RT-090 — jira-plugin lint block duplicated instead of inheriting workspace
+
+- **Date:** 2026-04-19
+- **Category:** Correctness (deferred)
+- **Commit context:** feat: wire plugin crates into
+  workspace (v0.41.0)
+- **Description:** `crates/rustwerk-jira-plugin/Cargo.toml`
+  copies the full `[lints.rust]` + `[lints.clippy]` block
+  from the workspace root instead of using `[lints]
+  workspace = true`. Only reason to deviate is
+  `unsafe_code = "allow"` (cdylib FFI).
+- **Impact:** Future workspace lint additions (e.g.
+  tightening a rust lint) silently skip the one crate
+  allowed to contain `unsafe`, weakening the security
+  posture of the very crate that most needs it.
+- **Constraint:** Cargo does not support overriding a
+  single workspace lint. Workspace has `unsafe_code =
+  "forbid"` which cannot be relaxed via `#![allow]`
+  (forbid is strict). So the duplication is the only
+  option unless we downgrade workspace to `deny` and
+  add `#[allow(unsafe_code)]` at each FFI use site.
+- **Fix options:** (a) accept current duplication and
+  add a comment in jira-plugin's Cargo.toml noting the
+  Cargo limitation; (b) downgrade workspace
+  `unsafe_code` to `deny` so crates inherit + `#[allow]`
+  at use sites.
+
+---
+
+### RT-089 — PLG-WORKSPACE half-wires the `plugins` feature
+
+- **Date:** 2026-04-19
+- **Category:** Correctness / Hygiene (deferred — by design)
+- **Commit context:** feat: wire plugin crates into
+  workspace (v0.41.0)
+- **Description:** The `plugins` feature in
+  `crates/rustwerk/Cargo.toml` gates only `libloading`
+  (optional, default on), but nothing imports
+  `libloading` yet. `rustwerk-plugin-api` is pulled in
+  as a non-optional dep, and `rustwerk-jira-plugin`
+  sets `unsafe_code = "allow"` on an empty crate.
+  Triggers:
+  1. `cargo build --no-default-features` produces an
+     identical binary to the default — feature flag is
+     inert.
+  2. SBOM scanners see `libloading` in 0.41.0 with no
+     loader present, suggesting plugin support that
+     isn't there.
+  3. `unsafe` guardrail is relaxed on jira-plugin
+     before any `extern "C"` exists; a stray `unsafe`
+     block could land in the interim with no lint.
+- **Deferred rationale:** PLG-WORKSPACE is explicitly
+  scaffolding per the WBS so PLG-HOST and PLG-JIRA can
+  build on it. Findings resolve once PLG-HOST (loader)
+  and PLG-JIRA (actual FFI code) land.
+- **Fix:** Revisit when PLG-HOST + PLG-JIRA ship.
+  Decide whether `rustwerk-plugin-api` should also be
+  gated behind `plugins`, and whether `plugins` should
+  remain a default feature.
 
 ---
 
