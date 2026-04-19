@@ -5,6 +5,49 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-084..088 — Installer script hardening (bundle)
+
+- **Date:** 2026-04-19
+- **Category:** Correctness + Security
+- **Commit context:** chore: add cross-platform install
+  scripts
+- **Resolution:** Five findings from the red-team review
+  of the new installer scripts were fixed in the same
+  commit:
+  - **RT-084** — Windows PowerShell 5.1 does not default
+    to TLS 1.2, which GitHub requires. `install.ps1`
+    now sets
+    `[Net.ServicePointManager]::SecurityProtocol` to
+    `Tls12` before any web request. Harmless on pwsh 7.
+  - **RT-085** — A 32-bit PowerShell host on 64-bit
+    Windows reports `PROCESSOR_ARCHITECTURE=x86` and
+    would have rejected a capable AMD64 machine.
+    `install.ps1` now consults `PROCESSOR_ARCHITEW6432`
+    first.
+  - **RT-086** — Unauthenticated GitHub API is
+    rate-limited to 60 req/hr/IP; shared NAT/CI users
+    would see a cryptic "could not resolve latest
+    version." Both scripts now fall back to following
+    the `releases/latest` HTML redirect and extracting
+    the tag from the `Location:` header when the API
+    call fails. `RUSTWERK_VERSION` remains the explicit
+    escape hatch.
+  - **RT-087** — The `wget` fallback lacked HTTPS
+    enforcement and retry/backoff. `install.sh` now
+    invokes `wget --https-only --tries=3` and
+    `curl --proto '=https' --tlsv1.2 --retry 3`
+    uniformly via `dl_to` helper functions.
+  - **RT-088** — `RUSTWERK_INSTALL_DIR` was written
+    verbatim into the user's persistent PATH on
+    Windows; a value containing `;` would corrupt it
+    permanently. `install.ps1` now rejects such values.
+    Additionally both scripts `rm` the destination
+    binary before the final copy/move so that a
+    symlink in the install dir is replaced, not
+    followed.
+
+---
+
 ### RT-073..081 — `rustwerk-plugin-api` FFI contract hardening (bundle)
 
 - **Date:** 2026-04-19

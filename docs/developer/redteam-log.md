@@ -4,10 +4,42 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-083
+**Next ID:** RT-089
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
+
+---
+
+### RT-083 — Installer checksums are not signed
+
+- **Date:** 2026-04-19
+- **Category:** Security (deferred)
+- **Commit context:** chore: add cross-platform install
+  scripts
+- **Description:** `scripts/install.sh` and
+  `scripts/install.ps1` verify the downloaded release
+  archive against a `SHA256SUMS` file fetched from the
+  same GitHub release. This protects against transport
+  corruption and non-repo MITM, but not against a
+  compromise of the release pipeline itself — a stolen
+  `GITHUB_TOKEN`, a malicious workflow edit, or a
+  push-access compromise lets an attacker publish a
+  matching `<archive, SHA256SUMS>` pair. End users
+  piping the installer to `sh`/`iex` have no way to
+  detect such a swap.
+- **Impact:** Supply-chain trust floor is "GitHub
+  release integrity." For a project that is intended
+  to be installed by third-party developers and run
+  with full user privileges, this is the most likely
+  escalation path.
+- **Suggested fix:** Sign `SHA256SUMS` in the release
+  workflow (cosign keyless with Sigstore, or minisign
+  with a committed public key), and have both installer
+  scripts verify the signature before trusting the
+  sums file. Keyless cosign is the lightest option —
+  no key management, verification tool is a single
+  static binary.
 
 ---
 

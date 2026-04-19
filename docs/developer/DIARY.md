@@ -7,6 +7,28 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Add cross-platform install scripts (v0.40.0)
+
+    `scripts/install.sh` (POSIX) and `scripts/install.ps1`
+    (PowerShell) let end users install rustwerk with a
+    single `curl | sh` or `irm | iex` command — no Rust
+    toolchain required. Both scripts detect OS/arch, resolve
+    the latest tag (via the GitHub API with a
+    `releases/latest` redirect fallback for rate-limited
+    callers, overridable with `RUSTWERK_VERSION`), download
+    the matching archive produced by `.github/workflows/release.yml`,
+    verify its SHA256 against the published `SHA256SUMS`,
+    and drop the binary in `$HOME/.local/bin` or
+    `%LOCALAPPDATA%\Programs\rustwerk\bin` (overridable via
+    `RUSTWERK_INSTALL_DIR`). The Windows script forces
+    TLS 1.2 for Windows PowerShell 5.1 and consults
+    `PROCESSOR_ARCHITEW6432` to detect 64-bit Windows from
+    a 32-bit host. PATH handling is symmetric: both scripts
+    print a hint by default; `install.ps1` only mutates the
+    persistent user PATH when `RUSTWERK_MODIFY_PATH=1`.
+    README gains an `Install` section documenting the
+    one-liners and environment overrides.
+
 - Add `rustwerk-plugin-api` crate (v0.40.0)
 
     New workspace member `crates/rustwerk-plugin-api`

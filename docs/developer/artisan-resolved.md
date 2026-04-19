@@ -6,6 +6,55 @@ findings.
 
 ---
 
+### AQ-056..061 — Installer script craftsmanship (bundle)
+
+- **Date:** 2026-04-19
+- **Category:** Error handling + API design + UX
+- **Commit context:** chore: add cross-platform install
+  scripts
+- **Resolution:** Six craftsmanship findings from the
+  Artisan review of the new installer scripts were
+  fixed in the same commit:
+  - **AQ-056** — `install.sh` resolved the latest
+    version through an unpiped `curl | sed`, which
+    swallowed curl errors and surfaced only an opaque
+    "could not resolve latest version." The resolution
+    logic now downloads to a tempfile with `dl_to`,
+    so network/HTTP errors propagate directly, and
+    only falls back to the redirect path when the API
+    call actually fails.
+  - **AQ-057** — `install.ps1` silently mutated the
+    user's persistent PATH while `install.sh` only
+    printed a hint, an undocumented contract mismatch.
+    The PowerShell script now prints a hint by default
+    and only mutates PATH when the caller opts in via
+    `RUSTWERK_MODIFY_PATH=1`, matching `install.sh`.
+  - **AQ-058** — `RUSTWERK_INSTALL_DIR` was undocumented
+    in the README despite being honored by both
+    scripts. The README install section now lists all
+    three environment overrides (`RUSTWERK_VERSION`,
+    `RUSTWERK_INSTALL_DIR`, `RUSTWERK_MODIFY_PATH`).
+  - **AQ-059** — The archive layout (`<staging>/rustwerk`)
+    was hardcoded; any future packaging change would
+    produce "binary not found in archive" with no
+    recovery. Both scripts now fall back to a
+    recursive search for the binary when the expected
+    path is absent.
+  - **AQ-060** — `install.sh` used
+    `grep " $archive\$"` for the checksum lookup,
+    which relied on coincidental whitespace layout
+    and would substring-match future entries. Both
+    scripts now parse `SHA256SUMS` by splitting on
+    whitespace and matching the filename field
+    exactly (stripping the leading `*` marker used by
+    binary-mode `sha256sum`).
+  - **AQ-061** — `install.ps1` created its temp
+    directory before the `try/finally`, leaking it if
+    interrupted in between. Creation now happens
+    inside `try` with the `finally` guarding cleanup.
+
+---
+
 ### AQ-049..054 — `rustwerk-plugin-api` code quality fixes (bundle)
 
 - **Date:** 2026-04-19

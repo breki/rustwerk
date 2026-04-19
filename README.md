@@ -177,6 +177,50 @@ The AI agent only handles what algorithmic logic cannot.
 4. Dependency graph correctness
 5. Developer workflow ergonomics
 
+## Install
+
+Prebuilt binaries for Linux, macOS, and Windows are
+published to each [GitHub Release][releases]. No Rust
+toolchain required.
+
+**Linux / macOS**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/breki/rustwerk/main/scripts/install.sh | sh
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/breki/rustwerk/main/scripts/install.ps1 | iex
+```
+
+Both installers detect OS/arch, download the matching
+archive from the latest release, verify its SHA256
+against the published `SHA256SUMS`, and install the
+binary (defaults: `~/.local/bin` on Unix,
+`%LOCALAPPDATA%\Programs\rustwerk\bin` on Windows).
+
+**Environment overrides** (set before piping to the
+shell):
+
+- `RUSTWERK_VERSION` — install a specific version
+  (e.g. `v0.40.0`) instead of the latest.
+- `RUSTWERK_INSTALL_DIR` — override the install
+  directory.
+- `RUSTWERK_MODIFY_PATH=1` *(Windows only)* — append
+  the install directory to the user's persistent PATH.
+  Off by default; `install.sh` never edits shell rc
+  files either.
+
+Alternatively, with a Rust toolchain installed:
+
+```bash
+cargo install --git https://github.com/breki/rustwerk rustwerk
+```
+
+[releases]: https://github.com/breki/rustwerk/releases
+
 ## Build
 
 ```bash
