@@ -7,6 +7,30 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Add `task rename` command (v0.39.0)
+
+    New `rustwerk task rename <OLD> <NEW>` changes a
+    task's ID while preserving status, effort log, tags,
+    and assignee. `Project::rename_task` moves the
+    `BTreeMap` key and rewrites dependency references
+    across all other tasks (with defensive dedup and
+    self-reference stripping to preserve the invariants
+    that `add_dependency` enforces). The CLI wrapper
+    preflight-checks the destination description-file
+    path and refuses to overwrite. Batch gets a matching
+    `task.rename` command; filesystem side effects
+    (description rename/remove) are collected as typed
+    `FileSideEffect` values during `execute_one` and
+    replayed after `save_project`, so chained renames
+    (A→B, B→C) apply files in the correct order and any
+    failure is reported in a JSON envelope on stderr
+    with a non-zero exit. `task remove` (CLI + batch) now
+    also cleans up the `.md` description file for
+    consistency. New `file_store::rename_task_description`
+    and `remove_task_description` helpers centralize the
+    filesystem lifecycle; the rename helper refuses to
+    overwrite existing destinations.
+
 - Adopt rustbase template and add `xtask check`
 
     Retroactively linked rustwerk to the

@@ -161,6 +161,55 @@ impl Project {
         Ok(task)
     }
 
+    /// Rename a task's ID. Updates all dependency
+    /// references across other tasks. Fails if `old_id`
+    /// does not exist or `new_id` is already in use.
+    /// A rename to the same ID is a no-op.
+    ///
+    /// Defensively deduplicates and strips self-references
+    /// after the rewrite, so the no-duplicate /
+    /// no-self-cycle invariants enforced by
+    /// `add_dependency` are preserved even in the face of
+    /// unexpected state.
+    pub fn rename_task(
+        &mut self,
+        old_id: &TaskId,
+        new_id: &TaskId,
+    ) -> Result<(), DomainError> {
+        if old_id == new_id {
+            return Ok(());
+        }
+        if !self.tasks.contains_key(old_id) {
+            return Err(DomainError::TaskNotFound(old_id.to_string()));
+        }
+        if self.tasks.contains_key(new_id) {
+            return Err(DomainError::DuplicateTaskId(new_id.to_string()));
+        }
+        // Rewrite references in every task's dep list,
+        // dedup, and drop any self-reference. Use the
+        // post-rename key (which is `new_id` only for the
+        // task being renamed, otherwise the task's own
+        // existing key) to decide what counts as a
+        // self-reference.
+        for (task_key, task) in &mut self.tasks {
+            let effective_key = if task_key == old_id { new_id } else { task_key };
+            let mut seen = std::collections::HashSet::new();
+            task.dependencies.retain_mut(|dep| {
+                if dep == old_id {
+                    *dep = new_id.clone();
+                }
+                dep != effective_key && seen.insert(dep.clone())
+            });
+        }
+        let task = self
+            .tasks
+            .remove(old_id)
+            .expect("existence checked above");
+        self.tasks.insert(new_id.clone(), task);
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
     /// Update a task's title and/or description.
     pub fn update_task(
         &mut self,
@@ -819,6 +868,101 @@ mod tests {
         p.add_dependency(&ids[1], &ids[2]).unwrap(); // B->C
                                                      // Diamond DAG, no cycle.
         assert_eq!(p.tasks.get(&ids[0]).unwrap().dependencies.len(), 2);
+    }
+
+    #[test]
+    fn rename_task_moves_key() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        let new_id = TaskId::new("B").unwrap();
+        p.rename_task(&ids[0], &new_id).unwrap();
+        assert!(!p.tasks.contains_key(&ids[0]));
+        assert!(p.tasks.contains_key(&new_id));
+        assert_eq!(p.tasks[&new_id].title, "Task A");
+    }
+
+    #[test]
+    fn rename_task_preserves_task_data() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.set_status(&ids[0], Status::InProgress, false).unwrap();
+        let entry = EffortEntry {
+            effort: Effort::parse("3H").unwrap(),
+            developer: "alice".into(),
+            timestamp: Utc::now(),
+            note: Some("n".into()),
+        };
+        p.log_effort(&ids[0], entry).unwrap();
+        let new_id = TaskId::new("A2").unwrap();
+        p.rename_task(&ids[0], &new_id).unwrap();
+        let task = &p.tasks[&new_id];
+        assert_eq!(task.status, Status::InProgress);
+        assert_eq!(task.effort_entries.len(), 1);
+    }
+
+    #[test]
+    fn rename_task_updates_dependents() {
+        let (mut p, ids) = project_with_tasks(&["A", "B", "C"]);
+        p.add_dependency(&ids[1], &ids[0]).unwrap(); // B->A
+        p.add_dependency(&ids[2], &ids[0]).unwrap(); // C->A
+        let new_a = TaskId::new("A2").unwrap();
+        p.rename_task(&ids[0], &new_a).unwrap();
+        assert!(p.tasks[&ids[1]].dependencies.contains(&new_a));
+        assert!(p.tasks[&ids[2]].dependencies.contains(&new_a));
+        assert!(!p.tasks[&ids[1]].dependencies.contains(&ids[0]));
+    }
+
+    #[test]
+    fn rename_task_self_is_noop() {
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.rename_task(&ids[0], &ids[0]).unwrap();
+        assert!(p.tasks.contains_key(&ids[0]));
+    }
+
+    #[test]
+    fn rename_task_missing_old_errors() {
+        let (mut p, _) = project_with_tasks(&["A"]);
+        let old = TaskId::new("NOPE").unwrap();
+        let new_id = TaskId::new("X").unwrap();
+        assert!(p.rename_task(&old, &new_id).is_err());
+    }
+
+    #[test]
+    fn rename_task_duplicate_new_errors() {
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        assert!(p.rename_task(&ids[0], &ids[1]).is_err());
+        // State unchanged.
+        assert!(p.tasks.contains_key(&ids[0]));
+        assert!(p.tasks.contains_key(&ids[1]));
+    }
+
+    #[test]
+    fn rename_task_dedupes_defensively() {
+        // Manually craft a project where task B has A
+        // listed twice in its deps (shouldn't happen via
+        // the public API, but defense-in-depth).
+        let (mut p, ids) = project_with_tasks(&["A", "B"]);
+        p.tasks
+            .get_mut(&ids[1])
+            .unwrap()
+            .dependencies
+            .extend_from_slice(&[ids[0].clone(), ids[0].clone()]);
+        let new_id = TaskId::new("A2").unwrap();
+        p.rename_task(&ids[0], &new_id).unwrap();
+        assert_eq!(p.tasks[&ids[1]].dependencies, vec![new_id]);
+    }
+
+    #[test]
+    fn rename_task_strips_self_reference_defensively() {
+        // Craft a project where a task's deps contain its
+        // own ID (shouldn't happen via the public API).
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.tasks
+            .get_mut(&ids[0])
+            .unwrap()
+            .dependencies
+            .push(ids[0].clone());
+        let new_id = TaskId::new("B").unwrap();
+        p.rename_task(&ids[0], &new_id).unwrap();
+        assert!(p.tasks[&new_id].dependencies.is_empty());
     }
 
     #[test]

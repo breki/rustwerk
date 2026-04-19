@@ -42,6 +42,73 @@ pub fn task_description_path(root: &Path, task_id: &TaskId) -> PathBuf {
         .with_extension("md")
 }
 
+/// Outcome of a description-file rename.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DescriptionRenameOutcome {
+    /// No source file existed; nothing to move.
+    NoSource,
+    /// The file was moved.
+    Moved,
+}
+
+/// Errors specific to description-file operations.
+#[derive(Debug, thiserror::Error)]
+pub enum DescriptionFileError {
+    /// The destination path already exists; refusing to
+    /// overwrite.
+    #[error(
+        "destination description file already exists: \
+             {path}"
+    )]
+    DestinationExists {
+        /// The destination path that already exists.
+        path: String,
+    },
+    /// Underlying I/O failure.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Rename a task description file from `from` to `to`.
+/// Returns `NoSource` if the source does not exist (not
+/// an error). Refuses to overwrite an existing
+/// destination.
+pub fn rename_task_description(
+    root: &Path,
+    from: &TaskId,
+    to: &TaskId,
+) -> Result<DescriptionRenameOutcome, DescriptionFileError> {
+    if from == to {
+        return Ok(DescriptionRenameOutcome::NoSource);
+    }
+    let old_path = task_description_path(root, from);
+    let new_path = task_description_path(root, to);
+    if !old_path.exists() {
+        return Ok(DescriptionRenameOutcome::NoSource);
+    }
+    if new_path.exists() {
+        return Err(DescriptionFileError::DestinationExists {
+            path: new_path.display().to_string(),
+        });
+    }
+    fs::rename(&old_path, &new_path)?;
+    Ok(DescriptionRenameOutcome::Moved)
+}
+
+/// Remove a task description file. Returns `true` if a
+/// file was removed, `false` if none existed.
+pub fn remove_task_description(
+    root: &Path,
+    id: &TaskId,
+) -> Result<bool, std::io::Error> {
+    let path = task_description_path(root, id);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 /// Save a project to `.rustwerk/project.json` under the
 /// given root directory. Creates the directory if it does
 /// not exist.
@@ -107,6 +174,86 @@ mod tests {
     fn project_file_path_convention() {
         let path = project_file_path(Path::new("/repo"));
         assert!(path.ends_with(".rustwerk/project.json"));
+    }
+
+    #[test]
+    fn rename_description_no_source_is_ok() {
+        let dir = temp_dir("rename-no-src");
+        fs::create_dir_all(dir.join(".rustwerk/tasks")).unwrap();
+        let from = TaskId::new("A").unwrap();
+        let to = TaskId::new("B").unwrap();
+        let outcome = rename_task_description(&dir, &from, &to).unwrap();
+        assert_eq!(outcome, DescriptionRenameOutcome::NoSource);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_description_moves_file() {
+        let dir = temp_dir("rename-moves");
+        let tasks = dir.join(".rustwerk/tasks");
+        fs::create_dir_all(&tasks).unwrap();
+        fs::write(tasks.join("A.md"), "body").unwrap();
+        let from = TaskId::new("A").unwrap();
+        let to = TaskId::new("B").unwrap();
+        let outcome = rename_task_description(&dir, &from, &to).unwrap();
+        assert_eq!(outcome, DescriptionRenameOutcome::Moved);
+        assert!(!tasks.join("A.md").exists());
+        assert!(tasks.join("B.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_description_refuses_overwrite() {
+        let dir = temp_dir("rename-refuse");
+        let tasks = dir.join(".rustwerk/tasks");
+        fs::create_dir_all(&tasks).unwrap();
+        fs::write(tasks.join("A.md"), "a").unwrap();
+        fs::write(tasks.join("B.md"), "b").unwrap();
+        let from = TaskId::new("A").unwrap();
+        let to = TaskId::new("B").unwrap();
+        let err = rename_task_description(&dir, &from, &to).unwrap_err();
+        assert!(matches!(
+            err,
+            DescriptionFileError::DestinationExists { .. }
+        ));
+        // Both files still present.
+        assert!(tasks.join("A.md").exists());
+        assert_eq!(fs::read_to_string(tasks.join("B.md")).unwrap(), "b");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_description_same_id_is_noop() {
+        let dir = temp_dir("rename-same");
+        let tasks = dir.join(".rustwerk/tasks");
+        fs::create_dir_all(&tasks).unwrap();
+        fs::write(tasks.join("A.md"), "body").unwrap();
+        let id = TaskId::new("A").unwrap();
+        let outcome = rename_task_description(&dir, &id, &id).unwrap();
+        assert_eq!(outcome, DescriptionRenameOutcome::NoSource);
+        assert!(tasks.join("A.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remove_description_missing_is_ok() {
+        let dir = temp_dir("remove-missing");
+        fs::create_dir_all(dir.join(".rustwerk/tasks")).unwrap();
+        let id = TaskId::new("NOPE").unwrap();
+        assert!(!remove_task_description(&dir, &id).unwrap());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remove_description_deletes_file() {
+        let dir = temp_dir("remove-deletes");
+        let tasks = dir.join(".rustwerk/tasks");
+        fs::create_dir_all(&tasks).unwrap();
+        fs::write(tasks.join("A.md"), "body").unwrap();
+        let id = TaskId::new("A").unwrap();
+        assert!(remove_task_description(&dir, &id).unwrap());
+        assert!(!tasks.join("A.md").exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

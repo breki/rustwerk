@@ -4,10 +4,33 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-072
+**Next ID:** RT-073
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
+
+---
+
+### RT-072 — Windows-reserved TaskIds (`CON`, `NUL`, `COM1`, etc.)
+
+- **Date:** 2026-04-19
+- **Category:** Correctness (Windows)
+- **Commit context:** feat: `task rename` command (v0.39.0)
+- **Description:** `TaskId::new` accepts arbitrary
+  alphanumeric+`-_` strings and uppercases them, which means
+  IDs like `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`,
+  `LPT1`–`LPT9` pass validation. `task_description_path`
+  turns those into filenames like `.rustwerk/tasks/CON.md`,
+  which have special semantics on Windows (console/device
+  aliases). `task describe CON` and `task rename X CON` will
+  either fail with confusing errors or produce odd I/O
+  behavior on Windows. Pre-existing issue for `task add
+  --id CON`; `task rename` widens the surface (rename into a
+  reserved name after-the-fact). Low severity, Windows-only.
+- **Example trigger:** On Windows, `rustwerk task add Foo
+  --id CON` then `rustwerk task describe CON`.
+- **Suggested fix:** Reject Windows-reserved names in
+  `TaskId::new`. Out of scope for the v0.39.0 feat commit.
 
 ---
 

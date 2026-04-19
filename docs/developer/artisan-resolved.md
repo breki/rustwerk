@@ -6,6 +6,28 @@ findings.
 
 ---
 
+### AQ-rename-bundle — `task rename` code quality fixes
+
+- **Date:** 2026-04-19
+- **Category:** Abstraction Boundaries / API Design / Error Handling
+- **Commit context:** feat: `task rename` command (v0.39.0)
+- **Resolution:** Extracted duplicated `.md` rename logic
+  from `cmd_task_rename` and the batch post-save loop into
+  a reusable `file_store::rename_task_description` helper
+  (refuses overwrite, returns a typed
+  `DescriptionFileError`) plus `remove_task_description`.
+  The batch driver no longer re-parses commands in a
+  post-save loop; side effects are collected into a typed
+  `FileSideEffect` enum during `execute_one` and replayed
+  after `save_project`. `cmd_task_rename` parameter names
+  aligned with the clap variant (`old_id, new_id`) for
+  end-to-end vocabulary consistency.  `cmd_task_remove`
+  and batch `task.remove` now clean up description files,
+  matching the lifecycle behavior of `task rename`.
+  `unwrap()` on the just-checked `tasks.remove(old_id)`
+  replaced with `.expect("existence checked above")` to
+  document the invariant at the call site.
+
 ### AQ-046 — `run_check` missing `→ cargo ...` trace line
 
 - **Date:** 2026-04-19

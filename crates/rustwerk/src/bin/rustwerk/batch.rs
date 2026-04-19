@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use rustwerk::domain::developer::{Developer, DeveloperId};
 use rustwerk::domain::project::Project;
 use rustwerk::domain::task::{Effort, EffortEntry, Task, TaskId};
+use rustwerk::persistence::file_store;
 
 use crate::{load_project, parse_status, save_project};
 
@@ -43,9 +44,27 @@ fn parse_batch_tags(arr: &[serde_json::Value]) -> Result<Vec<&str>> {
         .collect()
 }
 
+/// Side effects that must be applied to the filesystem
+/// after the project JSON is persisted. Collected during
+/// batch execution and replayed in order so chained
+/// renames (A→B, B→C) process files correctly.
+#[derive(Debug)]
+enum FileSideEffect {
+    RenameDescription { from: TaskId, to: TaskId },
+    RemoveDescription { id: TaskId },
+}
+
 /// Execute a single batch command against a project.
+/// File system changes (description file moves/deletes)
+/// are recorded into `side_effects` rather than applied
+/// directly, so they can be replayed after the
+/// project JSON is persisted.
 #[allow(clippy::too_many_lines)] // dispatch match
-fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
+fn execute_one(
+    project: &mut Project,
+    cmd: &BatchCommand,
+    side_effects: &mut Vec<FileSideEffect>,
+) -> Result<String> {
     let args = &cmd.args;
     match cmd.command.as_str() {
         "task.add" => {
@@ -86,6 +105,8 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 args["id"].as_str().context("task.remove requires 'id'")?;
             let task_id = TaskId::new(id)?;
             let task = project.remove_task(&task_id)?;
+            side_effects
+                .push(FileSideEffect::RemoveDescription { id: task_id.clone() });
             Ok(format!("Removed {task_id}: {}", task.title))
         }
         "task.update" => {
@@ -109,6 +130,22 @@ fn execute_one(project: &mut Project, cmd: &BatchCommand) -> Result<String> {
                 project.set_task_tags(&task_id, &tag_strs)?;
             }
             Ok(format!("Updated {task_id}"))
+        }
+        "task.rename" => {
+            let from = args["old_id"]
+                .as_str()
+                .context("task.rename requires 'old_id'")?;
+            let to = args["new_id"]
+                .as_str()
+                .context("task.rename requires 'new_id'")?;
+            let from_id = TaskId::new(from)?;
+            let to_id = TaskId::new(to)?;
+            project.rename_task(&from_id, &to_id)?;
+            side_effects.push(FileSideEffect::RenameDescription {
+                from: from_id.clone(),
+                to: to_id.clone(),
+            });
+            Ok(format!("{from_id}: renamed to {to_id}"))
         }
         "task.status" => {
             let id =
@@ -254,9 +291,10 @@ pub(super) fn cmd_batch(file: Option<&str>) -> Result<()> {
         return Ok(());
     }
     let mut results = Vec::with_capacity(commands.len());
+    let mut side_effects: Vec<FileSideEffect> = Vec::new();
 
     for (i, cmd) in commands.iter().enumerate() {
-        match execute_one(&mut project, cmd) {
+        match execute_one(&mut project, cmd, &mut side_effects) {
             Ok(msg) => {
                 results.push(BatchResult {
                     index: i,
@@ -287,7 +325,49 @@ pub(super) fn cmd_batch(file: Option<&str>) -> Result<()> {
     }
 
     save_project(&root, &project)?;
+
+    // Apply filesystem side effects in command order.
+    // The project JSON is already persisted, so failures
+    // here leave the JSON and the filesystem diverged.
+    // We collect errors, print `results` first so agents
+    // can see what commands succeeded at the JSON level,
+    // then report fs failures on stderr and exit
+    // non-zero.
+    let mut fs_errors: Vec<String> = Vec::new();
+    for effect in &side_effects {
+        match effect {
+            FileSideEffect::RenameDescription { from, to } => {
+                if let Err(e) =
+                    file_store::rename_task_description(&root, from, to)
+                {
+                    fs_errors.push(format!(
+                        "rename description {from} -> {to}: {e}"
+                    ));
+                }
+            }
+            FileSideEffect::RemoveDescription { id } => {
+                if let Err(e) = file_store::remove_task_description(&root, id) {
+                    fs_errors.push(format!("remove description {id}: {e}"));
+                }
+            }
+        }
+    }
+
     println!("{}", serde_json::to_string_pretty(&results)?);
+    if !fs_errors.is_empty() {
+        let report = serde_json::json!({
+            "error": "project.json was saved, but one or \
+                      more description-file operations \
+                      failed",
+            "fs_errors": fs_errors,
+        });
+        eprintln!("{}", serde_json::to_string_pretty(&report)?);
+        bail!(
+            "batch applied to project.json but {} file \
+             operation(s) failed",
+            fs_errors.len()
+        );
+    }
     Ok(())
 }
 
@@ -298,6 +378,12 @@ mod tests {
 
     fn test_project() -> Project {
         Project::new("Test").unwrap()
+    }
+
+    /// Test helper that drops the collected side effects.
+    fn run_one(p: &mut Project, cmd: &BatchCommand) -> Result<String> {
+        let mut sfx = Vec::new();
+        execute_one(p, cmd, &mut sfx)
     }
 
     fn add_test_dev(p: &mut Project, id: &str) {
@@ -322,7 +408,7 @@ mod tests {
                 "desc": "A description"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("MT"));
         assert_eq!(p.task_count(), 1);
         let task = &p.tasks[&TaskId::new("MT").unwrap()];
@@ -338,7 +424,7 @@ mod tests {
             command: "task.add".into(),
             args: serde_json::json!({"title": "Auto"}),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("T0001"));
     }
 
@@ -349,7 +435,7 @@ mod tests {
             command: "task.add".into(),
             args: serde_json::json!({}),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     #[test]
@@ -362,7 +448,7 @@ mod tests {
                 "complexity": 5_000_000_000_u64
             }),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     // --- execute_one: task.remove ---
@@ -376,7 +462,7 @@ mod tests {
             command: "task.remove".into(),
             args: serde_json::json!({"id": "A"}),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("Removed"));
         assert_eq!(p.task_count(), 0);
     }
@@ -395,7 +481,7 @@ mod tests {
                 "title": "New"
             }),
         };
-        execute_one(&mut p, &cmd).unwrap();
+        run_one(&mut p, &cmd).unwrap();
         assert_eq!(p.tasks[&TaskId::new("A").unwrap()].title, "New");
     }
 
@@ -408,7 +494,7 @@ mod tests {
             command: "task.update".into(),
             args: serde_json::json!({"id": "A"}),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     // --- execute_one: task.status ---
@@ -425,7 +511,7 @@ mod tests {
                 "status": "in-progress"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("IN_PROGRESS"));
     }
 
@@ -446,7 +532,7 @@ mod tests {
                 "force": true
             }),
         };
-        execute_one(&mut p, &cmd).unwrap();
+        run_one(&mut p, &cmd).unwrap();
     }
 
     // --- execute_one: task.assign/unassign ---
@@ -464,7 +550,7 @@ mod tests {
                 "to": "alice"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("alice"));
     }
 
@@ -482,7 +568,7 @@ mod tests {
             command: "task.unassign".into(),
             args: serde_json::json!({"id": "A"}),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("unassigned"));
     }
 
@@ -502,7 +588,7 @@ mod tests {
                 "to": "A"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("depends on"));
     }
 
@@ -525,8 +611,51 @@ mod tests {
                 "to": "A"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("Removed"));
+    }
+
+    // --- execute_one: task.rename ---
+
+    #[test]
+    fn batch_task_rename() {
+        let mut p = test_project();
+        p.add_task(TaskId::new("A").unwrap(), Task::new("X").unwrap())
+            .unwrap();
+        let cmd = BatchCommand {
+            command: "task.rename".into(),
+            args: serde_json::json!({
+                "old_id": "A",
+                "new_id": "B"
+            }),
+        };
+        let msg = run_one(&mut p, &cmd).unwrap();
+        assert!(msg.contains("renamed to B"));
+        assert!(p.tasks.contains_key(&TaskId::new("B").unwrap()));
+        assert!(!p.tasks.contains_key(&TaskId::new("A").unwrap()));
+    }
+
+    #[test]
+    fn batch_task_rename_missing_old() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "task.rename".into(),
+            args: serde_json::json!({
+                "old_id": "NOPE",
+                "new_id": "X"
+            }),
+        };
+        assert!(run_one(&mut p, &cmd).is_err());
+    }
+
+    #[test]
+    fn batch_task_rename_missing_args() {
+        let mut p = test_project();
+        let cmd = BatchCommand {
+            command: "task.rename".into(),
+            args: serde_json::json!({"old_id": "A"}),
+        };
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     // --- execute_one: effort.log/estimate ---
@@ -547,7 +676,7 @@ mod tests {
                 "note": "some work"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("2H"));
     }
 
@@ -563,7 +692,7 @@ mod tests {
                 "amount": "5H"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("5H"));
     }
 
@@ -581,7 +710,7 @@ mod tests {
                 "role": "lead"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("alice"));
         assert_eq!(p.developers.len(), 1);
     }
@@ -596,7 +725,7 @@ mod tests {
                 "name": "Bob"
             }),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("bob"));
     }
 
@@ -607,7 +736,7 @@ mod tests {
             command: "dev.add".into(),
             args: serde_json::json!({"name": "Alice"}),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     #[test]
@@ -617,7 +746,7 @@ mod tests {
             command: "dev.add".into(),
             args: serde_json::json!({"id": "x"}),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     #[test]
@@ -631,7 +760,7 @@ mod tests {
                 "name": "Alice"
             }),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     #[test]
@@ -642,7 +771,7 @@ mod tests {
             command: "dev.remove".into(),
             args: serde_json::json!({"id": "alice"}),
         };
-        let msg = execute_one(&mut p, &cmd).unwrap();
+        let msg = run_one(&mut p, &cmd).unwrap();
         assert!(msg.contains("alice"));
         assert!(p.developers.is_empty());
     }
@@ -654,7 +783,7 @@ mod tests {
             command: "dev.remove".into(),
             args: serde_json::json!({"id": "nobody"}),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 
     // --- execute_one: unknown command ---
@@ -666,6 +795,6 @@ mod tests {
             command: "nope".into(),
             args: serde_json::json!({}),
         };
-        assert!(execute_one(&mut p, &cmd).is_err());
+        assert!(run_one(&mut p, &cmd).is_err());
     }
 }

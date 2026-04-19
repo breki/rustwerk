@@ -74,6 +74,7 @@ rustwerk task add "Title" [--id ID] [--desc DESC] \
 rustwerk task update <ID> [--title T] [--desc D] \
   [--tags T]
 rustwerk task remove <ID>
+rustwerk task rename <OLD_ID> <NEW_ID>
 rustwerk task status <ID> <STATUS> [--force]
 rustwerk task list [--available] [--active] \
   [--status S] [--assignee DEV] [--chain ID] \
@@ -179,6 +180,23 @@ must be provided.
   "id": "AUTH-01",
   "title": "Implement OAuth2",
   "tags": ["backend", "security", "oauth"]
+}}
+```
+
+#### task.rename
+
+Change a task's ID. Updates all dependency references
+across other tasks. The task's status, effort log,
+tags, and assignee are preserved. The per-task
+description file at `.rustwerk/tasks/<ID>.md` is moved
+by the CLI batch driver after the JSON is persisted.
+Task ID references in free-form text are not rewritten.
+
+- **Required:** `old_id` (string), `new_id` (string)
+
+```json
+{"command": "task.rename", "args": {
+  "old_id": "AUTH-01", "new_id": "AUTH-SIGNIN"
 }}
 ```
 

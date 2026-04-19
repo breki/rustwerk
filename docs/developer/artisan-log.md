@@ -4,10 +4,37 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-048
+**Next ID:** AQ-049
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.
+
+---
+
+### AQ-048 — `domain/project/mod.rs` exceeds 500-line threshold
+
+- **Date:** 2026-04-19
+- **Category:** Module Size
+- **Commit context:** feat: `task rename` command (v0.39.0)
+- **Description:** `crates/rustwerk/src/domain/project/mod.rs`
+  is over 1000 lines, holding add/remove/rename/update task
+  logic, dependency graph operations (add_dependency,
+  remove_dependency, has_cycle), effort logging, developer
+  registry operations, and a large inline test block. The
+  new `rename_task` added ~60 lines and pushed it further.
+- **Better approach:** The `project` directory is already a
+  module; split the impl block across sibling files
+  following the existing pattern (bottleneck.rs,
+  critical_path.rs, queries.rs, etc.):
+  `project/tasks.rs` — add/remove/rename/update task
+  operations; `project/dependencies.rs` — add_dependency,
+  remove_dependency, has_cycle; `project/effort.rs` —
+  log_effort, set_effort_estimate; `project/developers.rs` —
+  add/remove developer. Each sub-module keeps its own
+  `#[cfg(test)]` block. `project/mod.rs` stays focused on
+  the struct definition, constructors, and serialization.
+  Deferred from the v0.39.0 feat commit to keep the feature
+  and refactor changesets separate.
 
 ---
 

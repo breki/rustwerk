@@ -199,6 +199,113 @@ fn task_remove() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// --- task rename ---
+
+#[test]
+fn task_rename_basic() {
+    let dir = temp_dir("rename-basic");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "Orig", "--id", "A"]);
+    let (stdout, _, ok) = run(&dir, &["task", "rename", "A", "B"]);
+    assert!(ok);
+    assert!(stdout.contains("A: renamed to B"));
+    let (stdout, _, _) = run(&dir, &["task", "list"]);
+    assert!(stdout.contains("B"));
+    assert!(!stdout.contains(" A "));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_rename_updates_dependencies() {
+    let dir = temp_dir("rename-deps");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T1", "--id", "A"]);
+    run(&dir, &["task", "add", "T2", "--id", "B"]);
+    run(&dir, &["task", "depend", "B", "A"]);
+    let (_, _, ok) = run(&dir, &["task", "rename", "A", "A2"]);
+    assert!(ok);
+    // B should now block on A2, not A.
+    let (stdout, _, _) = run(&dir, &["task", "list", "--chain", "B"]);
+    assert!(stdout.contains("A2"));
+    assert!(!stdout.contains(" A "));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_rename_moves_description_file() {
+    let dir = temp_dir("rename-desc");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let tasks_dir = dir.join(".rustwerk/tasks");
+    fs::create_dir_all(&tasks_dir).unwrap();
+    fs::write(tasks_dir.join("A.md"), "desc body").unwrap();
+    let (_, _, ok) = run(&dir, &["task", "rename", "A", "B"]);
+    assert!(ok);
+    assert!(!tasks_dir.join("A.md").exists());
+    assert!(tasks_dir.join("B.md").exists());
+    let (stdout, _, _) = run(&dir, &["task", "describe", "B"]);
+    assert!(stdout.contains("desc body"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_rename_to_existing_id_fails() {
+    let dir = temp_dir("rename-dup");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T1", "--id", "A"]);
+    run(&dir, &["task", "add", "T2", "--id", "B"]);
+    let (_, _, ok) = run(&dir, &["task", "rename", "A", "B"]);
+    assert!(!ok);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_rename_refuses_to_overwrite_existing_md() {
+    let dir = temp_dir("rename-overwrite");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let tasks_dir = dir.join(".rustwerk/tasks");
+    fs::create_dir_all(&tasks_dir).unwrap();
+    fs::write(tasks_dir.join("A.md"), "keep").unwrap();
+    fs::write(tasks_dir.join("B.md"), "stale").unwrap();
+    let (_, stderr, ok) = run(&dir, &["task", "rename", "A", "B"]);
+    assert!(!ok);
+    assert!(
+        stderr.contains("destination description file"),
+        "stderr: {stderr}"
+    );
+    // Project.json unchanged: task A still exists.
+    let (stdout, _, _) = run(&dir, &["task", "list"]);
+    assert!(stdout.contains("A "), "list output: {stdout}");
+    // Both description files preserved.
+    assert_eq!(fs::read_to_string(tasks_dir.join("A.md")).unwrap(), "keep");
+    assert_eq!(fs::read_to_string(tasks_dir.join("B.md")).unwrap(), "stale");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_remove_deletes_description_file() {
+    let dir = temp_dir("remove-desc");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let tasks_dir = dir.join(".rustwerk/tasks");
+    fs::create_dir_all(&tasks_dir).unwrap();
+    fs::write(tasks_dir.join("A.md"), "body").unwrap();
+    let (_, _, ok) = run(&dir, &["task", "remove", "A"]);
+    assert!(ok);
+    assert!(!tasks_dir.join("A.md").exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_rename_missing_task_fails() {
+    let dir = temp_dir("rename-missing");
+    run(&dir, &["init", "P"]);
+    let (_, _, ok) = run(&dir, &["task", "rename", "NOPE", "X"]);
+    assert!(!ok);
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // --- task update ---
 
 #[test]

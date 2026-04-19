@@ -77,7 +77,38 @@ pub(crate) fn cmd_task_remove(id: &str) -> Result<()> {
     let task_id = TaskId::new(id)?;
     let task = project.remove_task(&task_id)?;
     save_project(&root, &project)?;
+    let removed_desc = file_store::remove_task_description(&root, &task_id)?;
     println!("Removed task {task_id}: {}", task.title);
+    if removed_desc {
+        println!("Removed description file");
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_task_rename(old_id: &str, new_id: &str) -> Result<()> {
+    let (root, mut project) = load_project()?;
+    let from = TaskId::new(old_id)?;
+    let to = TaskId::new(new_id)?;
+
+    // Preflight: refuse if the destination description
+    // file already exists, so we never reach a state
+    // where project.json says the task is renamed but a
+    // stale .md file would be overwritten.
+    if from != to {
+        let new_path = file_store::task_description_path(&root, &to);
+        if new_path.exists() {
+            anyhow::bail!(
+                "destination description file already \
+                 exists: {}",
+                new_path.display()
+            );
+        }
+    }
+
+    project.rename_task(&from, &to)?;
+    save_project(&root, &project)?;
+    file_store::rename_task_description(&root, &from, &to)?;
+    println!("{from}: renamed to {to}");
     Ok(())
 }
 

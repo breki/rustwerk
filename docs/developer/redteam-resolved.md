@@ -5,6 +5,31 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-071(rename) — `task rename` JSON-vs-filesystem divergence
+
+- **Date:** 2026-04-19
+- **Category:** Correctness (Medium)
+- **Commit context:** feat: `task rename` command (v0.39.0)
+- **Resolution:** The CLI `cmd_task_rename` now preflights
+  the destination description-file path and bails with a
+  non-zero exit code if it already exists, preventing
+  overwrite. The batch driver collects filesystem side
+  effects as a typed `FileSideEffect` enum during
+  `execute_one` (instead of re-parsing the command JSON in
+  a separate post-save loop with silent `let...else`
+  fallbacks), then replays them in command order after
+  `save_project` and reports any fs failures in a JSON
+  error envelope on stderr while exiting non-zero. A new
+  `file_store::rename_task_description` helper refuses to
+  overwrite an existing destination and returns a typed
+  `DescriptionFileError`. `file_store::remove_task_description`
+  is used by `task remove` (CLI and batch) so the `.md`
+  cleanup path is consistent across lifecycle operations.
+  Defensive dedup + self-ref stripping added to
+  `Project::rename_task` to preserve the no-duplicate /
+  no-self-cycle invariants even in the face of unexpected
+  state.
+
 ### RT-067 — `extract_check_errors` drops user errors that mention "aborting"
 
 - **Date:** 2026-04-19

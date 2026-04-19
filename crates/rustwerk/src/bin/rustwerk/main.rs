@@ -32,8 +32,8 @@ use commands::{
     cmd_depend, cmd_dev_add, cmd_dev_list, cmd_dev_remove, cmd_effort_estimate,
     cmd_effort_log, cmd_init, cmd_report_bottlenecks, cmd_report_complete,
     cmd_report_effort, cmd_show, cmd_status, cmd_task_add, cmd_task_assign,
-    cmd_task_describe, cmd_task_list, cmd_task_remove, cmd_task_status,
-    cmd_task_unassign, cmd_task_update, cmd_undepend,
+    cmd_task_describe, cmd_task_list, cmd_task_remove, cmd_task_rename,
+    cmd_task_status, cmd_task_unassign, cmd_task_update, cmd_undepend,
 };
 use gantt::cmd_gantt;
 
@@ -225,6 +225,15 @@ enum TaskAction {
         /// Task ID to remove.
         id: String,
     },
+    /// Rename a task (change its ID). Updates all
+    /// dependency references and renames the description
+    /// file.
+    Rename {
+        /// Current task ID.
+        old_id: String,
+        /// New task ID.
+        new_id: String,
+    },
     /// Update a task's title or description.
     Update {
         /// Task ID.
@@ -349,6 +358,9 @@ fn main() -> Result<()> {
                 cmd_task_status(&id, &status, force)
             }
             TaskAction::Remove { id } => cmd_task_remove(&id),
+            TaskAction::Rename { old_id, new_id } => {
+                cmd_task_rename(&old_id, &new_id)
+            }
             TaskAction::Assign { id, to } => {
                 let dev = resolve_developer(to)?;
                 cmd_task_assign(&id, &dev)

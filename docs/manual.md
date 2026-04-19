@@ -346,6 +346,21 @@ Description files are stored at
 `.rustwerk/tasks/<ID>.md`. If no file exists, the
 command prints the expected path so you can create one.
 
+### Rename a Task
+
+Change a task's ID. Updates all dependency references
+across other tasks and renames the description file at
+`.rustwerk/tasks/<ID>.md` if it exists:
+
+```
+rustwerk task rename AUTH-LOGIN AUTH-SIGNIN
+```
+
+All embedded task data (status, effort log, tags,
+assignee) is preserved. Fails if the new ID is already
+in use. Task ID references in free-form text (effort
+notes, description bodies) are not rewritten.
+
 ### Remove a Task
 
 ```
@@ -688,6 +703,7 @@ echo '[
 | `task.add` | `title` | `id`, `desc`, `complexity`, `effort`, `tags` (array) |
 | `task.remove` | `id` | |
 | `task.update` | `id` | `title`, `desc`, `tags` (array) |
+| `task.rename` | `old_id`, `new_id` | |
 | `task.status` | `id`, `status` | `force` (bool) |
 | `task.assign` | `id`, `to` | |
 | `task.unassign` | `id` | |
