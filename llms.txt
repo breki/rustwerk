@@ -66,6 +66,47 @@ Integer, range 1–1000.
 
 ## CLI Commands
 
+### Global Flags
+
+`--json` is accepted on every command (before or after
+the subcommand). When set, the command emits a single
+pretty-printed JSON object to stdout instead of human
+text. Error output is unchanged (stays on stderr via
+`anyhow`). `batch` rejects `--json` as redundant (it
+always emits JSON).
+
+Numeric fields that may be non-finite (percentages,
+effort hour totals) use `Option<f64>` — the JSON value
+is `null` if the computation was not finite, avoiding
+invalid JSON from `NaN` / `Infinity`.
+
+JSON shapes (success only):
+
+| Command | Shape |
+|---------|-------|
+| `init NAME` | `{"name","path"}` |
+| `show` | `{"name","description"?,"created_at","summary":{...}}` |
+| `status` | `{"name","summary","active":[{"id","assignee"?}],"bottleneck_count","critical_path":[ID...],"critical_path_complexity"}` |
+| `task add` | `{"id","title"}` |
+| `task update` | `{"id","title"}` |
+| `task remove` | `{"id","title","description_removed"}` |
+| `task rename` | `{"old_id","new_id"}` |
+| `task status` | `{"id","status"}` (status is snake_case) |
+| `task list` | `{"tasks":[{"id","title","status","complexity"?,"assignee"?,"critical","tags":[...]}]}` |
+| `task assign` | `{"id","assignee":"DEV"}` |
+| `task unassign` | `{"id","assignee":null}` |
+| `task depend` / `undepend` | `{"from","to"}` |
+| `task describe` | `{"id","path" (project-relative),"exists":bool,"content":STRING\|null}` |
+| `dev add` / `remove` | `{"id","name"}` |
+| `dev list` | `{"developers":[{"id","name","email"?,"role"?}]}` |
+| `effort log` | `{"id","logged_hours","total_hours"}` |
+| `effort estimate` | `{"id","estimate_hours"}` |
+| `report complete` | `{"name","summary":{"total","todo","in_progress","blocked","done","on_hold","pct_complete":F\|null,"total_estimated_hours":F\|null,"total_actual_hours":F\|null,"total_complexity"},"critical_path":[ID...],"critical_path_complexity"}` |
+| `report effort` | `{"developers":[{"developer","hours"}],"total_hours"}` |
+| `report bottlenecks` | `{"bottlenecks":[{"id","downstream_count","status","assignee"?,"ready"}]}` |
+| `gantt [--remaining]` | `{"rows":[{"id","start","width","end","status","critical"}]}` |
+| `tree [--remaining]` | `{"name","nodes":[{"id","status","depth","reference","children":[...]}]}` |
+
 ### Task Management
 
 ```

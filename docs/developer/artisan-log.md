@@ -4,10 +4,34 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-063
+**Next ID:** AQ-074
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.
+
+---
+
+### AQ-073 — `commands/task.rs` still over the 500-line threshold
+
+- **Date:** 2026-04-19
+- **Category:** Module Size (deferred)
+- **Commit context:** feat: add `--json` global output
+  flag (v0.42.0)
+- **Description:** `crates/rustwerk/src/bin/rustwerk/commands/task.rs`
+  is 573 lines after the CLI-JSON refactor — over the
+  500-line threshold. Contains 11 `cmd_*` entry points
+  plus filter helpers plus list rendering plus ~10 DTO
+  structs.
+- **Better approach:** Split into a `commands/task/`
+  subdirectory, e.g. `list.rs` (filters + TaskListItem
+  + TaskListOutput + filter_task_ids); `crud.rs` (add,
+  update, remove, rename); `workflow.rs` (assign,
+  unassign, status, depend, undepend); `describe.rs`.
+- **Deferred rationale:** The CLI-JSON refactor was
+  already large; splitting would obscure the diff.
+  The DTOs are cohesive and the file is coherent to
+  read. Worth revisiting if/when additional task
+  commands are added.
 
 ---
 

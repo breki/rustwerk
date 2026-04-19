@@ -6,6 +6,64 @@ findings.
 
 ---
 
+### AQ-063..072 — CLI-JSON craftsmanship bundle
+
+- **Date:** 2026-04-19
+- **Category:** Architecture + API design + error handling
+- **Commit context:** feat: add `--json` global output
+  flag (v0.42.0)
+- **Resolution:** Ten findings from the Artisan review
+  of the initial CLI-JSON implementation were
+  addressed in the same commit as part of a wholesale
+  refactor:
+  - **AQ-063** — `json: bool` threaded through every
+    `cmd_*` mixed business and presentation logic.
+    Refactored: each `cmd_*` now returns an owned DTO
+    implementing `Serialize + RenderText`. A new
+    `render::emit<T>(&T, OutputFormat)` helper in
+    `src/bin/rustwerk/render.rs` picks the renderer;
+    the ~20 if/else branches collapsed to one call
+    site each in `main.rs`.
+  - **AQ-064** — `json_output::print` propagated
+    `BrokenPipe` as an error, making
+    `rustwerk ... --json | head` exit non-zero with
+    a scary message. `render::emit` now treats
+    `BrokenPipe` as a clean `Ok(())`.
+  - **AQ-065** — `cmd_init` emitted the raw user
+    argument instead of the persisted project name.
+    Now reads `project.metadata.name` after
+    `Project::new` normalisation.
+  - **AQ-066** — `cmd_task_describe --json` could
+    not distinguish missing from empty (`content:
+    null` in both cases). Added explicit `exists:
+    bool` field.
+  - **AQ-067** — `CompleteReportOutput` duplicated
+    all `SummaryJson` fields inline. Now embeds
+    `summary: SummaryJson`; the shared shape is
+    authoritative.
+  - **AQ-068** — `TaskAssignJson` was reused for
+    `task unassign` and `DevAddJson` for
+    `dev remove`. Introduced a neutral `TaskRef { id,
+    title }` / `DevRef { id, name }` pair; the
+    renamed `TaskAssignOutput` DTO now models both
+    assign and unassign explicitly via
+    `Option<DeveloperId>`.
+  - **AQ-069** — `created_at` was hand-formatted as
+    `String`. Now serialized via serde's default
+    `chrono::DateTime<Utc>` encoder (RFC 3339).
+  - **AQ-070** — `EffortByDevJson.hours` was
+    `f64`; lifted to `Option<f64>` (RT-089) and kept
+    the name since the pair `{developer, hours}` is
+    unambiguous in its container.
+  - **AQ-071** — `print_json` helper went unused
+    after the refactor. Deleted.
+  - **AQ-072** — `gantt::render_gantt` /
+    `tree::render_tree` wrote to stdout directly via
+    `print!` / `println!`, which prevented them from
+    being invoked from `RenderText::render_text`.
+    Both now take `&mut dyn Write` and propagate
+    `io::Result`. Tests updated to pass a `Vec<u8>`.
+
 ### AQ-056..061 — Installer script craftsmanship (bundle)
 
 - **Date:** 2026-04-19

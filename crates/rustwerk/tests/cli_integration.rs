@@ -1675,6 +1675,267 @@ fn task_describe_nonexistent_task_fails() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// --- --json global flag ---
+
+fn json_stdout(stdout: &str) -> serde_json::Value {
+    serde_json::from_str(stdout)
+        .unwrap_or_else(|e| panic!("expected JSON stdout, got: {stdout} ({e})"))
+}
+
+#[test]
+fn json_init_emits_name_and_path() {
+    let dir = temp_dir("json-init");
+    let (stdout, _, ok) = run(&dir, &["init", "Proj", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["name"], "Proj");
+    assert!(v["path"].is_string());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_flag_works_before_subcommand() {
+    // `--json` is `global = true`, so it must be accepted
+    // before the subcommand as well as after.
+    let dir = temp_dir("json-global-position");
+    let (stdout, _, ok) = run(&dir, &["--json", "init", "P"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["name"], "P");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_task_add_emits_id_and_title() {
+    let dir = temp_dir("json-task-add");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) =
+        run(&dir, &["task", "add", "Hello", "--id", "T1", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["id"], "T1");
+    assert_eq!(v["title"], "Hello");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_task_status_emits_snake_case_status() {
+    let dir = temp_dir("json-task-status");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let (stdout, _, ok) =
+        run(&dir, &["task", "status", "A", "in-progress", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["id"], "A");
+    assert_eq!(v["status"], "in_progress");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_task_list_emits_tasks_array() {
+    let dir = temp_dir("json-task-list");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "First", "--id", "A"]);
+    run(&dir, &["task", "add", "Second", "--id", "B"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    let tasks = v["tasks"].as_array().expect("tasks should be array");
+    assert_eq!(tasks.len(), 2);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_task_list_empty_emits_empty_array() {
+    let dir = temp_dir("json-task-list-empty");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) = run(&dir, &["task", "list", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert!(v["tasks"].as_array().unwrap().is_empty());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_task_assign_and_unassign() {
+    let dir = temp_dir("json-task-assign");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["dev", "add", "alice", "Alice"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+
+    let (stdout, _, ok) =
+        run(&dir, &["task", "assign", "A", "alice", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["id"], "A");
+    assert_eq!(v["assignee"], "alice");
+
+    let (stdout, _, ok) = run(&dir, &["task", "unassign", "A", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["id"], "A");
+    assert!(v["assignee"].is_null());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_task_describe_reports_missing_content() {
+    let dir = temp_dir("json-describe-missing");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let (stdout, _, ok) = run(&dir, &["task", "describe", "A", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["id"], "A");
+    assert_eq!(v["exists"], false);
+    assert!(v["content"].is_null());
+    // Path is project-relative, not absolute.
+    let path = v["path"].as_str().unwrap();
+    assert!(!std::path::Path::new(path).is_absolute(), "path: {path}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn batch_rejects_redundant_json_flag() {
+    let dir = temp_dir("batch-json-rejects");
+    run(&dir, &["init", "P"]);
+    let (_stdout, stderr, ok) = run(&dir, &["batch", "--json"]);
+    assert!(!ok, "batch --json should fail");
+    assert!(
+        stderr.contains("redundant"),
+        "expected 'redundant' in stderr, got: {stderr}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_show_includes_summary() {
+    let dir = temp_dir("json-show");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let (stdout, _, ok) = run(&dir, &["show", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["name"], "P");
+    assert_eq!(v["summary"]["total"], 1);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_status_includes_active_and_critical_path() {
+    let dir = temp_dir("json-status");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let (stdout, _, ok) = run(&dir, &["status", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["name"], "P");
+    assert!(v["summary"].is_object());
+    assert!(v["active"].is_array());
+    assert!(v["critical_path"].is_array());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_dev_list_emits_developers_array() {
+    let dir = temp_dir("json-dev-list");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["dev", "add", "bob", "Bob", "--role", "lead"]);
+    let (stdout, _, ok) = run(&dir, &["dev", "list", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    let devs = v["developers"].as_array().unwrap();
+    assert_eq!(devs.len(), 1);
+    assert_eq!(devs[0]["id"], "bob");
+    assert_eq!(devs[0]["role"], "lead");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_effort_estimate_returns_hours() {
+    let dir = temp_dir("json-effort-estimate");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let (stdout, _, ok) =
+        run(&dir, &["effort", "estimate", "A", "2D", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["id"], "A");
+    // 2 days = 16 hours.
+    assert!((v["estimate_hours"].as_f64().unwrap() - 16.0).abs() < 1e-9);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_report_complete_emits_summary() {
+    let dir = temp_dir("json-report-complete");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A", "--complexity", "3"]);
+    let (stdout, _, ok) = run(&dir, &["report", "complete", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["name"], "P");
+    assert_eq!(v["summary"]["total"], 1);
+    assert_eq!(v["summary"]["total_complexity"], 3);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_report_bottlenecks_emits_array() {
+    let dir = temp_dir("json-bottlenecks");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "A", "--id", "A"]);
+    run(&dir, &["task", "add", "B", "--id", "B"]);
+    run(&dir, &["task", "depend", "B", "A"]);
+    let (stdout, _, ok) = run(&dir, &["report", "bottlenecks", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    let bn = v["bottlenecks"].as_array().unwrap();
+    assert!(!bn.is_empty());
+    assert_eq!(bn[0]["id"], "A");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_gantt_emits_rows() {
+    let dir = temp_dir("json-gantt");
+    run(&dir, &["init", "P"]);
+    run(&dir, &["task", "add", "T", "--id", "A", "--complexity", "3"]);
+    let (stdout, _, ok) = run(&dir, &["gantt", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    let rows = v["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], "A");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn json_tree_emits_nodes() {
+    let dir = temp_dir("json-tree");
+    run(&dir, &["init", "Tree"]);
+    run(&dir, &["task", "add", "T", "--id", "A"]);
+    let (stdout, _, ok) = run(&dir, &["tree", "--json"]);
+    assert!(ok);
+    let v = json_stdout(&stdout);
+    assert_eq!(v["name"], "Tree");
+    assert!(v["nodes"].is_array());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn non_json_output_unchanged() {
+    // Sanity check that --json is opt-in only: without the
+    // flag, human text is still produced.
+    let dir = temp_dir("non-json-sanity");
+    run(&dir, &["init", "P"]);
+    let (stdout, _, ok) = run(&dir, &["task", "add", "Hello", "--id", "A"]);
+    assert!(ok);
+    assert!(stdout.starts_with("Created task A"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // --- version ---
 
 #[test]

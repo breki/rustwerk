@@ -2,11 +2,13 @@ use std::env;
 use std::io::{self, IsTerminal, Write};
 
 use anyhow::Result;
+use serde::Serialize;
 
 use rustwerk::domain::project::TreeNode;
-use rustwerk::domain::task::Status;
+use rustwerk::domain::task::{Status, TaskId};
 
 use crate::load_project;
+use crate::render::RenderText;
 
 /// ANSI color codes.
 mod ansi {
@@ -44,17 +46,69 @@ fn status_style(status: Status) -> &'static str {
     }
 }
 
+/// Serialized tree node.
+#[derive(Serialize)]
+pub(crate) struct TreeNodeDto {
+    pub(crate) id: TaskId,
+    pub(crate) status: Status,
+    pub(crate) depth: usize,
+    pub(crate) reference: bool,
+    pub(crate) children: Vec<TreeNodeDto>,
+}
+
+fn to_dto(node: &TreeNode, depth: usize) -> TreeNodeDto {
+    match node {
+        TreeNode::Reference { id, status } => TreeNodeDto {
+            id: id.clone(),
+            status: *status,
+            depth,
+            reference: true,
+            children: Vec::new(),
+        },
+        TreeNode::Task {
+            id,
+            status,
+            children,
+        } => TreeNodeDto {
+            id: id.clone(),
+            status: *status,
+            depth,
+            reference: false,
+            children: children.iter().map(|c| to_dto(c, depth + 1)).collect(),
+        },
+    }
+}
+
+/// `tree` command output.
+#[derive(Serialize)]
+pub(crate) struct TreeOutput {
+    pub(crate) name: String,
+    pub(crate) nodes: Vec<TreeNodeDto>,
+    #[serde(skip_serializing)]
+    raw: Vec<TreeNode>,
+}
+
+impl RenderText for TreeOutput {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        render_tree(w, &self.name, &self.raw, use_color());
+        Ok(())
+    }
+}
+
 /// Entry point for the `tree` command.
-pub(super) fn cmd_tree(remaining: bool) -> Result<()> {
+pub(super) fn cmd_tree(remaining: bool) -> Result<TreeOutput> {
     let (_root, project) = load_project()?;
-    let nodes = if remaining {
+    let raw = if remaining {
         project.task_tree_remaining()
     } else {
         project.task_tree()
     };
-    let mut out = io::stdout().lock();
-    render_tree(&mut out, &project.metadata.name, &nodes, use_color());
-    Ok(())
+    let nodes = raw.iter().map(|n| to_dto(n, 0)).collect();
+    Ok(TreeOutput {
+        name: project.metadata.name,
+        nodes,
+        raw,
+    })
 }
 
 /// Render the dependency tree to a writer.

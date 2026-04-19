@@ -5,6 +5,57 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-091 — `task describe --json` leaked absolute filesystem path
+
+- **Date:** 2026-04-19
+- **Category:** Information leak
+- **Commit context:** feat: add `--json` global output
+  flag (v0.42.0)
+- **Description:** Initial CLI-JSON implementation
+  emitted `path: path.display().to_string()` using the
+  absolute path. Text mode only showed the path on the
+  not-found branch; JSON always showed it, leaking the
+  developer's home directory in every successful call.
+- **Resolution:** In the same commit, `cmd_task_describe`
+  now calls `abs_path.strip_prefix(&root)` and emits a
+  project-relative path. Integration test
+  `json_task_describe_reports_missing_content` now
+  asserts the path is not absolute.
+
+### RT-090 — `task describe` had no size cap on file read
+
+- **Date:** 2026-04-19
+- **Category:** Denial of service
+- **Commit context:** feat: add `--json` global output
+  flag (v0.42.0)
+- **Description:** `std::fs::read_to_string` on the
+  description file had no limit — a symlink to
+  `/dev/zero` or a multi-GB file would exhaust memory.
+  Pretty-printed JSON escape expansion amplified the
+  worst case (e.g. NULs become `\u0000`, 6× expansion).
+- **Resolution:** `cmd_task_describe` now stats the
+  file, refuses anything over `MAX_DESCRIBE_BYTES`
+  (1 MiB), and wraps the read in `File::take` so the
+  cap is enforced even if the metadata races. UTF-8
+  errors are surfaced with a clear "description file
+  is not valid UTF-8: <path>" message.
+
+### RT-089 — Float NaN/Infinity could abort JSON output post-save
+
+- **Date:** 2026-04-19
+- **Category:** Correctness
+- **Commit context:** feat: add `--json` global output
+  flag (v0.42.0)
+- **Description:** `serde_json::to_writer_pretty`
+  refuses non-finite `f64`. Commands like `effort log
+  --json` mutate state, save to disk, then serialize —
+  a `NaN`/`Inf` would exit non-zero after the save had
+  already landed.
+- **Resolution:** `render::finite(f64) -> Option<f64>`
+  helper, applied to every float field in the DTOs
+  (`pct_complete`, hour totals, percentages). Non-finite
+  values serialize as `null` instead of aborting.
+
 ### RT-084..088 — Installer script hardening (bundle)
 
 - **Date:** 2026-04-19

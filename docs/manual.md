@@ -671,6 +671,48 @@ The "State" column combines status and readiness:
 Only non-done tasks are included. Tasks with no
 downstream dependents are omitted.
 
+## JSON Output (`--json`)
+
+Every command accepts a global `--json` flag. When set,
+the command emits a single pretty-printed JSON object
+to stdout instead of human-readable text. The flag can
+appear before or after the subcommand:
+
+```
+rustwerk --json task list
+rustwerk task list --json
+```
+
+JSON is intended for scripts and AI agents. It is the
+stable, machine-readable contract; human text may
+change. The exact shape per command is documented in
+`llms.txt`. A few examples:
+
+```
+$ rustwerk task add "Title" --id T1 --json
+{
+  "id": "T1",
+  "title": "Title"
+}
+
+$ rustwerk task list --json
+{
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Title",
+      "status": "todo",
+      "critical": false,
+      "tags": []
+    }
+  ]
+}
+```
+
+Errors stay human-readable on stderr (structured error
+output is a separate feature). `batch` already emits
+JSON natively, so `--json` is a no-op there.
+
 ## Batch Commands
 
 Execute multiple commands atomically from a JSON file

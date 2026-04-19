@@ -1,8 +1,8 @@
-mod dev;
-mod effort;
-mod project;
-mod report;
-mod task;
+pub(crate) mod dev;
+pub(crate) mod effort;
+pub(crate) mod project;
+pub(crate) mod report;
+pub(crate) mod task;
 
 pub(crate) use dev::{cmd_dev_add, cmd_dev_list, cmd_dev_remove};
 pub(crate) use effort::{cmd_effort_estimate, cmd_effort_log};

@@ -1,6 +1,7 @@
 mod batch;
 mod commands;
 mod gantt;
+mod render;
 mod tree;
 
 use std::env;
@@ -45,6 +46,10 @@ use gantt::cmd_gantt;
              orchestration CLI"
 )]
 struct Cli {
+    /// Emit machine-readable JSON to stdout instead of
+    /// human-readable text. Available on every command.
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -333,101 +338,162 @@ pub(crate) fn parse_status(s: &str) -> Result<Status> {
     }
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    match cli.command {
-        Commands::Init { name } => cmd_init(&name),
-        Commands::Show => cmd_show(),
-        Commands::Task { action } => match action {
-            TaskAction::Add {
-                title,
-                id,
-                desc,
-                complexity,
-                effort,
-                tags,
-            } => cmd_task_add(
+fn dispatch_task(action: TaskAction, fmt: render::OutputFormat) -> Result<()> {
+    match action {
+        TaskAction::Add {
+            title,
+            id,
+            desc,
+            complexity,
+            effort,
+            tags,
+        } => render::emit(
+            &cmd_task_add(
                 &title,
                 id.as_deref(),
                 desc.as_deref(),
                 complexity,
                 effort.as_deref(),
                 tags.as_deref(),
-            ),
-            TaskAction::Status { id, status, force } => {
-                cmd_task_status(&id, &status, force)
-            }
-            TaskAction::Remove { id } => cmd_task_remove(&id),
-            TaskAction::Rename { old_id, new_id } => {
-                cmd_task_rename(&old_id, &new_id)
-            }
-            TaskAction::Assign { id, to } => {
-                let dev = resolve_developer(to)?;
-                cmd_task_assign(&id, &dev)
-            }
-            TaskAction::Unassign { id } => cmd_task_unassign(&id),
-            TaskAction::Update {
-                id,
-                title,
-                desc,
-                tags,
-            } => cmd_task_update(
+            )?,
+            fmt,
+        ),
+        TaskAction::Status { id, status, force } => {
+            render::emit(&cmd_task_status(&id, &status, force)?, fmt)
+        }
+        TaskAction::Remove { id } => {
+            render::emit(&cmd_task_remove(&id)?, fmt)
+        }
+        TaskAction::Rename { old_id, new_id } => {
+            render::emit(&cmd_task_rename(&old_id, &new_id)?, fmt)
+        }
+        TaskAction::Assign { id, to } => {
+            let dev = resolve_developer(to)?;
+            render::emit(&cmd_task_assign(&id, &dev)?, fmt)
+        }
+        TaskAction::Unassign { id } => {
+            render::emit(&cmd_task_unassign(&id)?, fmt)
+        }
+        TaskAction::Update {
+            id,
+            title,
+            desc,
+            tags,
+        } => render::emit(
+            &cmd_task_update(
                 &id,
                 title.as_deref(),
                 desc.as_deref(),
                 tags.as_deref(),
-            ),
-            TaskAction::List {
-                available,
-                active,
-                status,
-                assignee,
-                chain,
-                tag,
-            } => cmd_task_list(
+            )?,
+            fmt,
+        ),
+        TaskAction::List {
+            available,
+            active,
+            status,
+            assignee,
+            chain,
+            tag,
+        } => render::emit(
+            &cmd_task_list(
                 available,
                 active,
                 status.as_deref(),
                 assignee.as_deref(),
                 chain.as_deref(),
                 tag.as_deref(),
-            ),
-            TaskAction::Depend { from, to } => cmd_depend(&from, &to),
-            TaskAction::Undepend { from, to } => cmd_undepend(&from, &to),
-            TaskAction::Describe { id } => cmd_task_describe(&id),
-        },
-        Commands::Dev { action } => match action {
-            DevAction::Add {
-                id,
-                name,
-                email,
-                role,
-            } => cmd_dev_add(&id, &name, email.as_deref(), role.as_deref()),
-            DevAction::Remove { id } => cmd_dev_remove(&id),
-            DevAction::List => cmd_dev_list(),
-        },
-        Commands::Report { action } => match action {
-            ReportAction::Complete => cmd_report_complete(),
-            ReportAction::Effort => cmd_report_effort(),
-            ReportAction::Bottlenecks => cmd_report_bottlenecks(),
-        },
-        Commands::Batch { file } => cmd_batch(file.as_deref()),
-        Commands::Gantt { remaining } => cmd_gantt(remaining),
-        Commands::Status => cmd_status(),
-        Commands::Tree { remaining } => tree::cmd_tree(remaining),
-        Commands::Effort { action } => match action {
-            EffortAction::Log {
-                id,
-                amount,
-                dev,
-                note,
-            } => {
-                let dev = resolve_developer(dev)?;
-                cmd_effort_log(&id, &amount, &dev, note.as_deref())
+            )?,
+            fmt,
+        ),
+        TaskAction::Depend { from, to } => {
+            render::emit(&cmd_depend(&from, &to)?, fmt)
+        }
+        TaskAction::Undepend { from, to } => {
+            render::emit(&cmd_undepend(&from, &to)?, fmt)
+        }
+        TaskAction::Describe { id } => {
+            render::emit(&cmd_task_describe(&id)?, fmt)
+        }
+    }
+}
+
+fn dispatch_dev(action: DevAction, fmt: render::OutputFormat) -> Result<()> {
+    match action {
+        DevAction::Add {
+            id,
+            name,
+            email,
+            role,
+        } => render::emit(
+            &cmd_dev_add(&id, &name, email.as_deref(), role.as_deref())?,
+            fmt,
+        ),
+        DevAction::Remove { id } => render::emit(&cmd_dev_remove(&id)?, fmt),
+        DevAction::List => render::emit(&cmd_dev_list()?, fmt),
+    }
+}
+
+fn dispatch_effort(
+    action: EffortAction,
+    fmt: render::OutputFormat,
+) -> Result<()> {
+    match action {
+        EffortAction::Log {
+            id,
+            amount,
+            dev,
+            note,
+        } => {
+            let dev = resolve_developer(dev)?;
+            render::emit(
+                &cmd_effort_log(&id, &amount, &dev, note.as_deref())?,
+                fmt,
+            )
+        }
+        EffortAction::Estimate { id, amount } => {
+            render::emit(&cmd_effort_estimate(&id, &amount)?, fmt)
+        }
+    }
+}
+
+fn dispatch_report(
+    action: &ReportAction,
+    fmt: render::OutputFormat,
+) -> Result<()> {
+    match action {
+        ReportAction::Complete => render::emit(&cmd_report_complete()?, fmt),
+        ReportAction::Effort => render::emit(&cmd_report_effort()?, fmt),
+        ReportAction::Bottlenecks => {
+            render::emit(&cmd_report_bottlenecks()?, fmt)
+        }
+    }
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let fmt = render::OutputFormat::from_json_flag(cli.json);
+    match cli.command {
+        Commands::Init { name } => render::emit(&cmd_init(&name)?, fmt),
+        Commands::Show => render::emit(&cmd_show()?, fmt),
+        Commands::Task { action } => dispatch_task(action, fmt),
+        Commands::Dev { action } => dispatch_dev(action, fmt),
+        Commands::Report { action } => dispatch_report(&action, fmt),
+        Commands::Batch { file } => {
+            if cli.json {
+                anyhow::bail!(
+                    "`batch` always emits JSON; --json is redundant"
+                );
             }
-            EffortAction::Estimate { id, amount } => {
-                cmd_effort_estimate(&id, &amount)
-            }
-        },
+            cmd_batch(file.as_deref())
+        }
+        Commands::Gantt { remaining } => {
+            render::emit(&cmd_gantt(remaining)?, fmt)
+        }
+        Commands::Status => render::emit(&cmd_status()?, fmt),
+        Commands::Tree { remaining } => {
+            render::emit(&tree::cmd_tree(remaining)?, fmt)
+        }
+        Commands::Effort { action } => dispatch_effort(action, fmt),
     }
 }

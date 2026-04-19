@@ -1,155 +1,242 @@
 use std::collections::BTreeMap;
+use std::io::{self, Write};
 
 use anyhow::Result;
+use serde::Serialize;
 
+use rustwerk::domain::task::{Status, TaskId};
+
+use crate::commands::project::SummaryJson;
 use crate::load_project;
+use crate::render::{finite, RenderText};
 
-/// PM completion summary report.
-pub(crate) fn cmd_report_complete() -> Result<()> {
+/// `report complete` output. Embeds the shared
+/// [`SummaryJson`] instead of duplicating its fields.
+#[derive(Serialize)]
+pub(crate) struct CompleteReportOutput {
+    pub(crate) name: String,
+    pub(crate) summary: SummaryJson,
+    pub(crate) critical_path: Vec<TaskId>,
+    pub(crate) critical_path_complexity: u32,
+}
+
+impl RenderText for CompleteReportOutput {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        let s = &self.summary;
+        writeln!(w, "Completion Report: {}", self.name)?;
+        writeln!(w, "{}", "=".repeat(40))?;
+
+        writeln!(w)?;
+        writeln!(w, "Status Breakdown")?;
+        writeln!(w, "  Done:        {:>3}", s.done)?;
+        writeln!(w, "  In Progress: {:>3}", s.in_progress)?;
+        writeln!(w, "  Blocked:     {:>3}", s.blocked)?;
+        writeln!(w, "  On Hold:     {:>3}", s.on_hold)?;
+        writeln!(w, "  Todo:        {:>3}", s.todo)?;
+        writeln!(w, "  Total:       {:>3}", s.total)?;
+
+        writeln!(w)?;
+        let bar_width = 30usize;
+        let filled = if s.total > 0 {
+            (f64::from(s.done) / f64::from(s.total) * bar_width as f64).round()
+                as usize
+        } else {
+            0
+        };
+        let filled = filled.min(bar_width);
+        let empty = bar_width - filled;
+        writeln!(
+            w,
+            "Completion: [{}>{}] {:.0}%",
+            "=".repeat(filled),
+            " ".repeat(empty),
+            s.pct_complete.unwrap_or(0.0),
+        )?;
+
+        let est = s.total_estimated_hours.unwrap_or(0.0);
+        let act = s.total_actual_hours.unwrap_or(0.0);
+        if est > 0.0 || act > 0.0 {
+            writeln!(w)?;
+            writeln!(w, "Effort")?;
+            writeln!(w, "  Estimated:   {est:.1}H")?;
+            writeln!(w, "  Actual:      {act:.1}H")?;
+            if est > 0.0 {
+                let pct = act / est * 100.0;
+                writeln!(w, "  Burn rate:   {pct:.0}%")?;
+            }
+        }
+
+        if s.total_complexity > 0 {
+            writeln!(w)?;
+            writeln!(w, "Complexity:    {} total", s.total_complexity)?;
+        }
+
+        writeln!(w)?;
+        if self.critical_path.is_empty() {
+            writeln!(w, "Critical Path: (none remaining)")?;
+        } else {
+            writeln!(
+                w,
+                "Critical Path: {} tasks, {} complexity",
+                self.critical_path.len(),
+                self.critical_path_complexity
+            )?;
+            write!(w, "  ")?;
+            for (i, id) in self.critical_path.iter().enumerate() {
+                if i > 0 {
+                    write!(w, " → ")?;
+                }
+                write!(w, "{id}")?;
+            }
+            writeln!(w)?;
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn cmd_report_complete() -> Result<CompleteReportOutput> {
     let (_root, project) = load_project()?;
     let s = project.summary();
     let (crit_path, crit_len) = project.remaining_critical_path();
-
-    println!("Completion Report: {}", project.metadata.name);
-    println!("{}", "=".repeat(40));
-
-    // Status breakdown.
-    println!();
-    println!("Status Breakdown");
-    println!("  Done:        {:>3}", s.done);
-    println!("  In Progress: {:>3}", s.in_progress);
-    println!("  Blocked:     {:>3}", s.blocked);
-    println!("  On Hold:     {:>3}", s.on_hold);
-    println!("  Todo:        {:>3}", s.todo);
-    println!("  Total:       {:>3}", s.total);
-
-    // Completion bar.
-    println!();
-    let bar_width = 30;
-    let filled = if s.total > 0 {
-        (f64::from(s.done) / f64::from(s.total) * bar_width as f64).round()
-            as usize
-    } else {
-        0
-    };
-    let empty = bar_width - filled;
-    println!(
-        "Completion: [{}>{}] {:.0}%",
-        "=".repeat(filled),
-        " ".repeat(empty),
-        s.pct_complete,
-    );
-
-    // Effort.
-    if s.total_estimated_hours > 0.0 || s.total_actual_hours > 0.0 {
-        println!();
-        println!("Effort");
-        println!("  Estimated:   {:.1}H", s.total_estimated_hours);
-        println!("  Actual:      {:.1}H", s.total_actual_hours);
-        if s.total_estimated_hours > 0.0 {
-            let pct = s.total_actual_hours / s.total_estimated_hours * 100.0;
-            println!("  Burn rate:   {pct:.0}%");
-        }
-    }
-
-    // Complexity.
-    if s.total_complexity > 0 {
-        println!();
-        println!("Complexity:    {} total", s.total_complexity);
-    }
-
-    // Critical path.
-    println!();
-    if crit_path.is_empty() {
-        println!("Critical Path: (none remaining)");
-    } else {
-        println!(
-            "Critical Path: {} tasks, {} complexity",
-            crit_path.len(),
-            crit_len
-        );
-        print!("  ");
-        for (i, id) in crit_path.iter().enumerate() {
-            if i > 0 {
-                print!(" → ");
-            }
-            print!("{id}");
-        }
-        println!();
-    }
-
-    Ok(())
+    Ok(CompleteReportOutput {
+        name: project.metadata.name.clone(),
+        summary: (&s).into(),
+        critical_path: crit_path,
+        critical_path_complexity: crit_len,
+    })
 }
 
-/// Effort breakdown per developer.
-pub(crate) fn cmd_report_effort() -> Result<()> {
-    let (_root, project) = load_project()?;
+/// One developer row in the effort report.
+#[derive(Serialize)]
+pub(crate) struct EffortByDev {
+    pub(crate) developer: String,
+    pub(crate) hours: Option<f64>,
+}
 
-    // Aggregate effort by developer across all tasks.
-    let mut by_dev: BTreeMap<&str, f64> = BTreeMap::new();
+/// `report effort` output.
+#[derive(Serialize)]
+pub(crate) struct EffortReportOutput {
+    pub(crate) developers: Vec<EffortByDev>,
+    pub(crate) total_hours: Option<f64>,
+}
+
+impl RenderText for EffortReportOutput {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        if self.developers.is_empty() {
+            return writeln!(w, "No effort logged.");
+        }
+        let total = self.total_hours.unwrap_or(0.0);
+        writeln!(w, "Effort by Developer")?;
+        writeln!(w, "{}", "=".repeat(40))?;
+        for entry in &self.developers {
+            let hours = entry.hours.unwrap_or(0.0);
+            let pct = if total > 0.0 { hours / total * 100.0 } else { 0.0 };
+            writeln!(
+                w,
+                "  {:<20} {hours:>7.1}H ({pct:.0}%)",
+                entry.developer
+            )?;
+        }
+        writeln!(w, "{}", "-".repeat(40))?;
+        writeln!(w, "  {:<20} {total:>7.1}H", "Total")
+    }
+}
+
+pub(crate) fn cmd_report_effort() -> Result<EffortReportOutput> {
+    let (_root, project) = load_project()?;
+    let mut by_dev: BTreeMap<String, f64> = BTreeMap::new();
     for task in project.tasks.values() {
         for entry in &task.effort_entries {
-            *by_dev.entry(&entry.developer).or_insert(0.0) +=
+            *by_dev.entry(entry.developer.clone()).or_insert(0.0) +=
                 entry.effort.to_hours();
         }
     }
-
-    if by_dev.is_empty() {
-        println!("No effort logged.");
-        return Ok(());
-    }
-
     let total: f64 = by_dev.values().sum();
-    println!("Effort by Developer");
-    println!("{}", "=".repeat(40));
-    for (dev, hours) in &by_dev {
-        let pct = hours / total * 100.0;
-        println!("  {dev:<20} {hours:>7.1}H ({pct:.0}%)");
-    }
-    println!("{}", "-".repeat(40));
-    println!("  {:<20} {:>7.1}H", "Total", total);
-
-    Ok(())
+    let developers = by_dev
+        .into_iter()
+        .map(|(developer, hours)| EffortByDev {
+            developer,
+            hours: finite(hours),
+        })
+        .collect();
+    Ok(EffortReportOutput {
+        developers,
+        total_hours: finite(total),
+    })
 }
 
-/// PM bottleneck report — tasks blocking the most
-/// downstream work, enriched with assignee and status.
-pub(crate) fn cmd_report_bottlenecks() -> Result<()> {
+/// One bottleneck row.
+#[derive(Serialize)]
+pub(crate) struct BottleneckItem {
+    pub(crate) id: TaskId,
+    pub(crate) downstream_count: usize,
+    pub(crate) status: Status,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) assignee: Option<String>,
+    pub(crate) ready: bool,
+}
+
+/// `report bottlenecks` output.
+#[derive(Serialize)]
+pub(crate) struct BottleneckReportOutput {
+    pub(crate) bottlenecks: Vec<BottleneckItem>,
+}
+
+impl RenderText for BottleneckReportOutput {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        if self.bottlenecks.is_empty() {
+            return writeln!(w, "No bottlenecks detected.");
+        }
+
+        let iw = self
+            .bottlenecks
+            .iter()
+            .map(|bn| bn.id.as_str().len())
+            .max()
+            .unwrap_or(2)
+            .max(2);
+
+        writeln!(w, "Bottleneck Report")?;
+        writeln!(
+            w,
+            "  {:<iw$}  {:>6}  {:<13} Assignee",
+            "ID", "Blocks", "State"
+        )?;
+        writeln!(w, "{}", "-".repeat(iw + 36))?;
+
+        for bn in &self.bottlenecks {
+            let assignee = bn.assignee.as_deref().unwrap_or("-");
+            let state = if bn.status == Status::InProgress {
+                "in progress"
+            } else if bn.status == Status::OnHold {
+                "on hold"
+            } else if bn.ready {
+                "ready"
+            } else {
+                "blocked"
+            };
+            writeln!(
+                w,
+                "  {:<iw$}  {:>6}  {:<13} {}",
+                bn.id, bn.downstream_count, state, assignee
+            )?;
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn cmd_report_bottlenecks() -> Result<BottleneckReportOutput> {
     let (_root, project) = load_project()?;
-    let bottlenecks = project.bottlenecks();
-
-    if bottlenecks.is_empty() {
-        println!("No bottlenecks detected.");
-        return Ok(());
-    }
-
-    let iw = bottlenecks
-        .iter()
-        .map(|bn| bn.id.as_str().len())
-        .max()
-        .unwrap_or(2)
-        .max(2);
-
-    println!("Bottleneck Report");
-    println!("  {:<iw$}  {:>6}  {:<13} Assignee", "ID", "Blocks", "State",);
-    println!("{}", "-".repeat(iw + 36));
-
-    for bn in &bottlenecks {
-        let assignee = bn.assignee.as_deref().unwrap_or("-");
-        let state = if bn.status == rustwerk::domain::task::Status::InProgress {
-            "in progress"
-        } else if bn.status == rustwerk::domain::task::Status::OnHold {
-            "on hold"
-        } else if bn.ready {
-            "ready"
-        } else {
-            "blocked"
-        };
-        println!(
-            "  {:<iw$}  {:>6}  {:<13} {}",
-            bn.id, bn.downstream_count, state, assignee,
-        );
-    }
-
-    Ok(())
+    let bottlenecks = project
+        .bottlenecks()
+        .into_iter()
+        .map(|bn| BottleneckItem {
+            id: bn.id,
+            downstream_count: bn.downstream_count,
+            status: bn.status,
+            assignee: bn.assignee,
+            ready: bn.ready,
+        })
+        .collect();
+    Ok(BottleneckReportOutput { bottlenecks })
 }

@@ -1,12 +1,14 @@
 use std::env;
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal, Write};
 
 use anyhow::Result;
+use serde::Serialize;
 
 use rustwerk::domain::project::GanttRow;
-use rustwerk::domain::task::Status;
+use rustwerk::domain::task::{Status, TaskId};
 
 use crate::load_project;
+use crate::render::RenderText;
 
 /// Default terminal width when detection fails.
 const FALLBACK_WIDTH: usize = 80;
@@ -63,25 +65,63 @@ fn bar_style(status: Status, critical: bool) -> (&'static str, &'static str) {
     }
 }
 
+/// Serialized Gantt row.
+#[derive(Serialize)]
+pub(crate) struct GanttRowDto {
+    pub(crate) id: TaskId,
+    pub(crate) start: u32,
+    pub(crate) width: u32,
+    pub(crate) end: u32,
+    pub(crate) status: Status,
+    pub(crate) critical: bool,
+}
+
+/// `gantt` command output.
+#[derive(Serialize)]
+pub(crate) struct GanttOutput {
+    pub(crate) rows: Vec<GanttRowDto>,
+    #[serde(skip_serializing)]
+    raw: Vec<GanttRow>,
+}
+
+impl RenderText for GanttOutput {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        render_gantt(w, &self.raw, term_width(), use_color())
+    }
+}
+
 /// Entry point for the `gantt` command.
-pub(super) fn cmd_gantt(remaining: bool) -> Result<()> {
+pub(super) fn cmd_gantt(remaining: bool) -> Result<GanttOutput> {
     let (_root, project) = load_project()?;
-    let rows = if remaining {
+    let raw = if remaining {
         project.gantt_schedule_remaining()
     } else {
         project.gantt_schedule()
     };
-    let width = term_width();
-    render_gantt(&rows, width, use_color());
-    Ok(())
+    let rows = raw
+        .iter()
+        .map(|r| GanttRowDto {
+            id: r.id.clone(),
+            start: r.start,
+            width: r.width,
+            end: r.end(),
+            status: r.status,
+            critical: r.critical,
+        })
+        .collect();
+    Ok(GanttOutput { rows, raw })
 }
 
-/// Render a Gantt chart to stdout. Separated from
-/// `cmd_gantt` for testability.
-fn render_gantt(rows: &[GanttRow], terminal_width: usize, color: bool) {
+/// Render a Gantt chart. Separated from `cmd_gantt` for
+/// testability.
+fn render_gantt(
+    w: &mut dyn Write,
+    rows: &[GanttRow],
+    terminal_width: usize,
+    color: bool,
+) -> io::Result<()> {
     if rows.is_empty() {
-        println!("No tasks.");
-        return;
+        return writeln!(w, "No tasks.");
     }
 
     let max_end = rows.iter().map(GanttRow::end).max().unwrap_or(0);
@@ -114,30 +154,29 @@ fn render_gantt(rows: &[GanttRow], terminal_width: usize, color: bool) {
     // if they'd overlap when scaled.
     let tick_interval = if scale_factor < 0.5 { 10 } else { 5 };
 
-    print!("{dim}{:width$}", "", width = label_width);
+    write!(w, "{dim}{:width$}", "", width = label_width)?;
     for i in (0..max_end).step_by(tick_interval as usize) {
         let col = scale_pos(i, scale_factor);
         let next_col =
             scale_pos((i + tick_interval).min(max_end), scale_factor);
         let gap = next_col.saturating_sub(col);
         if gap > 0 {
-            print!("{i:<gap$}");
+            write!(w, "{i:<gap$}")?;
         }
     }
-    println!("{rst}");
-    print!("{dim}{:width$}", "", width = label_width);
+    writeln!(w, "{rst}")?;
+    write!(w, "{dim}{:width$}", "", width = label_width)?;
     for i in 0..scaled_max {
-        // Find if this column corresponds to a tick.
         let is_tick = (0..max_end)
             .step_by(tick_interval as usize)
             .any(|t| scale_pos(t, scale_factor) == i);
         if is_tick {
-            print!("\u{252C}"); // ┬
+            write!(w, "\u{252C}")?;
         } else {
-            print!("\u{2500}"); // ─
+            write!(w, "\u{2500}")?;
         }
     }
-    println!("{rst}");
+    writeln!(w, "{rst}")?;
 
     // Rows — bar rendering uses domain methods.
     for row in rows {
@@ -183,7 +222,8 @@ fn render_gantt(rows: &[GanttRow], terminal_width: usize, color: bool) {
         let right_cap = GanttRow::RIGHT_CAP;
 
         let padding = " ".repeat(s_start);
-        print!(
+        writeln!(
+            w,
             "{crit_style}{marker}{rst}\
              {id_style}{:<width$}{rst} \
              {padding}{bar_color}\
@@ -191,9 +231,9 @@ fn render_gantt(rows: &[GanttRow], terminal_width: usize, color: bool) {
              {rst}",
             row.id,
             width = id_width,
-        );
-        println!();
+        )?;
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -273,14 +313,16 @@ mod tests {
 
     #[test]
     fn render_gantt_empty_says_no_tasks() {
-        render_gantt(&[], 80, false);
-        // Doesn't panic — prints "No tasks."
+        let mut buf = Vec::new();
+        render_gantt(&mut buf, &[], 80, false).unwrap();
+        assert!(String::from_utf8(buf).unwrap().contains("No tasks."));
     }
 
     #[test]
     fn render_gantt_single_task_no_color() {
         let rows = vec![make_row("A", 0, 5, Status::Todo, false)];
-        render_gantt(&rows, 80, false);
+        let mut buf = Vec::new();
+        render_gantt(&mut buf, &rows, 80, false).unwrap();
     }
 
     #[test]
@@ -290,7 +332,8 @@ mod tests {
             make_row("B", 5, 3, Status::InProgress, false),
             make_row("C", 0, 2, Status::Blocked, false),
         ];
-        render_gantt(&rows, 80, true);
+        let mut buf = Vec::new();
+        render_gantt(&mut buf, &rows, 80, true).unwrap();
     }
 
     #[test]
@@ -299,16 +342,17 @@ mod tests {
             make_row("A", 0, 10, Status::Done, false),
             make_row("B", 10, 20, Status::Todo, false),
         ];
-        render_gantt(&rows, 30, false);
+        let mut buf = Vec::new();
+        render_gantt(&mut buf, &rows, 30, false).unwrap();
     }
 
     #[test]
     fn render_gantt_low_scale_factor_uses_wider_ticks() {
-        // Many tasks to force scale_factor < 0.5.
         let rows = vec![
             make_row("A", 0, 100, Status::Done, false),
             make_row("B", 100, 100, Status::Todo, false),
         ];
-        render_gantt(&rows, 40, false);
+        let mut buf = Vec::new();
+        render_gantt(&mut buf, &rows, 40, false).unwrap();
     }
 }

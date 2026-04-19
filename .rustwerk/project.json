@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-19T18:16:16.251411800Z"
+    "modified_at": "2026-04-19T18:23:40.982239100Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -130,7 +130,7 @@
     },
     "CLI-JSON": {
       "title": "Global --json output flag for all commands",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "CLI-TASK"
       ],

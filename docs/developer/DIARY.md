@@ -7,6 +7,49 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Add global `--json` output flag (v0.42.0)
+
+    CLI-JSON. Every command now accepts a global
+    `--json` flag (`#[arg(long, global = true)]` in
+    the `Cli` struct) and emits a pretty-printed JSON
+    DTO to stdout instead of the default human text.
+    Integration tests cover every shape; `llms.txt`
+    documents the contract so AI agents can rely on
+    the wire format instead of scraping text. Error
+    output is unchanged (structured JSON errors are
+    AI-ERRORS' job). `batch` always emitted JSON, so
+    `--json` is now rejected there as redundant
+    instead of silently swallowed.
+
+    During the Artisan review the initial `json: bool`
+    threading through every `cmd_*` was flagged as
+    mixing business logic with presentation — the
+    follow-up refactor in the same commit reshapes
+    every command to return an owned DTO implementing
+    `Serialize + RenderText`. A new
+    `src/bin/rustwerk/render.rs` module holds the
+    trait plus a generic `emit<T>(&T, OutputFormat)`
+    helper; the ~20 if/else branches collapse to a
+    single call site per command in `main.rs`.
+    Adding a new output format (yaml, ndjson) is now
+    a single-file change. See AQ-063..AQ-072 in
+    `artisan-resolved.md`.
+
+    Red team caught three real issues, all resolved in
+    the same commit: `task describe --json` leaked
+    absolute filesystem paths (RT-091 — now project-
+    relative via `strip_prefix(&root)`); no size cap on
+    description file read (RT-090 — `MAX_DESCRIBE_BYTES
+    = 1 MiB` with `File::take`, symlink to `/dev/zero`
+    now refused); and `serde_json` aborting on
+    non-finite floats post-save (RT-089 — all `f64`
+    fields wrapped in `Option<f64>` via a `finite()`
+    helper that serializes `NaN`/`Inf` as `null`).
+    `BrokenPipe` on stdout is now a clean exit. One
+    finding deferred: `commands/task.rs` is 573 lines,
+    over the 500-line module threshold; logged as
+    AQ-073 pending a natural split.
+
 - Wire plugin crates into workspace (v0.41.0)
 
     PLG-WORKSPACE scaffolding for the plugin architecture.
