@@ -7,6 +7,49 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Add Jira plugin (v0.44.0)
+
+    PLG-JIRA. The `rustwerk-jira-plugin` cdylib now
+    exports the four FFI entry points required by
+    `rustwerk-plugin-api` (`api_version`, `info`,
+    `push_tasks`, `free_string`) and can actually push
+    rustwerk tasks as Jira Cloud issues over HTTPS via
+    Basic auth. Mapping to issue JSON is deliberately
+    minimal here (`project` + `summary` +
+    plain-text `description` + `issuetype: Task`);
+    PLG-MAP upgrades the description to Atlassian
+    Document Format and adds richer fields.
+
+    The crate layout is split for testability:
+    `config.rs` owns `JiraConfig` parsing + validation,
+    `jira_client.rs` owns the HTTP client behind an
+    `HttpClient` trait, `mapping.rs` builds the issue
+    payload, and `lib.rs` is the FFI façade. All unit
+    tests exercise the trait with a recording
+    `MockHttp` / `FakeHttp` fake — no network traffic
+    in `cargo xtask validate`. 57 new tests.
+
+    Gateway fallback mirrors the marketplace-v2 Python
+    behaviour: if the direct
+    `{jira_url}/rest/api/3/issue` call returns 401 or
+    404, the plugin fetches `{jira_url}/_edge/tenant_info`
+    to discover `cloudId`, then retries via
+    `https://api.atlassian.com/ex/jira/{cloudId}/rest/api/3/issue`.
+    Any other status short-circuits without fallback.
+
+    Red-team review on the hardening surface raised
+    seven findings, all fixed in-commit — see
+    `redteam-resolved.md` for RT-093..RT-099 covering
+    host allowlist, https-only scheme, transport-error
+    sanitisation, response-body truncation, HTTP
+    timeouts, narrowing `unsafe_code` to `lib.rs`
+    only, and pinning rustls as the sole TLS backend.
+
+    Not yet user-facing: the plugin builds, the host's
+    `plugin_host.rs` can discover and load it, but the
+    `rustwerk plugin list` / `plugin push` commands
+    are still PLG-CLI. Artisan: no findings.
+
 - Close red-team backlog items (v0.43.1)
 
     Backlog sweep. The open red-team log had grown to

@@ -5,6 +5,91 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-JIRA hardening sweep (2026-04-19)
+
+Seven findings raised and fixed in the same commit
+(`feat: add jira plugin`, v0.44.0). All were discovered
+during red-team review of the new Jira plugin cdylib
+before it was exposed to any end-user flow.
+
+- **RT-093 — Gateway fallback leaked token to
+  attacker-controlled `jira_url`.** If a project
+  supplied `jira_url` pointing at a host the attacker
+  controlled, the plugin would POST the Basic-auth
+  credentials to that host, follow a crafted
+  `_edge/tenant_info` response containing any
+  `cloudId`, then replay the same credentials +
+  payload to
+  `https://api.atlassian.com/ex/jira/{attacker-cloud-id}/…`
+  — handing the operator's real Jira token to a
+  tenant the attacker owned.
+  **Fix:** `JiraConfig::validate` now rejects any
+  `jira_url` whose host does not end in
+  `.atlassian.net` (case-insensitively, with a
+  non-empty subdomain label). New `DisallowedHost`
+  variant on `ConfigError`, seven unit tests covering
+  the positive and negative cases.
+
+- **RT-094 — `jira_url` scheme not validated; allowed
+  `http://`.** Basic-auth would have been sent in
+  clear text on any plaintext URL.
+  **Fix:** `InsecureScheme` variant; `validate_jira_url`
+  rejects any scheme other than `https`.
+
+- **RT-095 — Transport-error messages could leak URL
+  userinfo.** `format!("HTTP transport error: {t}")`
+  stringified `ureq::Transport`, which includes the
+  target URL; a `jira_url` of the form
+  `https://user:token@site.atlassian.net` would
+  surface the credentials in
+  `TaskPushResult.message`.
+  **Fix:** new `transport_error_message` renders only
+  `ErrorKind` (plus short message when present),
+  never the URL.
+
+- **RT-096 — Unbounded Jira response body embedded in
+  per-task error messages.** A large response body
+  (or a malicious proxy returning multi-MB payloads)
+  would be placed verbatim into every failing
+  `TaskPushResult.message`; with N tasks the
+  aggregated `PluginResult` easily exceeded the
+  host's 10 MiB response cap, silently aborting the
+  whole batch with a host-side parse failure.
+  **Fix:** new `truncate_body` caps response bodies
+  at 4 KiB on a UTF-8 boundary and appends
+  `"…[truncated]"` so the signal survives. Three
+  unit tests including a multi-byte codepoint
+  straddling the cap.
+
+- **RT-097 — No HTTP timeouts configured.** Bare
+  `ureq::get`/`post` helpers have no read timeout;
+  a slow Jira would hang the plugin (and the host)
+  indefinitely.
+  **Fix:** `UreqClient` now holds a preconfigured
+  `ureq::Agent` with 30-second connect/read/write
+  timeouts. Constructed via `UreqClient::default()`.
+
+- **RT-098 — `unsafe_code = "allow"` was set
+  crate-wide.** Only the FFI exports in `lib.rs`
+  actually need unsafe — `config.rs`, `jira_client.rs`,
+  `mapping.rs` have no need.
+  **Fix:** crate-level lint changed to `deny`;
+  `lib.rs` opts in with `#![allow(unsafe_code)]`
+  mirroring the `plugin_host.rs` precedent. Any new
+  module accidentally reaching for unsafe will fail
+  to compile.
+
+- **RT-099 — `ureq` TLS backend not pinned.** The
+  default ureq 2.x feature set pulled `native-tls`
+  (and hence system OpenSSL on Linux), making
+  portable-binary builds dependent on whatever TLS
+  stack happened to be around.
+  **Fix:** `Cargo.toml` now declares
+  `ureq = { default-features = false, features = ["json", "tls"] }`
+  so rustls + webpki-roots is the only option.
+
+---
+
 ### Red-team backlog sweep (2026-04-19)
 
 Resolved four findings in a single `fix:` commit
