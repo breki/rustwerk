@@ -12,6 +12,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum XCommand {
+    /// Fast compile check (no tests, concise output)
+    Check,
     /// Run clippy (deny warnings)
     Clippy,
     /// Run all tests
@@ -43,6 +45,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
+        XCommand::Check => run_check(),
         XCommand::Clippy => run_clippy(),
         XCommand::Test { filter } => run_test(filter.as_deref()),
         XCommand::Validate => run_clippy()
@@ -57,6 +60,43 @@ fn main() {
         eprintln!("xtask error: {e}");
         std::process::exit(1);
     }
+}
+
+/// Maximum number of error lines to display for `check`.
+const CHECK_MAX_ERROR_LINES: usize = 10;
+
+fn run_check() -> Result<(), String> {
+    println!("→ {} check --workspace --message-format=short", cargo_bin());
+    let output = Command::new(cargo_bin())
+        .args(["check", "--workspace", "--message-format=short"])
+        .output()
+        .map_err(|e| format!("failed to run cargo check: {e}"))?;
+
+    if output.status.success() {
+        println!("Check OK");
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let errors = extract_check_errors(&stderr);
+    let count = errors.len();
+
+    eprintln!("FAILED: {count} compilation error(s)\n");
+    for line in errors.iter().take(CHECK_MAX_ERROR_LINES) {
+        eprintln!("  {line}");
+    }
+    if count > CHECK_MAX_ERROR_LINES {
+        eprintln!("  ... and {} more", count - CHECK_MAX_ERROR_LINES);
+    }
+    Err(format!("{count} compilation error(s)"))
+}
+
+fn extract_check_errors(stderr: &str) -> Vec<&str> {
+    stderr
+        .lines()
+        .filter(|l| l.starts_with("error[") || l.starts_with("error:"))
+        .filter(|l| !l.starts_with("error: aborting due to"))
+        .collect()
 }
 
 fn run_clippy() -> Result<(), String> {
@@ -205,5 +245,62 @@ fn run_cmd(cmd: &str, args: &[&str]) -> Result<(), String> {
             Some(code) => Err(format!("{cmd} exited with {code}")),
             None => Err(format!("{cmd} terminated by signal")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE_STDERR: &str = "\
+error[E0425]: cannot find value `foo` in this scope
+ --> crates/rustwerk/src/lib.rs:45:12
+error[E0308]: mismatched types
+ --> crates/rustwerk/src/cli.rs:123:5
+warning: unused variable: `x`
+ --> xtask/src/main.rs:10:9
+error: aborting due to 2 previous errors";
+
+    #[test]
+    fn extracts_only_error_bracket_lines() {
+        let errors = extract_check_errors(SAMPLE_STDERR);
+        assert_eq!(errors.len(), 2);
+        assert!(errors[0].contains("E0425"));
+        assert!(errors[1].contains("E0308"));
+    }
+
+    #[test]
+    fn empty_input_gives_empty_result() {
+        let errors = extract_check_errors("");
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn warnings_only_gives_empty_result() {
+        let stderr = "warning: unused variable: `x`";
+        let errors = extract_check_errors(stderr);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn keeps_user_errors_that_mention_aborting() {
+        let stderr = "\
+error: aborting build: feature flag missing
+error: aborting due to 1 previous error";
+        let errors = extract_check_errors(stderr);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("feature flag missing"));
+    }
+
+    #[test]
+    fn includes_plain_error_lines() {
+        let stderr = "\
+error[E0425]: cannot find value `foo`
+error: could not compile `rustwerk`
+error: aborting due to 1 previous error";
+        let errors = extract_check_errors(stderr);
+        assert_eq!(errors.len(), 2);
+        assert!(errors[0].contains("E0425"));
+        assert!(errors[1].contains("could not compile"));
     }
 }

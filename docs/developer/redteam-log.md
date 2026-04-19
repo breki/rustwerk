@@ -4,10 +4,93 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-067
+**Next ID:** RT-072
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.
+
+---
+
+### RT-071 — `/template-sync` "all" option bypasses per-file review
+
+- **Date:** 2026-04-19
+- **Category:** Security (prompt-injection surface)
+- **Commit context:** chore: adopt rustbase template
+- **Description:** `.claude/commands/template-sync.md` step 6
+  allows the user to accept "all" as the selection, applying
+  every recommended template change in one pass. Because the
+  agent reads raw upstream diff content (commit messages,
+  file bodies) as input during categorization, an injected
+  instruction in upstream content can influence decisions
+  during bulk application.
+- **Impact:** If rustbase is compromised or a malicious PR
+  lands there, a single `/template-sync; all` run in
+  rustwerk would apply attacker-directed edits without
+  per-file review.
+- **Suggested fix:** Remove the "all" option, or require
+  per-file confirmation for any path outside a hardcoded
+  allowlist (`.github/`, `xtask/`, `scripts/`). Also logged
+  as upstream feedback in
+  `docs/developer/template-feedback.md`.
+
+### RT-070 — `/template-sync` uses untrusted URL from `.template-sync.toml`
+
+- **Date:** 2026-04-19
+- **Category:** Security (supply chain)
+- **Commit context:** chore: adopt rustbase template
+- **Description:** `.claude/commands/template-sync.md:24-26`
+  reads `repo` from `.template-sync.toml` and passes it
+  verbatim to `git remote add template <url>`. A malicious
+  or accidentally-merged PR that swaps the URL for a
+  lookalike/attacker repo would redirect all future
+  `/template-sync` runs with no signal.
+- **Impact:** Supply-chain redirect; attacker content gets
+  surfaced for apply/skip selection.
+- **Suggested fix:** Hard-code the expected upstream URL
+  (`https://github.com/breki/rustbase`) in the slash command
+  and assert `.template-sync.toml` matches before using it.
+  Also logged as upstream feedback.
+
+### RT-069 — `Bash(git checkout:*)` permission broader than workflow needs
+
+- **Date:** 2026-04-19
+- **Category:** Security (CLI/agent config)
+- **Commit context:** chore: adopt rustbase template
+- **Description:** `.claude/commands/template-sync.md:3`
+  grants `Bash(git checkout:*)` in allowed-tools, but the
+  documented workflow never invokes `git checkout`. The
+  glob permits destructive variants (`checkout -f <ref>`,
+  `checkout -- .`, `checkout -- <path>`) that can overwrite
+  uncommitted work or move HEAD to an untrusted ref whose
+  `.gitattributes`/hooks then activate on next git command.
+- **Impact:** Prompt-injection escape: an instruction
+  embedded in an upstream diff could induce a destructive
+  checkout. The uncommitted-changes precondition is
+  advisory, not a hard gate.
+- **Suggested fix:** Remove `Bash(git checkout:*)` from
+  the `allowed-tools` front-matter entirely. Also logged
+  as upstream feedback.
+
+### RT-068 — `cargo xtask check` reports "0 compilation error(s)" for non-rustc failures
+
+- **Date:** 2026-04-19
+- **Category:** Correctness / diagnostics
+- **Commit context:** chore: adopt rustbase template (add
+  `xtask check`)
+- **Description:** `run_check` in `xtask/src/main.rs` only
+  surfaces stderr lines matching `error[`/`error:`. When
+  cargo exits non-zero for non-compilation reasons
+  (manifest parse failure, lockfile corruption, missing
+  registry network), the first diagnostic line may not
+  match that pattern, leaving `errors.is_empty()` while
+  status is non-zero. Output becomes `FAILED: 0
+  compilation error(s)` with no body.
+- **Impact:** Diagnostic black-hole for non-compile
+  failures — user has no idea why the tool failed.
+- **Suggested fix:** When `errors.is_empty()` but the
+  process exited non-zero, fall back to printing the last
+  ~20 lines of captured stderr. Also logged as upstream
+  feedback.
 
 ---
 

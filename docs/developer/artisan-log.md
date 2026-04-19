@@ -4,10 +4,31 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-046
+**Next ID:** AQ-048
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.
+
+---
+
+### AQ-047 — `run_check` truncation logic is untested
+
+- **Date:** 2026-04-19
+- **Category:** Testability
+- **Commit context:** chore: adopt rustbase template (add
+  `xtask check`)
+- **Description:** The `count > CHECK_MAX_ERROR_LINES` /
+  `... and N more` truncation branch in `run_check`
+  (`xtask/src/main.rs`) is pure presentation logic but is
+  not covered by unit tests — only the pure
+  `extract_check_errors` helper is tested. The arithmetic
+  `count - CHECK_MAX_ERROR_LINES` is the kind of off-by-one
+  that slips review.
+- **Better approach:** Extract a
+  `fn format_check_failure(errors: &[&str]) -> String`
+  helper and have `run_check` print its result. Add a
+  fifth unit test that locks truncation behavior for
+  `errors.len() > CHECK_MAX_ERROR_LINES`.
 
 ---
 

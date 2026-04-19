@@ -17,6 +17,7 @@ Git-native, AI-agent-friendly project orchestration CLI.
 ## Build Commands
 
 ```bash
+cargo xtask check                # fast compile check (no tests)
 cargo xtask validate             # clippy + tests + coverage
 cargo xtask test [filter]        # tests only
 cargo xtask clippy               # lint only
@@ -62,9 +63,35 @@ Project-specific skills available as slash commands:
 
 | Skill | Purpose |
 |-------|---------|
+| `/check` | Fast compile check (no tests) |
+| `/test` | Run tests with agent-friendly output |
+| `/validate` | Full quality pipeline (clippy + tests + coverage + dupes) |
 | `/commit` | Commit with versioning, diary, and code review |
 | `/next-task` | Pick and implement the next WBS task |
 | `/todo` | Process the next pending TODO item |
 | `/rustwerk` | RustWerk CLI reference for project management (update on any functional change) |
 | `/tui-expert` | TUI rendering and alignment guidelines |
 | `/simplify` | Review changed code for quality |
+| `/template-improve` | Log feedback for the rustbase template |
+| `/template-sync` | Sync upstream template changes into this project |
+
+## Template Sync
+
+This project tracks its template origin in
+`.template-sync.toml`. rustwerk predates the
+[rustbase](https://github.com/breki/rustbase) template
+and was retroactively linked to it. Use `/template-sync`
+to pull improvements from upstream rustbase. The command
+fetches upstream changes, categorizes them, and helps
+you selectively apply relevant updates while preserving
+rustwerk's customizations (notably: rustwerk is CLI-only
+and has no frontend, so web/e2e template changes are
+skipped by default).
+
+## Template Feedback
+
+When you notice anything in template-provided files that
+is suboptimal, incorrect, outdated, or could be
+improved, log it in `docs/developer/template-feedback.md`
+via `/template-improve`. This feedback is used to
+improve the rustbase template for future projects.

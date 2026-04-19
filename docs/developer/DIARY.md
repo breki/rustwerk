@@ -5,6 +5,22 @@ reverse chronological order.
 
 ---
 
+### 2026-04-19
+
+- Adopt rustbase template and add `xtask check`
+
+    Retroactively linked rustwerk to the
+    [rustbase](https://github.com/breki/rustbase) template
+    via `.template-sync.toml` (pinned to rustbase `076cf44`
+    / v0.4.0). Added `cargo xtask check` for fast
+    compile-only verification with concise output
+    (`Check OK` or `FAILED: N compilation error(s)` with up
+    to 10 error lines). New slash commands: `/check`,
+    `/validate`, `/test`, `/template-improve`,
+    `/template-sync`. Future template updates can be
+    pulled via `/template-sync`; rustwerk-side feedback
+    accumulates in `docs/developer/template-feedback.md`.
+
 ### 2026-04-07
 
 - Add `--version` flag to CLI (v0.38.0)

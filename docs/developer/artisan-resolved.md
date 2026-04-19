@@ -6,6 +6,18 @@ findings.
 
 ---
 
+### AQ-046 — `run_check` missing `→ cargo ...` trace line
+
+- **Date:** 2026-04-19
+- **Category:** UX consistency
+- **Commit context:** chore: adopt rustbase template (add
+  `xtask check`)
+- **Resolution:** Added
+  `println!("→ {} check --workspace --message-format=short", cargo_bin());`
+  at the top of `run_check` so it matches the trace-line
+  convention used by `run_cmd` for every other xtask
+  subcommand.
+
 ### AQ-044 — Redundant directory creation in version test
 
 - **Date:** 2026-04-07

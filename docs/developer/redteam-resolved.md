@@ -5,6 +5,22 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-067 — `extract_check_errors` drops user errors that mention "aborting"
+
+- **Date:** 2026-04-19
+- **Category:** Correctness (Low)
+- **Commit context:** chore: adopt rustbase template (add
+  `xtask check`)
+- **Resolution:** Changed the filter from
+  `.contains("aborting")` to
+  `.starts_with("error: aborting due to")`, which matches
+  only the exact rustc summary terminator. Added a
+  regression test (`keeps_user_errors_that_mention_aborting`)
+  that asserts a user-authored
+  `error: aborting build: feature flag missing` survives
+  filtering while the rustc summary line is still dropped.
+  Also logged as upstream feedback.
+
 ### RT-065 — TOCTOU race in `cmd_task_describe`
 
 - **Date:** 2026-04-04

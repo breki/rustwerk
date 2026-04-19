@@ -1,0 +1,17 @@
+# Template sync metadata -- do not edit manually.
+# Managed by the /template-sync command.
+
+[template]
+repo = "https://github.com/breki/rustbase"
+
+# Commit SHA this project was created from.
+# rustwerk predates the rustbase template; this SHA
+# marks the template commit at which rustwerk was
+# retroactively linked to it, not the true origin.
+created-from = "076cf4480dd763797799095ad5e97af900291cfb"
+
+# Commit SHA last synced to.
+last-synced = "076cf4480dd763797799095ad5e97af900291cfb"
+
+# Human-readable version at last sync.
+last-synced-version = "0.4.0"
