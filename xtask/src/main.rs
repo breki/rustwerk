@@ -104,6 +104,20 @@ fn run_check() -> Result<(), String> {
     let errors = extract_check_errors(&stderr);
     let count = errors.len();
 
+    // Non-compilation failures (manifest parse, lockfile
+    // corruption, registry network problems) exit
+    // non-zero without emitting lines that start with
+    // `error[` or `error:`, so fall back to printing the
+    // tail of stderr instead of a silent "0 error(s)"
+    // message.
+    if count == 0 {
+        eprintln!("FAILED: cargo check exited non-zero (no rustc errors parsed)\n");
+        for line in tail_lines(&stderr, CHECK_STDERR_TAIL_LINES) {
+            eprintln!("  {line}");
+        }
+        return Err("cargo check failed (see stderr tail above)".into());
+    }
+
     eprintln!("FAILED: {count} compilation error(s)\n");
     for line in errors.iter().take(CHECK_MAX_ERROR_LINES) {
         eprintln!("  {line}");
@@ -112,6 +126,20 @@ fn run_check() -> Result<(), String> {
         eprintln!("  ... and {} more", count - CHECK_MAX_ERROR_LINES);
     }
     Err(format!("{count} compilation error(s)"))
+}
+
+/// Number of trailing stderr lines to show when
+/// `cargo check` exits non-zero with no recognised
+/// rustc error lines.
+const CHECK_STDERR_TAIL_LINES: usize = 20;
+
+/// Last `n` non-empty lines of `text`, preserving
+/// original order.
+fn tail_lines(text: &str, n: usize) -> Vec<&str> {
+    let all: Vec<&str> =
+        text.lines().filter(|l| !l.trim().is_empty()).collect();
+    let start = all.len().saturating_sub(n);
+    all[start..].to_vec()
 }
 
 fn extract_check_errors(stderr: &str) -> Vec<&str> {

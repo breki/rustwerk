@@ -12,10 +12,28 @@ use super::error::DomainError;
 )]
 pub struct TaskId(String);
 
+/// Windows reserved device names (case-insensitive).
+/// Task IDs are lower-bound to the filesystem as
+/// `.rustwerk/tasks/<ID>.md`; on Windows these names
+/// collide with console/serial/printer device aliases
+/// and cannot be created as regular files. Rejected
+/// on all platforms so that a project created on Linux
+/// and checked out on Windows is not silently broken.
+const WINDOWS_RESERVED_IDS: &[&str] = &[
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5",
+    "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5",
+    "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
 impl TaskId {
     /// Create a new task ID from a string. Must be
     /// non-empty and contain only alphanumeric characters,
-    /// hyphens, and underscores.
+    /// hyphens, and underscores. Rejects Windows-reserved
+    /// device names (`CON`, `NUL`, `COM1`..`COM9`,
+    /// `LPT1`..`LPT9`, ...) so task IDs never collide
+    /// with filesystem aliases on Windows.
     pub fn new(id: &str) -> Result<Self, DomainError> {
         if id.is_empty() {
             return Err(DomainError::ValidationError(
@@ -32,7 +50,14 @@ impl TaskId {
                      {id}"
             )));
         }
-        Ok(Self(id.to_uppercase()))
+        let upper = id.to_uppercase();
+        if WINDOWS_RESERVED_IDS.contains(&upper.as_str()) {
+            return Err(DomainError::ValidationError(format!(
+                "task ID {upper} is a Windows reserved \
+                 device name and cannot be used"
+            )));
+        }
+        Ok(Self(upper))
     }
 
     /// Return the ID as a string slice.
@@ -464,6 +489,23 @@ mod tests {
     fn task_id_invalid_chars_rejected() {
         assert!(TaskId::new("auth login").is_err());
         assert!(TaskId::new("auth.login").is_err());
+    }
+
+    #[test]
+    fn task_id_windows_reserved_names_rejected() {
+        // Case-insensitive: the validator uppercases
+        // before matching.
+        for reserved in &["CON", "con", "NUL", "PRN", "aux", "COM1", "lpt9"] {
+            assert!(
+                TaskId::new(reserved).is_err(),
+                "{reserved} should be rejected as a Windows reserved name"
+            );
+        }
+        // Nearby names that are NOT reserved must still
+        // pass (prefix collisions are allowed).
+        assert!(TaskId::new("CONTACT").is_ok());
+        assert!(TaskId::new("COM10").is_ok());
+        assert!(TaskId::new("NULL").is_ok());
     }
 
     #[test]

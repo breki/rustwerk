@@ -1,6 +1,6 @@
 ---
 description: Sync upstream template changes into this project
-allowed-tools: Bash(git remote:*), Bash(git fetch:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git checkout:*), Bash(git status:*), Bash(cargo xtask validate*), Read, Edit, Write, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(git remote:*), Bash(git fetch:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git status:*), Bash(cargo xtask validate*), Read, Edit, Write, Grep, Glob, AskUserQuestion
 ---
 
 Sync changes from the upstream rustbase template into

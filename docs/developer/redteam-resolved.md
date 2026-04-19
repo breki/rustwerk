@@ -5,6 +5,72 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### Red-team backlog sweep (2026-04-19)
+
+Resolved four findings in a single `fix:` commit
+("fix: close red-team backlog items") and retired five
+findings as stale / won't-fix. Brought the open log
+from 16 down to 7 findings (below the 10+ threshold).
+
+- **RT-068 — `cargo xtask check` reported "0
+  compilation error(s)" for non-rustc failures.**
+  Resolved. `xtask/src/main.rs::run_check` now falls
+  back to printing the last 20 non-empty stderr lines
+  when cargo exits non-zero but emits no lines
+  matching `error[`/`error:`, turning the diagnostic
+  black-hole into a useful stderr tail.
+- **RT-069 — `Bash(git checkout:*)` overly broad in
+  `/template-sync` allowed-tools.** Resolved. The
+  permission is removed from
+  `.claude/commands/template-sync.md`; the workflow
+  never invoked `git checkout` anyway, so this closes
+  a prompt-injection escape surface.
+- **RT-072 — Windows-reserved TaskIds (`CON`,
+  `NUL`, etc.).** Resolved. `TaskId::new` now
+  rejects the 22 Windows device-name aliases
+  (`CON`, `PRN`, `AUX`, `NUL`, `COM1`..`COM9`,
+  `LPT1`..`LPT9`) case-insensitively via a
+  `WINDOWS_RESERVED_IDS` allowlist. Unit test
+  covers the reserved set plus prefix-collision
+  negatives (`CONTACT`, `COM10`, `NULL` still
+  pass).
+- **RT-024 — Cyclic graph in hand-edited
+  `project.json` panicked `critical_path`.**
+  Resolved. `file_store::load` now calls
+  `project.topological_sort()` and rejects the load
+  with a new `StoreError::InvalidProject` variant if
+  the returned order is shorter than the task count
+  (Kahn's algorithm drops cycle participants
+  silently; unequal lengths mean ≥ 1 cycle). Unit
+  test hand-crafts a two-task cycle and asserts the
+  rejection message.
+
+Retired as stale / won't-fix:
+
+- **RT-082 — `rustwerk` 0.40.0 bumped without plugin
+  loader consumer.** PLG-HOST (v0.43.0) now supplies
+  the loader. The chain PLG-API 0.40 → PLG-WORKSPACE
+  0.41 → CLI-JSON 0.42 → PLG-HOST 0.43 is
+  self-documenting via DIARY entries.
+- **RT-040 — Cyclic deps vanish from `--chain`
+  output.** Defense-in-depth for a state already
+  prevented by runtime `add_dependency` validation
+  AND (as of this sweep) by `load` validation. Not
+  reachable.
+- **RT-038 — Dangling dependency refs truncate
+  `--chain`.** Mitigated by DEP-GUARD (prevents
+  task removal while dependents exist). Not
+  reachable through normal operation.
+- **RT-014 — Batch `--file` path traversal.**
+  Accepted as inherent to the local-CLI trust model
+  per the original finding's own rationale.
+  Reopen if rustwerk is ever wired into a
+  non-interactive orchestration path.
+- **RT-013 — Batch rollback is implicit.**
+  Forward-looking design concern, not a current
+  bug. Revisit only if the batch path grows
+  checkpointing or partial-save behaviour.
+
 ### Plugin host trust-model hardening (bundle)
 
 - **Date:** 2026-04-19

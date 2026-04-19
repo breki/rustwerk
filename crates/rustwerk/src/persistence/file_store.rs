@@ -14,6 +14,12 @@ pub enum StoreError {
     /// JSON serialization/deserialization error.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    /// Loaded project file is syntactically valid JSON
+    /// but semantically broken (e.g. dependency graph
+    /// contains a cycle).
+    #[error("invalid project: {0}")]
+    InvalidProject(String),
 }
 
 /// Convention: project file lives at
@@ -124,10 +130,26 @@ pub fn save(root: &Path, project: &Project) -> Result<(), StoreError> {
 
 /// Load a project from `.rustwerk/project.json` under the
 /// given root directory.
+///
+/// Validates that the loaded dependency graph is a DAG —
+/// a hand-edited `project.json` with cycles would
+/// otherwise make downstream commands like `gantt` or
+/// `task list` panic when they compute the critical path.
 pub fn load(root: &Path) -> Result<Project, StoreError> {
     let path = project_file_path(root);
     let json = fs::read_to_string(&path)?;
-    let project = serde_json::from_str(&json)?;
+    let project: Project = serde_json::from_str(&json)?;
+    // Kahn's algorithm drops cycle participants silently.
+    // If the result is shorter than the task list, the
+    // loaded graph contains at least one cycle.
+    let order_len = project.topological_sort().len();
+    if order_len != project.tasks.len() {
+        return Err(StoreError::InvalidProject(format!(
+            "dependency graph contains a cycle ({} tasks, {} in topological order)",
+            project.tasks.len(),
+            order_len,
+        )));
+    }
     Ok(project)
 }
 
@@ -261,5 +283,51 @@ mod tests {
         let tid = crate::domain::task::TaskId::new("PLG-API").unwrap();
         let path = task_description_path(Path::new("/repo"), &tid);
         assert!(path.ends_with(".rustwerk/tasks/PLG-API.md"));
+    }
+
+    #[test]
+    fn load_rejects_cyclic_graph_from_disk() {
+        // Hand-craft a `project.json` with a cycle
+        // (A → B, B → A). The runtime `add_dependency`
+        // prevents cycles, but a hand-edit or upstream
+        // corruption could reach this state.
+        let dir = temp_dir("cycle-load");
+        let rustwerk = dir.join(".rustwerk");
+        fs::create_dir_all(&rustwerk).unwrap();
+        let json = r#"{
+            "metadata": {
+                "name": "Cycle",
+                "created_at": "2026-04-19T00:00:00Z",
+                "modified_at": "2026-04-19T00:00:00Z"
+            },
+            "tasks": {
+                "A": {
+                    "title": "A",
+                    "status": "todo",
+                    "dependencies": ["B"],
+                    "effort_entries": [],
+                    "tags": []
+                },
+                "B": {
+                    "title": "B",
+                    "status": "todo",
+                    "dependencies": ["A"],
+                    "effort_entries": [],
+                    "tags": []
+                }
+            },
+            "developers": {},
+            "next_task_id": 1
+        }"#;
+        fs::write(rustwerk.join("project.json"), json).unwrap();
+        let err = load(&dir).unwrap_err();
+        match err {
+            StoreError::InvalidProject(msg) => assert!(
+                msg.contains("cycle"),
+                "expected 'cycle' in error, got: {msg}"
+            ),
+            other => panic!("expected InvalidProject, got {other:?}"),
+        }
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -7,6 +7,47 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Close red-team backlog items (v0.43.1)
+
+    Backlog sweep. The open red-team log had grown to
+    16 entries — past the 10+ threshold that requests a
+    full-codebase review before continuing feature
+    work. Triaged the backlog, fixed four items
+    in-commit, retired five as stale/won't-fix, and
+    slimmed one. Open count: 16 → 7.
+
+    Fixes: **RT-068** (`xtask check` now prints the
+    last 20 stderr lines when cargo exits non-zero
+    without matching "error[" / "error:" markers, so
+    non-compile failures — manifest parse, lockfile
+    corruption, registry network — are no longer a
+    diagnostic black hole); **RT-069** (removed the
+    unused `Bash(git checkout:*)` permission from
+    `/template-sync` allowed-tools, closing a
+    prompt-injection escape surface); **RT-072**
+    (`TaskId::new` now rejects the 22 Windows
+    device-name aliases — `CON`, `NUL`,
+    `COM1`..`COM9`, `LPT1`..`LPT9`, etc. —
+    case-insensitively, so a project created on Linux
+    can't silently break on a Windows checkout);
+    **RT-024** (`file_store::load` now runs
+    `topological_sort` and rejects any
+    `project.json` whose loaded dependency graph
+    contains a cycle via a new
+    `StoreError::InvalidProject` variant, turning a
+    downstream panic in `critical_path` into a clean
+    load error).
+
+    Retired: RT-082 (PLG-HOST consumed the bumped
+    crate, making the "bump without consumer" moot);
+    RT-040 and RT-038 (defense-in-depth for states
+    already prevented by runtime validation and, as
+    of this sweep, `load` validation); RT-014
+    (accepted as inherent to local-CLI trust model
+    per the original finding's own rationale);
+    RT-013 (forward-looking design debt, not a
+    current bug).
+
 - Add dynamic plugin host (v0.43.0)
 
     PLG-HOST. The main binary can now discover and
