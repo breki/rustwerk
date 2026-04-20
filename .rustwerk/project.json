@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T04:28:06.487566900Z"
+    "modified_at": "2026-04-20T05:01:47.724253Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -437,6 +437,16 @@
         "plugin"
       ]
     },
+    "PLG-API-STATE": {
+      "title": "Per-task plugin-state round-trip in the plugin API",
+      "description": "Round-trip per-task plugin-state through TaskDto and project.json; bump API_VERSION to 2.",
+      "status": "todo",
+      "complexity": 5,
+      "tags": [
+        "api",
+        "plugin"
+      ]
+    },
     "PLG-CLI": {
       "title": "CLI plugin list and push subcommands",
       "description": "Add Plugin command to main.rs with List and Push actions. plugin list discovers and shows plugins. plugin push <name> --project-key PROJ [--tasks T1,T2] pushes tasks. Config assembly from env vars (JIRA_URL, JIRA_TOKEN), git user.email, CLI args.",
@@ -465,6 +475,26 @@
         "plugin"
       ]
     },
+    "PLG-HOST-E2E": {
+      "title": "Load-discover-invoke integration test",
+      "description": "Integration test that builds the jira cdylib and drives plugin list + push --dry-run against it.",
+      "status": "todo",
+      "complexity": 5,
+      "tags": [
+        "plugin",
+        "test"
+      ]
+    },
+    "PLG-INSTALL": {
+      "title": "rustwerk plugin install subcommand",
+      "description": "rustwerk plugin install <source> [--scope project|user] [--force].",
+      "status": "todo",
+      "complexity": 2,
+      "tags": [
+        "cli",
+        "plugin"
+      ]
+    },
     "PLG-JIRA": {
       "title": "Jira plugin crate (cdylib) with REST client",
       "description": "Create rustwerk-jira-plugin crate as cdylib. Implement 4 FFI exports. Jira REST client using ureq (sync). HTTP Basic Auth (email:token). Direct URL first, Platform API Gateway fallback for scoped tokens. Cloud ID from _edge/tenant_info.",
@@ -475,6 +505,53 @@
       ],
       "effort_estimate": "8H",
       "complexity": 8,
+      "tags": [
+        "jira",
+        "plugin"
+      ]
+    },
+    "PLG-JIRA-E2E": {
+      "title": "Live-Jira smoke test",
+      "description": "Opt-in live-Jira integration test gated on RUSTWERK_JIRA_TEST_* env vars.",
+      "status": "todo",
+      "complexity": 3,
+      "tags": [
+        "jira",
+        "plugin",
+        "test"
+      ]
+    },
+    "PLG-JIRA-FIELDS": {
+      "title": "Richer Jira field mapping",
+      "description": "Map rustwerk status, assignee, complexity, and tags onto Jira fields via config maps.",
+      "status": "todo",
+      "complexity": 5,
+      "tags": [
+        "jira",
+        "plugin"
+      ]
+    },
+    "PLG-JIRA-STATE": {
+      "title": "Remember the Jira issue key per task",
+      "description": "Jira plugin records the created issue key in plugin_state.jira on successful push.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-API-STATE"
+      ],
+      "complexity": 2,
+      "tags": [
+        "jira",
+        "plugin"
+      ]
+    },
+    "PLG-JIRA-UPDATE": {
+      "title": "Idempotent push — update existing Jira issues",
+      "description": "Idempotent push: PUT existing issues using stored key; recreate on 404.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-JIRA-STATE"
+      ],
+      "complexity": 5,
       "tags": [
         "jira",
         "plugin"
