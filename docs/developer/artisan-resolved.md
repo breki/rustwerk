@@ -6,6 +6,42 @@ findings.
 
 ---
 
+### PLG-MAP review sweep (2026-04-20)
+
+Three findings raised and fixed in the same commit
+(`feat: render Jira description as ADF`, v0.46.0).
+
+- **AQ-079 — Redundant empty-string branch in
+  `adf_doc`.** The function branched on
+  `text.is_empty()` to produce a one-element vector,
+  but `"".split('\n')` already yields `[""]`, so both
+  arms produced the same result. Dead branching
+  obscures intent. **Fix:** the `if/else` was
+  collapsed into a single
+  `normalized.split('\n').map(adf_paragraph).collect()`
+  call; the "empty input is still a valid doc"
+  guarantee is now expressed in the module doc comment
+  and guarded by the
+  `adf_doc_is_valid_even_when_input_empty` test.
+
+- **AQ-080 — Description fallback logic lived inside
+  `build_issue_payload`.** The "empty description
+  falls back to title" rule was inlined in the payload
+  builder, mixing policy with mapping and meaning
+  `adf_doc` could never be exercised with the raw
+  (possibly empty) description. **Fix:** extracted
+  `fn description_text(task: &TaskDto) -> &str`
+  alongside `summary_for`, so `build_issue_payload`
+  now reads as a flat mapping and the fallback policy
+  has one named home.
+
+- **AQ-081 — Trailing commas inside `json!`
+  literals.** New `json!` sites ended `content`/`text`
+  entries with a trailing comma before the closing
+  brace, while existing sites in the same file did
+  not. **Fix:** dropped the trailing commas for
+  consistency with the surrounding code.
+
 ### PLG-CLI review sweep (2026-04-19)
 
 Four findings raised and fixed in the same commit

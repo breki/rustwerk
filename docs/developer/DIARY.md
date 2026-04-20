@@ -5,6 +5,34 @@ reverse chronological order.
 
 ---
 
+### 2026-04-20
+
+- Render Jira description as ADF (v0.46.0)
+
+    PLG-MAP. The jira plugin's `description` field now
+    ships as an Atlassian Document Format (ADF) `doc`
+    node — one `paragraph` per line, empty paragraphs
+    for blank lines, fallback to the task title when
+    the description is empty. Replaces the
+    plain-string placeholder that PLG-JIRA shipped and
+    unblocks rich-text rendering in Jira Cloud (the
+    REST API v3 rejects plain strings in
+    description).
+
+    Red team/Artisan sweep (RT-104..RT-105,
+    AQ-079..AQ-081, all fixed in-commit): normalize
+    `\r\n` and bare `\r` to `\n` so Windows-authored
+    descriptions don't smuggle trailing carriage
+    returns into ADF text nodes; strip ASCII control
+    characters other than `\t` so stray form-feeds or
+    ANSI escapes from pasted terminal output don't
+    trigger opaque HTTP 400 responses from the ADF
+    validator; extract `description_text` so the
+    empty-description-falls-back-to-title policy has
+    one named home; drop the redundant empty-string
+    branch in `adf_doc`; drop inconsistent trailing
+    commas inside `json!` literals.
+
 ### 2026-04-19
 
 - Add plugin CLI subcommands (v0.45.0)

@@ -5,6 +5,42 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-MAP review sweep (2026-04-20)
+
+Two findings raised and fixed in the same commit
+(`feat: render Jira description as ADF`, v0.46.0).
+
+- **RT-104 — CRLF line endings produce trailing `\r` in
+  ADF text nodes.** `adf_doc` at `mapping.rs:53` used
+  `text.split('\n')`, which splits only on LF. A
+  Windows-style description with `\r\n` line endings
+  left a trailing `\r` on every line, embedded verbatim
+  in the ADF `text` node. Jira's ADF validator rejects
+  text nodes containing control chars other than
+  `\t`/`\n`, so a Windows user whose description came
+  from a CRLF file would see `POST /rest/api/3/issue`
+  fail with HTTP 400 (or render garbled paragraphs).
+  **Fix:** `adf_doc` now normalizes both `\r\n` and
+  bare `\r` to `\n` before splitting. Regression tests
+  `payload_description_normalizes_crlf` and
+  `payload_description_normalizes_bare_cr` cover both
+  cases.
+
+- **RT-105 — ASCII control chars pass through
+  unfiltered.** `adf_paragraph` embedded input verbatim
+  in a `text` node. Control chars (U+0000–U+001F
+  except `\t`/`\n`, plus U+007F) are rejected by ADF's
+  schema, so a single stray `\x0c` or ANSI escape
+  sequence from pasted terminal output caused the POST
+  to fail with an opaque HTTP 400 instead of a local
+  validation error. **Fix:** `adf_paragraph` now
+  filters out control chars other than `\t` before
+  building the text node. Regression test
+  `payload_description_strips_control_chars` proves
+  form-feed and escape bytes are dropped;
+  `payload_description_preserves_tabs` proves `\t`
+  still survives.
+
 ### PLG-CLI review sweep (2026-04-19)
 
 Four findings raised and fixed in the same commit

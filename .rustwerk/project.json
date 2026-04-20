@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T04:19:30.545565500Z"
+    "modified_at": "2026-04-20T04:28:06.487566900Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -483,7 +483,7 @@
     "PLG-MAP": {
       "title": "Task-to-Jira issue mapping (ADF format)",
       "description": "Map TaskDto to Jira issue creation payload. POST /rest/api/3/issue. Description in Atlassian Document Format. Project key from config. Issue type defaults to Task.",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "PLG-JIRA"
       ],
