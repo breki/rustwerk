@@ -7,6 +7,46 @@ reverse chronological order.
 
 ### 2026-04-20
 
+- Parent/epic linking for Jira push (v0.53.0)
+
+    PLG-JIRA-PARENT. `Task` gains an optional hierarchical
+    `parent: TaskId` edge, distinct from the dependency
+    DAG. Load-time validation rejects self-parents,
+    dangling parent refs, and cycles (parent edges form
+    a forest). `Project::parent_push_levels` returns a
+    typed `PushLevels` newtype ordering tasks
+    parent-first by depth; the `plugin push jira`
+    orchestrator now invokes the plugin once per level,
+    reloading `project.json` between levels so each
+    child's DTO carries the parent's just-persisted
+    `plugin_state.jira.key` in a new
+    `TaskDto.parent_plugin_state` field.
+
+    The jira plugin emits `fields.parent.key` when the
+    host attached valid parent state. A new
+    `epic_link_custom_field: "customfield_NNNNN"` option
+    dual-emits the same key to a legacy custom field for
+    pre-2022 Jira sites that drove hierarchy through
+    "Epic Link" rather than `parent.key`. Invalid parent
+    keys emit a non-fatal
+    `MappingWarning::InvalidParentKey` — the child is
+    created as an orphan rather than failing the push.
+
+    CLI: `task add --parent`, `task update --parent`,
+    `task unparent`, plus batch-API parity
+    (`task.unparent` action + `parent` field on add /
+    update). Clap rejects `--parent ""` at parse time;
+    clearing always goes through `task unparent`.
+
+    The plugin crate split further into
+    `domain/project/parent.rs` (five parent-forest
+    methods + `PushLevels` newtype + 14 tests) and a
+    consolidated plugin-push `execute_levels` helper
+    with a typed `LevelExecution` outcome so the
+    aggregate message reports `"X of Y levels
+    completed"` when a reload interrupts mid-run
+    instead of misreporting the full count.
+
 - Richer Jira field mapping — status transitions, assignee, priority, labels (v0.52.0)
 
     PLG-JIRA-FIELDS. `JiraConfig` gains four optional

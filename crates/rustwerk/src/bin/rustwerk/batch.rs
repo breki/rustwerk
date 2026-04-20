@@ -105,6 +105,10 @@ fn execute_one(
                 } else {
                     project.add_task_auto(task)
                 };
+            if let Some(p) = args.get("parent").and_then(|v| v.as_str()) {
+                let parent_id = TaskId::new(p)?;
+                project.set_parent(&task_id, &parent_id)?;
+            }
             Ok(format!("Created task {task_id}"))
         }
         "task.remove" => {
@@ -127,14 +131,17 @@ fn execute_one(
                 .get("issue_type")
                 .or_else(|| args.get("type"))
                 .and_then(|v| v.as_str());
+            let parent = args.get("parent").and_then(|v| v.as_str());
             if title.is_none()
                 && desc.is_none()
                 && tags.is_none()
                 && issue_type.is_none()
+                && parent.is_none()
             {
                 bail!(
                     "task.update requires at least one \
-                     of 'title', 'desc', 'tags', or 'issue_type'"
+                     of 'title', 'desc', 'tags', 'issue_type', \
+                     or 'parent'"
                 );
             }
             let description =
@@ -152,7 +159,25 @@ fn execute_one(
                 };
                 project.set_task_issue_type(&task_id, parsed)?;
             }
+            if let Some(p) = parent {
+                if p.is_empty() {
+                    bail!(
+                        "use the 'task.unparent' action to clear the parent edge; \
+                         an empty 'parent' string is not accepted"
+                    );
+                }
+                let parent_id = TaskId::new(p)?;
+                project.set_parent(&task_id, &parent_id)?;
+            }
             Ok(format!("Updated {task_id}"))
+        }
+        "task.unparent" => {
+            let id = args["id"]
+                .as_str()
+                .context("task.unparent requires 'id'")?;
+            let task_id = TaskId::new(id)?;
+            project.unparent(&task_id)?;
+            Ok(format!("Unparented {task_id}"))
         }
         "task.rename" => {
             let from = args["old_id"]

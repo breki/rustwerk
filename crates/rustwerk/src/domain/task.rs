@@ -394,6 +394,18 @@ pub struct Task {
     /// Current status.
     #[serde(default)]
     pub status: Status,
+    /// Hierarchical parent in the WBS forest, distinct
+    /// from the [`dependencies`](Self::dependencies) DAG.
+    ///
+    /// Parent/child encodes *containment* — "this story
+    /// belongs under that epic" — which maps to Jira's
+    /// `parent.key` (and the legacy `epic_link` custom
+    /// field). Dependencies encode *ordering*
+    /// ("A blocks B"). A task typically has at most one
+    /// parent; cycles are rejected at load time. `None`
+    /// means the task is a root of the parent forest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<TaskId>,
     /// IDs of tasks this task depends on.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<TaskId>,
@@ -526,6 +538,7 @@ impl Task {
             title: title.to_string(),
             description: None,
             status: Status::default(),
+            parent: None,
             dependencies: Vec::new(),
             effort_estimate: None,
             complexity: None,

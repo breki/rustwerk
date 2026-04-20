@@ -4,7 +4,7 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-122
+**Next ID:** AQ-128
 
 ---
 

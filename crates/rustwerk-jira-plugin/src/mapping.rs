@@ -13,6 +13,8 @@ use rustwerk_plugin_api::TaskDto;
 use serde_json::{json, Value};
 
 use crate::config::JiraConfig;
+use crate::jira_client::IssueKey;
+use crate::push::STATE_KEY_FIELD;
 use crate::warnings::MappingWarning;
 
 /// Outbound Jira issue payload plus any advisory
@@ -50,6 +52,7 @@ pub(crate) fn build_issue_payload(task: &TaskDto, cfg: &JiraConfig) -> IssuePayl
     apply_assignee(&mut fields, &mut warnings, task, cfg);
     apply_priority(&mut fields, &mut warnings, task, cfg);
     apply_labels(&mut fields, &mut warnings, task, cfg);
+    apply_parent(&mut fields, &mut warnings, task, cfg);
 
     IssuePayload {
         body: Value::Object(
@@ -144,6 +147,48 @@ fn is_valid_jira_label(s: &str) -> bool {
     !s.is_empty() && !s.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
+/// PLG-JIRA-PARENT: emit `fields.parent.key` when the
+/// host attached `parent_plugin_state` and it carries a
+/// valid Jira issue key. When the legacy
+/// `epic_link_custom_field` is configured, emit that
+/// field with the same key alongside `parent.key` so
+/// legacy sites that drive hierarchy through a custom
+/// field stay linked.
+///
+/// Missing `parent_plugin_state` is silent (root task,
+/// or parent not yet pushed). Present-but-invalid key
+/// (hand-edited `project.json`, or schema drift) emits
+/// a typed warning and the parent field is omitted —
+/// creating an orphan issue is better than failing the
+/// task.
+fn apply_parent(
+    fields: &mut serde_json::Map<String, Value>,
+    warnings: &mut Vec<MappingWarning>,
+    task: &TaskDto,
+    cfg: &JiraConfig,
+) {
+    let Some(state) = task.parent_plugin_state.as_ref() else {
+        return;
+    };
+    let Some(raw_key) = state.get(STATE_KEY_FIELD).and_then(Value::as_str) else {
+        return;
+    };
+    let Some(parent_key) = IssueKey::parse(raw_key) else {
+        warnings.push(MappingWarning::InvalidParentKey(raw_key.to_owned()));
+        return;
+    };
+    fields.insert(
+        "parent".into(),
+        json!({ "key": parent_key.as_str() }),
+    );
+    if let Some(custom_field) = cfg.epic_link_custom_field.as_deref() {
+        fields.insert(
+            custom_field.to_owned(),
+            Value::String(parent_key.as_str().to_owned()),
+        );
+    }
+}
+
 /// Produce the Jira `summary` field. Prefers the task's
 /// title; falls back to the ID when the title is empty.
 fn summary_for(task: &TaskDto) -> String {
@@ -232,6 +277,7 @@ mod tests {
             tags: vec![],
             issue_type: None,
             plugin_state: None,
+            parent_plugin_state: None,
         }
     }
 
@@ -247,6 +293,7 @@ mod tests {
             assignee_map: HashMap::new(),
             priority_map: HashMap::new(),
             labels_from_tags: false,
+            epic_link_custom_field: None,
         }
     }
 
@@ -557,6 +604,69 @@ mod tests {
         assert!(!is_valid_jira_label("has\ttab"));
         assert!(!is_valid_jira_label("has\nnewline"));
         assert!(!is_valid_jira_label("bell\x07"));
+    }
+
+    // --- PLG-JIRA-PARENT: parent field emission ---
+
+    #[test]
+    fn parent_field_emitted_when_parent_state_has_valid_key() {
+        let mut t = task();
+        t.parent_plugin_state = Some(json!({ "key": "PROJ-7" }));
+        let out = build_issue_payload(&t, &cfg("PROJ"));
+        assert_eq!(out.body["fields"]["parent"]["key"], "PROJ-7");
+        assert!(out.warnings.is_empty());
+    }
+
+    #[test]
+    fn parent_field_absent_when_parent_state_missing() {
+        let out = build_issue_payload(&task(), &cfg("PROJ"));
+        assert!(out.body["fields"].get("parent").is_none());
+        assert!(out.warnings.is_empty());
+    }
+
+    #[test]
+    fn parent_field_absent_when_key_missing_from_state() {
+        // Parent was pushed but the state blob has no key
+        // (e.g. a 204 no-body response); no warning — the
+        // host simply has no parent key available yet.
+        let mut t = task();
+        t.parent_plugin_state = Some(json!({ "other": "field" }));
+        let out = build_issue_payload(&t, &cfg("PROJ"));
+        assert!(out.body["fields"].get("parent").is_none());
+        assert!(out.warnings.is_empty());
+    }
+
+    #[test]
+    fn invalid_parent_key_warns_and_omits_parent_field() {
+        let mut t = task();
+        t.parent_plugin_state = Some(json!({ "key": "../../admin" }));
+        let out = build_issue_payload(&t, &cfg("PROJ"));
+        assert!(out.body["fields"].get("parent").is_none());
+        assert_eq!(
+            out.warnings,
+            vec![MappingWarning::InvalidParentKey("../../admin".into())]
+        );
+    }
+
+    #[test]
+    fn legacy_epic_link_custom_field_emitted_alongside_parent_key() {
+        let mut c = cfg("PROJ");
+        c.epic_link_custom_field = Some("customfield_10014".into());
+        let mut t = task();
+        t.parent_plugin_state = Some(json!({ "key": "PROJ-9" }));
+        let out = build_issue_payload(&t, &c);
+        assert_eq!(out.body["fields"]["parent"]["key"], "PROJ-9");
+        assert_eq!(out.body["fields"]["customfield_10014"], "PROJ-9");
+    }
+
+    #[test]
+    fn legacy_custom_field_omitted_when_no_parent_link() {
+        let mut c = cfg("PROJ");
+        c.epic_link_custom_field = Some("customfield_10014".into());
+        // No parent state → neither field emitted.
+        let out = build_issue_payload(&task(), &c);
+        assert!(out.body["fields"].get("parent").is_none());
+        assert!(out.body["fields"].get("customfield_10014").is_none());
     }
 
     #[test]

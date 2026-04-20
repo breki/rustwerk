@@ -2,11 +2,14 @@ mod bottleneck;
 mod critical_path;
 mod gantt_row;
 mod gantt_schedule;
+mod parent;
 mod queries;
 mod scheduling;
 mod summary;
 mod tree;
 mod tree_node;
+
+pub use parent::PushLevels;
 
 pub use bottleneck::Bottleneck;
 pub use gantt_row::GanttRow;
@@ -1105,4 +1108,5 @@ mod tests {
         assert_eq!(d.role.as_deref(), Some("project-lead"));
         assert_eq!(d.specialties, vec!["rust", "cli"]);
     }
+
 }

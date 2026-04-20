@@ -46,38 +46,56 @@ impl RenderText for TaskAddOutput {
     }
 }
 
+/// Named bag of optional `task add` fields. Mirrors
+/// [`TaskUpdateFields`] — a struct instead of eight
+/// positional `Option<&str>` parameters avoids the
+/// argument-order footgun and keeps the signature
+/// stable as new optional fields are added.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct TaskAddFields<'a> {
+    pub(crate) id: Option<&'a str>,
+    pub(crate) desc: Option<&'a str>,
+    pub(crate) complexity: Option<u32>,
+    pub(crate) effort: Option<&'a str>,
+    pub(crate) tags: Option<&'a str>,
+    pub(crate) issue_type: Option<&'a str>,
+    pub(crate) parent: Option<&'a str>,
+}
+
 pub(crate) fn cmd_task_add(
     title: &str,
-    id: Option<&str>,
-    desc: Option<&str>,
-    complexity: Option<u32>,
-    effort: Option<&str>,
-    tags: Option<&str>,
-    issue_type: Option<&str>,
+    fields: TaskAddFields<'_>,
 ) -> Result<TaskAddOutput> {
     let (root, mut project) = load_project()?;
     let mut task = Task::new(title)?;
-    task.description = desc.map(String::from);
-    if let Some(c) = complexity {
+    task.description = fields.desc.map(String::from);
+    if let Some(c) = fields.complexity {
         task.set_complexity(c)?;
     }
-    if let Some(e) = effort {
+    if let Some(e) = fields.effort {
         task.effort_estimate = Some(Effort::parse(e)?);
     }
-    if let Some(t) = tags {
+    if let Some(t) = fields.tags {
         let tag_list = parse_tags(t);
         task.set_tags(&tag_list)?;
     }
-    if let Some(t) = issue_type {
+    if let Some(t) = fields.issue_type {
         task.issue_type = Some(IssueType::parse(t)?);
     }
-    let task_id = if let Some(id_str) = id {
+    let task_id = if let Some(id_str) = fields.id {
         let tid = TaskId::new(id_str)?;
         project.add_task(tid.clone(), task)?;
         tid
     } else {
         project.add_task_auto(task)
     };
+    if let Some(parent_str) = fields.parent {
+        // Set parent after insert so the domain's
+        // existence / cycle validation sees the final
+        // task graph.
+        let parent_id = TaskId::new(parent_str)?;
+        project.set_parent(&task_id, &parent_id)?;
+    }
     save_project(&root, &project)?;
     let title = project.tasks[&task_id].title.clone();
     Ok(TaskAddOutput(TaskRef { id: task_id, title }))
@@ -216,6 +234,7 @@ pub(crate) struct TaskUpdateFields<'a> {
     pub(crate) desc: Option<&'a str>,
     pub(crate) tags: Option<&'a str>,
     pub(crate) issue_type: Option<&'a str>,
+    pub(crate) parent: Option<&'a str>,
 }
 
 impl TaskUpdateFields<'_> {
@@ -224,6 +243,7 @@ impl TaskUpdateFields<'_> {
             && self.desc.is_none()
             && self.tags.is_none()
             && self.issue_type.is_none()
+            && self.parent.is_none()
     }
 }
 
@@ -251,9 +271,35 @@ pub(crate) fn cmd_task_update(
             if t.is_empty() { None } else { Some(IssueType::parse(t)?) };
         project.set_task_issue_type(&task_id, parsed)?;
     }
+    if let Some(p) = fields.parent {
+        // Empty string is rejected at the clap layer;
+        // downstream clearing goes through `task unparent`.
+        let parent_id = TaskId::new(p)?;
+        project.set_parent(&task_id, &parent_id)?;
+    }
     save_project(&root, &project)?;
     let title = project.tasks[&task_id].title.clone();
     Ok(TaskUpdateOutput(TaskRef { id: task_id, title }))
+}
+
+/// `task unparent` output.
+#[derive(Serialize)]
+pub(crate) struct TaskUnparentOutput {
+    pub(crate) id: TaskId,
+}
+
+impl RenderText for TaskUnparentOutput {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        writeln!(w, "{}: parent cleared", self.id)
+    }
+}
+
+pub(crate) fn cmd_task_unparent(id: &str) -> Result<TaskUnparentOutput> {
+    let (root, mut project) = load_project()?;
+    let task_id = TaskId::new(id)?;
+    project.unparent(&task_id)?;
+    save_project(&root, &project)?;
+    Ok(TaskUnparentOutput { id: task_id })
 }
 
 /// `task status` output.
@@ -299,6 +345,11 @@ pub(crate) struct TaskListItem {
     pub(crate) tags: Vec<Tag>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) issue_type: Option<IssueType>,
+    /// Hierarchical parent (WBS forest edge, distinct
+    /// from dependencies). Absent on the JSON wire when
+    /// the task is a root.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) parent: Option<TaskId>,
 }
 
 /// `task list` output.
@@ -472,6 +523,7 @@ pub(crate) fn cmd_task_list(
             critical: crit.contains(id),
             tags: task.tags.clone(),
             issue_type: task.issue_type,
+            parent: task.parent.clone(),
         })
         .collect();
 

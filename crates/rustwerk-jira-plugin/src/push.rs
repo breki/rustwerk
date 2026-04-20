@@ -21,6 +21,17 @@ use crate::mapping::{self, IssuePayload};
 use crate::transition::{append_warnings, maybe_transition_after_write};
 use crate::warnings::MappingWarning;
 
+/// Field name under `plugin_state.jira` that stores the
+/// Jira issue key. The same string is written here
+/// ([`build_created_state`]) and read by
+/// [`existing_issue_key_validated`] and by
+/// [`crate::mapping::apply_parent`] (for child tasks
+/// reading their parent's key). Defining it in one place
+/// eliminates a silent-breakage path where a typo on
+/// either side would make idempotency / parent linking
+/// silently fail.
+pub(crate) const STATE_KEY_FIELD: &str = "key";
+
 /// Abstraction over "what is the current wall-clock UTC
 /// instant". The jira plugin needs to stamp
 /// `last_pushed_at` into per-task plugin state;
@@ -151,7 +162,7 @@ pub(crate) fn existing_issue_key_validated(task: &TaskDto) -> ExistingKey {
     let Some(state) = task.plugin_state.as_ref() else {
         return ExistingKey::None;
     };
-    let Some(key_value) = state.get("key") else {
+    let Some(key_value) = state.get(STATE_KEY_FIELD) else {
         return ExistingKey::None;
     };
     let Some(key_str) = key_value.as_str() else {
@@ -380,7 +391,7 @@ pub(crate) fn build_created_state(
     now: chrono::DateTime<chrono::Utc>,
 ) -> serde_json::Value {
     json!({
-        "key": created.key.as_str(),
+        STATE_KEY_FIELD: created.key.as_str(),
         "self": created.self_url,
         "last_pushed_at": format_last_pushed_at(now),
     })
@@ -408,7 +419,7 @@ fn build_refreshed_state(
     // be present and string-typed. A malformed stored
     // blob is not refreshed; the host keeps the prior
     // state intact.
-    existing_obj.get("key")?.as_str()?;
+    existing_obj.get(STATE_KEY_FIELD)?.as_str()?;
     existing_obj.get("self")?.as_str()?;
     let mut refreshed = existing_obj.clone();
     refreshed.insert(

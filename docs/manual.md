@@ -405,6 +405,51 @@ rustwerk task unassign AUTH-LOGIN
 The developer must be registered in the project (see
 [Developer Management](#developer-management)).
 
+### Hierarchical Parent (WBS Forest)
+
+Tasks form an optional parent/child forest in addition
+to the dependency DAG. The parent edge encodes
+*containment* — "this story belongs under that epic" —
+which the jira plugin emits as `fields.parent.key`.
+Dependencies remain independent (ordering, not
+containment).
+
+Attach a parent on creation:
+
+```
+rustwerk task add "Login form" --parent AUTH
+```
+
+Change or attach a parent on an existing task:
+
+```
+rustwerk task update AUTH-LOGIN --parent AUTH
+```
+
+Clear the parent (task becomes a root):
+
+```
+rustwerk task unparent AUTH-LOGIN
+```
+
+Constraints enforced at both edit time and
+`project.json` load time:
+
+- A task cannot be its own parent.
+- The parent must exist in the project.
+- Parent edges form a forest — no cycles. (Dependencies
+  may form a DAG; parents must not.)
+
+Pushing to Jira via `plugin push jira` now runs
+parent-first in levels: each push is invoked once per
+hierarchical depth, with `project.json` reloaded
+between levels so each child's `parent_plugin_state`
+carries the just-written Jira key from its parent.
+Tasks with a parent that hasn't been pushed yet still
+succeed — the plugin emits a non-fatal
+`(WARNING: parent plugin state has invalid Jira issue
+key …)` and creates an orphan issue.
+
 ## Developer Management
 
 ### Add a Developer
@@ -909,6 +954,14 @@ per-task issue-type selection and field mapping:
   task tags are forwarded as `fields.labels`. Defaults
   to `false` because rustwerk allows tag characters
   that Jira labels reject (e.g. spaces).
+- `epic_link_custom_field` — string, legacy Jira
+  sites only. When set (e.g. `"customfield_10014"`),
+  the plugin writes BOTH `fields.parent.key` and
+  `fields.<customfield_id>` on children so pre-2022
+  Jira instances that drove hierarchy through a
+  custom field stay linked. Modern Jira only needs
+  `parent.key` — leave this unset. Validated at load
+  time to match `customfield_<digits>`.
 
 Absent keys are omitted entirely. `--dry-run` prints
 only the **key names** present — never the token

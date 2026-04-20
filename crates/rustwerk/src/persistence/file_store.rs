@@ -150,6 +150,9 @@ pub fn load(root: &Path) -> Result<Project, StoreError> {
             order_len,
         )));
     }
+    project
+        .validate_parent_forest()
+        .map_err(|e| StoreError::InvalidProject(e.to_string()))?;
     Ok(project)
 }
 

@@ -694,6 +694,7 @@ mod tests {
             assignee_map: std::collections::HashMap::new(),
             priority_map: std::collections::HashMap::new(),
             labels_from_tags: false,
+            epic_link_custom_field: None,
         }
     }
 

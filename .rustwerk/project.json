@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T17:51:06.190861800Z"
+    "modified_at": "2026-04-20T21:17:34.176882500Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -553,7 +553,7 @@
     "PLG-JIRA-PARENT": {
       "title": "Parent / epic linking for Jira push",
       "description": "Parent linking — push parent.key on children so rustwerk WBS hierarchy lands as Jira epic→task→sub-task.",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "PLG-JIRA-ISSUETYPE",
         "PLG-JIRA-UPDATE"

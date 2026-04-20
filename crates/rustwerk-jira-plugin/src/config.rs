@@ -84,6 +84,17 @@ pub(crate) struct JiraConfig {
     /// silent translation.
     #[serde(default)]
     pub labels_from_tags: bool,
+    /// Legacy Jira "Epic Link" custom-field ID
+    /// (e.g. `"customfield_10014"`). Modern Jira (post-2022)
+    /// uses `parent.key` for every hierarchy relation
+    /// including the Epic Link; legacy sites wrote the
+    /// epic key to a custom field instead. When this is
+    /// set, the plugin emits BOTH `fields.parent.key`
+    /// AND `fields.<customfield_id>` so legacy sites
+    /// stay linked. Validated at load time to match the
+    /// `customfield_\d+` shape.
+    #[serde(default)]
+    pub epic_link_custom_field: Option<String>,
 }
 
 /// Built-in mapping from rustwerk's kebab-case wire name
@@ -203,6 +214,12 @@ pub(crate) enum ConfigError {
     /// manifesting as "no assignee" on every push.
     #[error("plugin config field 'assignee_map' key '{0}' does not look like an email (must contain '@')")]
     InvalidAssigneeEmail(String),
+    /// `epic_link_custom_field` doesn't match the
+    /// `customfield_\d+` shape. Jira custom-field IDs
+    /// always use that convention; a typo here would
+    /// fail-loudly with a 400 on every push instead.
+    #[error("plugin config field 'epic_link_custom_field' must match 'customfield_<digits>', got '{0}'")]
+    InvalidEpicLinkCustomField(String),
 }
 
 // thiserror doesn't know serde_json's type here — we
@@ -262,6 +279,13 @@ impl JiraConfig {
                 return Err(ConfigError::InvalidAssigneeEmail(email.clone()));
             }
         }
+        if let Some(field) = self.epic_link_custom_field.as_deref() {
+            if !is_valid_custom_field_id(field) {
+                return Err(ConfigError::InvalidEpicLinkCustomField(
+                    field.to_owned(),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -289,6 +313,17 @@ impl JiraConfig {
             .get(&complexity.to_string())
             .map(String::as_str)
     }
+}
+
+/// Jira custom-field IDs follow the `customfield_<digits>`
+/// convention in every documented Jira Cloud / Server
+/// version. Keeping the check here so the config error
+/// message mentions the exact shape.
+fn is_valid_custom_field_id(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("customfield_") else {
+        return false;
+    };
+    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
 }
 
 /// Enforce scheme + host allowlist on the Jira base URL.
@@ -506,6 +541,7 @@ mod tests {
             assignee_map: HashMap::new(),
             priority_map: HashMap::new(),
             labels_from_tags: false,
+            epic_link_custom_field: None,
         }
     }
 
@@ -694,5 +730,52 @@ mod tests {
     fn config_missing_status_map_entry_returns_none() {
         let cfg = JiraConfig::from_json(&full_json()).unwrap();
         assert_eq!(cfg.transition_id_for_status("in_progress"), None);
+    }
+
+    // --- PLG-JIRA-PARENT: epic_link_custom_field ---
+
+    #[test]
+    fn config_accepts_valid_epic_link_custom_field() {
+        let json = serde_json::json!({
+            "jira_url": "https://x.atlassian.net",
+            "jira_token": "t",
+            "username": "u",
+            "project_key": "P",
+            "epic_link_custom_field": "customfield_10014",
+        })
+        .to_string();
+        let cfg = JiraConfig::from_json(&json).unwrap();
+        assert_eq!(
+            cfg.epic_link_custom_field.as_deref(),
+            Some("customfield_10014")
+        );
+    }
+
+    #[test]
+    fn config_rejects_malformed_epic_link_custom_field() {
+        let json = serde_json::json!({
+            "jira_url": "https://x.atlassian.net",
+            "jira_token": "t",
+            "username": "u",
+            "project_key": "P",
+            "epic_link_custom_field": "epic_link",
+        })
+        .to_string();
+        let err = JiraConfig::from_json(&json).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidEpicLinkCustomField(_)));
+    }
+
+    #[test]
+    fn is_valid_custom_field_id_accepts_customfield_digits() {
+        assert!(is_valid_custom_field_id("customfield_1"));
+        assert!(is_valid_custom_field_id("customfield_10014"));
+    }
+
+    #[test]
+    fn is_valid_custom_field_id_rejects_garbage() {
+        assert!(!is_valid_custom_field_id(""));
+        assert!(!is_valid_custom_field_id("customfield_"));
+        assert!(!is_valid_custom_field_id("customfield_abc"));
+        assert!(!is_valid_custom_field_id("field_10014"));
     }
 }

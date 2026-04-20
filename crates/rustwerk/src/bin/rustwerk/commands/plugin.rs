@@ -174,15 +174,10 @@ pub(crate) fn cmd_plugin_push(
     tasks_filter: Option<&str>,
     dry_run: bool,
 ) -> Result<PluginPushOutput> {
-    let (root, mut project) = load_project()?;
+    let (root, project) = load_project()?;
     let selected_ids: Vec<TaskId> = filter_tasks(&project, tasks_filter)?
         .into_iter()
         .map(|(id, _)| id)
-        .collect();
-    let pushed_ids: HashSet<TaskId> = selected_ids.iter().cloned().collect();
-    let dtos: Vec<TaskDto> = selected_ids
-        .iter()
-        .map(|id| task_to_dto_for_plugin(id, &project.tasks[id], name))
         .collect();
 
     let config = assemble_config(
@@ -193,6 +188,10 @@ pub(crate) fn cmd_plugin_push(
     );
 
     if dry_run {
+        let dtos: Vec<TaskDto> = selected_ids
+            .iter()
+            .map(|id| task_to_dto_for_plugin(id, &project.tasks[id], name, &project))
+            .collect();
         return Ok(PluginPushOutput::DryRun {
             plugin: name.to_string(),
             tasks: dtos.iter().map(|t| t.id.clone()).collect(),
@@ -215,31 +214,178 @@ pub(crate) fn cmd_plugin_push(
 
     let config_json = serde_json::to_string(&config)
         .context("failed to serialize plugin config")?;
-    let tasks_json = serde_json::to_string(&dtos)
-        .context("failed to serialize tasks payload")?;
-    let result = loaded
-        .push_tasks(&config_json, &tasks_json)
-        .with_context(|| format!("plugin '{name}' push failed"))?;
 
-    // Persist any plugin_state_update the plugin
-    // returned. We save even on aggregate failure
-    // because individual successful tasks inside a
-    // partial-failure batch still have legitimate
-    // state to record (e.g. a new Jira issue key).
-    //
-    // A save failure is non-fatal to the render path:
-    // the plugin has already produced external side
-    // effects, so the user needs to see the result
-    // (including any `external_key`s) before we can
-    // report the save problem.
-    let save_warning =
-        persist_plugin_state(&root, &mut project, name, &pushed_ids, &result);
+    // PLG-JIRA-PARENT: push parent-first in levels.
+    // Each level is an independent plugin invocation;
+    // between levels we persist the plugin_state_update
+    // blobs and reload the project so the next level's
+    // DTOs carry parent state in `parent_plugin_state`.
+    // Levels collapse to a single level when no task in
+    // the selection has an in-set parent, preserving
+    // the pre-PARENT behaviour for simple projects.
+    let levels = project.parent_push_levels(&selected_ids)?;
+
+    if selected_ids.is_empty() {
+        // RT-Y3: empty selection is not a silent success
+        // — the user's filter likely typo'd. Return a
+        // result that flags this so `is_success` is false
+        // and the exit code is non-zero.
+        let aggregate = rustwerk_plugin_api::PluginResult {
+            success: false,
+            message: "no matching tasks to push (filter produced empty selection)"
+                .into(),
+            task_results: Some(Vec::new()),
+        };
+        return Ok(PluginPushOutput::Executed {
+            plugin: name.to_string(),
+            result: aggregate,
+            save_warning: None,
+        });
+    }
+
+    let execution =
+        execute_levels(&root, project, loaded, name, &config_json, &levels)?;
+
+    let aggregate = build_aggregate_result(&execution, levels.len());
 
     Ok(PluginPushOutput::Executed {
         plugin: name.to_string(),
-        result,
-        save_warning,
+        result: aggregate,
+        save_warning: execution.save_warning(),
     })
+}
+
+/// Outcome of a multi-level plugin push — collected so
+/// [`cmd_plugin_push`] can assemble an accurate
+/// user-facing message even when some levels didn't run
+/// (e.g. a between-levels reload failure).
+struct LevelExecution {
+    combined_results: Vec<rustwerk_plugin_api::TaskPushResult>,
+    save_warnings: Vec<String>,
+    any_failure: bool,
+    levels_completed: usize,
+}
+
+impl LevelExecution {
+    /// Fold the collected save warnings into a single
+    /// user-facing string, or `None` when clean.
+    /// Multiple warnings are separated by `" | "`, chosen
+    /// because none of the individual messages contain
+    /// that sequence (they're either persistence errors
+    /// or reload errors, both deterministic).
+    fn save_warning(&self) -> Option<String> {
+        if self.save_warnings.is_empty() {
+            None
+        } else {
+            Some(self.save_warnings.join(" | "))
+        }
+    }
+}
+
+/// Execute the plugin one level at a time, reloading the
+/// project between levels so each child's
+/// `parent_plugin_state` carries the parent's
+/// just-persisted blob.
+///
+/// Returns partial progress on reload failure — the
+/// caller folds `levels_completed` into the aggregate
+/// message so the user sees how far the run got (RT-Y2).
+fn execute_levels(
+    root: &Path,
+    mut project: Project,
+    loaded: &plugin_host::LoadedPlugin,
+    name: &str,
+    config_json: &str,
+    levels: &rustwerk::domain::project::PushLevels,
+) -> Result<LevelExecution> {
+    let mut combined_results: Vec<rustwerk_plugin_api::TaskPushResult> = Vec::new();
+    let mut save_warnings: Vec<String> = Vec::new();
+    let mut any_failure = false;
+    let mut levels_completed = 0usize;
+
+    for (index, level) in levels.iter().enumerate() {
+        if index > 0 {
+            project = match load_project() {
+                Ok((_, p)) => p,
+                Err(e) => {
+                    save_warnings.push(format!(
+                        "failed to reload project between push levels: {e}"
+                    ));
+                    break;
+                }
+            };
+        }
+        let level_dtos: Vec<TaskDto> = level
+            .iter()
+            .map(|id| task_to_dto_for_plugin(id, &project.tasks[id], name, &project))
+            .collect();
+        let level_set: HashSet<TaskId> = level.iter().cloned().collect();
+        let tasks_json = serde_json::to_string(&level_dtos)
+            .context("failed to serialize tasks payload")?;
+        let result = loaded
+            .push_tasks(config_json, &tasks_json)
+            .with_context(|| format!("plugin '{name}' push failed"))?;
+        any_failure |= !result.success;
+        if let Some(rs) = result.task_results.as_ref() {
+            combined_results.extend(rs.iter().cloned());
+        }
+        if let Some(w) =
+            persist_plugin_state(root, &mut project, name, &level_set, &result)
+        {
+            save_warnings.push(w);
+        }
+        levels_completed += 1;
+    }
+
+    Ok(LevelExecution {
+        combined_results,
+        save_warnings,
+        any_failure,
+        levels_completed,
+    })
+}
+
+/// Build the aggregate `PluginResult` from a
+/// [`LevelExecution`]. `total_levels` is the planned
+/// count; `levels_completed` tracks actual execution so
+/// the user-facing message stays honest when a reload
+/// interrupts the run mid-way.
+fn build_aggregate_result(
+    exec: &LevelExecution,
+    total_levels: usize,
+) -> rustwerk_plugin_api::PluginResult {
+    let partial = exec.levels_completed < total_levels;
+    let level_phrase = if partial {
+        format!(
+            "{} of {} level(s) completed",
+            exec.levels_completed, total_levels
+        )
+    } else {
+        format!("{total_levels} level(s)")
+    };
+    let (success, message) = if exec.any_failure || partial {
+        let failed = exec.combined_results.iter().filter(|r| !r.success).count();
+        (
+            false,
+            format!(
+                "{failed} of {} task(s) failed across {level_phrase}",
+                exec.combined_results.len()
+            ),
+        )
+    } else {
+        (
+            true,
+            format!(
+                "{} task(s) pushed across {level_phrase}",
+                exec.combined_results.len()
+            ),
+        )
+    };
+    rustwerk_plugin_api::PluginResult {
+        success,
+        message,
+        task_results: Some(exec.combined_results.clone()),
+    }
 }
 
 /// Per-task `plugin_state_update` byte cap. State is
@@ -388,6 +534,7 @@ fn task_to_dto(id: &TaskId, task: &Task) -> TaskDto {
         tags: task.tags.iter().map(|t| t.as_str().to_string()).collect(),
         issue_type: task.issue_type.map(|t| t.as_wire_str().to_string()),
         plugin_state: None,
+        parent_plugin_state: None,
     }
 }
 
@@ -395,14 +542,25 @@ fn task_to_dto(id: &TaskId, task: &Task) -> TaskDto {
 /// per-plugin-namespace blob out of
 /// `task.plugin_state` so the receiving plugin sees
 /// its own entry (or `None` when nothing has been
-/// recorded yet).
+/// recorded yet). When the task has a `parent` edge,
+/// the parent's per-plugin-namespace blob is also
+/// attached as `parent_plugin_state` so the plugin
+/// can splice parent keys (e.g. Jira `parent.key`)
+/// without needing a separate round-trip.
 fn task_to_dto_for_plugin(
     id: &TaskId,
     task: &Task,
     plugin_name: &str,
+    project: &Project,
 ) -> TaskDto {
+    let parent_plugin_state = task
+        .parent
+        .as_ref()
+        .and_then(|pid| project.tasks.get(pid))
+        .and_then(|parent| parent.plugin_state.get(plugin_name).cloned());
     TaskDto {
         plugin_state: task.plugin_state.get(plugin_name).cloned(),
+        parent_plugin_state,
         ..task_to_dto(id, task)
     }
 }
@@ -840,6 +998,7 @@ mod tests {
             title: "Title".into(),
             description: Some("Desc".into()),
             status: Status::InProgress,
+            parent: None,
             dependencies: vec![TaskId::new("PLG-API").unwrap()],
             effort_estimate: Some(Effort {
                 value: 2.5,
@@ -915,6 +1074,12 @@ mod tests {
         assert!(dto.plugin_state.is_none());
     }
 
+    fn project_with_task(id: &TaskId, task: Task) -> Project {
+        let mut p = Project::new("test").unwrap();
+        p.add_task(id.clone(), task).unwrap();
+        p
+    }
+
     #[test]
     fn task_to_dto_for_plugin_slices_by_name() {
         let id = TaskId::new("T1").unwrap();
@@ -927,9 +1092,10 @@ mod tests {
             "github".into(),
             serde_json::json!({ "issue": 42 }),
         );
-
-        let dto = task_to_dto_for_plugin(&id, &t, "jira");
+        let project = project_with_task(&id, t.clone());
+        let dto = task_to_dto_for_plugin(&id, &t, "jira", &project);
         assert_eq!(dto.plugin_state, Some(serde_json::json!({ "key": "PROJ-7" })));
+        assert!(dto.parent_plugin_state.is_none());
     }
 
     #[test]
@@ -940,16 +1106,57 @@ mod tests {
             "github".into(),
             serde_json::json!({ "issue": 42 }),
         );
-
-        let dto = task_to_dto_for_plugin(&id, &t, "jira");
+        let project = project_with_task(&id, t.clone());
+        let dto = task_to_dto_for_plugin(&id, &t, "jira", &project);
         assert!(dto.plugin_state.is_none());
     }
 
     #[test]
     fn task_to_dto_for_plugin_absent_when_map_empty() {
         let id = TaskId::new("T1").unwrap();
-        let dto = task_to_dto_for_plugin(&id, &task_fixture(), "jira");
+        let t = task_fixture();
+        let project = project_with_task(&id, t.clone());
+        let dto = task_to_dto_for_plugin(&id, &t, "jira", &project);
         assert!(dto.plugin_state.is_none());
+    }
+
+    #[test]
+    fn task_to_dto_for_plugin_carries_parent_plugin_state_from_project() {
+        // PLG-JIRA-PARENT: the parent's per-namespace
+        // blob must be sliced into parent_plugin_state so
+        // the child plugin can read the Jira key without
+        // a second round-trip.
+        let parent_id = TaskId::new("EPIC").unwrap();
+        let child_id = TaskId::new("STORY").unwrap();
+        let mut parent = Task::new("Epic").unwrap();
+        parent.plugin_state.insert(
+            "jira".into(),
+            serde_json::json!({ "key": "PROJ-99" }),
+        );
+        let mut child = Task::new("Story").unwrap();
+        child.parent = Some(parent_id.clone());
+        let mut project = Project::new("test").unwrap();
+        project.add_task(parent_id.clone(), parent).unwrap();
+        project.add_task(child_id.clone(), child.clone()).unwrap();
+        let dto = task_to_dto_for_plugin(&child_id, &child, "jira", &project);
+        assert_eq!(
+            dto.parent_plugin_state,
+            Some(serde_json::json!({ "key": "PROJ-99" }))
+        );
+    }
+
+    #[test]
+    fn task_to_dto_for_plugin_parent_state_absent_when_parent_never_pushed() {
+        let parent_id = TaskId::new("EPIC").unwrap();
+        let child_id = TaskId::new("STORY").unwrap();
+        let parent = Task::new("Epic").unwrap(); // no plugin_state
+        let mut child = Task::new("Story").unwrap();
+        child.parent = Some(parent_id.clone());
+        let mut project = Project::new("test").unwrap();
+        project.add_task(parent_id.clone(), parent).unwrap();
+        project.add_task(child_id.clone(), child.clone()).unwrap();
+        let dto = task_to_dto_for_plugin(&child_id, &child, "jira", &project);
+        assert!(dto.parent_plugin_state.is_none());
     }
 
     #[test]
@@ -1967,5 +2174,84 @@ mod tests {
         assert!(s.contains("jira (v0.1.0) — Push tasks to Jira"));
         assert!(s.contains("capabilities: push_tasks"));
         assert!(s.contains("path: /path/to.dll"));
+    }
+
+    // --- PLG-JIRA-PARENT: level execution helpers ---
+
+    #[test]
+    fn level_execution_save_warning_joins_with_pipe() {
+        let exec = LevelExecution {
+            combined_results: Vec::new(),
+            save_warnings: vec!["first".into(), "second".into()],
+            any_failure: false,
+            levels_completed: 2,
+        };
+        let joined = exec.save_warning().unwrap();
+        assert!(joined.contains("first"));
+        assert!(joined.contains("second"));
+        assert!(joined.contains(" | "));
+    }
+
+    #[test]
+    fn level_execution_save_warning_none_when_empty() {
+        let exec = LevelExecution {
+            combined_results: Vec::new(),
+            save_warnings: Vec::new(),
+            any_failure: false,
+            levels_completed: 0,
+        };
+        assert!(exec.save_warning().is_none());
+    }
+
+    #[test]
+    fn aggregate_result_reports_full_count_on_clean_run() {
+        let exec = LevelExecution {
+            combined_results: vec![
+                rustwerk_plugin_api::TaskPushResult::ok("A", "created"),
+                rustwerk_plugin_api::TaskPushResult::ok("B", "created"),
+            ],
+            save_warnings: Vec::new(),
+            any_failure: false,
+            levels_completed: 2,
+        };
+        let r = build_aggregate_result(&exec, 2);
+        assert!(r.success);
+        assert!(r.message.contains("2 task(s) pushed across 2 level(s)"));
+    }
+
+    #[test]
+    fn aggregate_result_flags_partial_run_when_reload_failed() {
+        // RT-Y2: levels_completed < total_levels ⇒
+        // aggregate reports "X of Y levels completed" and
+        // the push is marked unsuccessful even if every
+        // task that did run succeeded.
+        let exec = LevelExecution {
+            combined_results: vec![
+                rustwerk_plugin_api::TaskPushResult::ok("A", "created"),
+            ],
+            save_warnings: vec!["reload boom".into()],
+            any_failure: false,
+            levels_completed: 1,
+        };
+        let r = build_aggregate_result(&exec, 3);
+        assert!(!r.success);
+        assert!(r.message.contains("1 of 3 level(s) completed"));
+    }
+
+    #[test]
+    fn aggregate_result_flags_task_failure_even_with_full_level_count() {
+        let exec = LevelExecution {
+            combined_results: vec![
+                rustwerk_plugin_api::TaskPushResult::ok("A", "created"),
+                rustwerk_plugin_api::TaskPushResult::fail("B", "nope"),
+            ],
+            save_warnings: Vec::new(),
+            any_failure: true,
+            levels_completed: 2,
+        };
+        let r = build_aggregate_result(&exec, 2);
+        assert!(!r.success);
+        assert!(r.message.contains("1 of 2 task(s) failed"));
+        assert!(r.message.contains("2 level(s)"));
     }
 }

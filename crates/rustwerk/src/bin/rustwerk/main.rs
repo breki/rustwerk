@@ -41,7 +41,7 @@ use commands::{
     cmd_effort_log, cmd_init, cmd_report_bottlenecks, cmd_report_complete,
     cmd_report_effort, cmd_show, cmd_status, cmd_task_add, cmd_task_assign,
     cmd_task_describe, cmd_task_list, cmd_task_remove, cmd_task_rename,
-    cmd_task_status, cmd_task_unassign, cmd_task_update, cmd_undepend,
+    cmd_task_status, cmd_task_unassign, cmd_task_unparent, cmd_task_update, cmd_undepend,
 };
 use gantt::cmd_gantt;
 
@@ -270,6 +270,12 @@ enum TaskAction {
         /// `epic`, `story`, `task`, or `sub-task`.
         #[arg(long = "type")]
         issue_type: Option<String>,
+        /// Hierarchical parent task ID (forms the WBS
+        /// forest; distinct from `--depends` dependency
+        /// DAG). Rejected at load time if it would
+        /// create a cycle. Use `task unparent` to clear.
+        #[arg(long, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+        parent: Option<String>,
     },
     /// Set task status.
     Status {
@@ -338,6 +344,16 @@ enum TaskAction {
         /// `sub-task`). Pass `""` to clear.
         #[arg(long = "type")]
         issue_type: Option<String>,
+        /// New hierarchical parent task ID. Use
+        /// `task unparent` to clear.
+        #[arg(long, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+        parent: Option<String>,
+    },
+    /// Clear a task's hierarchical parent. No-op when the
+    /// task is already a root.
+    Unparent {
+        /// Task ID.
+        id: String,
     },
     /// Assign a developer to a task. Falls back to the
     /// `RUSTWERK_USER` environment variable when no
@@ -433,15 +449,19 @@ fn dispatch_task(action: TaskAction, fmt: render::OutputFormat) -> Result<()> {
             effort,
             tags,
             issue_type,
+            parent,
         } => render::emit(
             &cmd_task_add(
                 &title,
-                id.as_deref(),
-                desc.as_deref(),
-                complexity,
-                effort.as_deref(),
-                tags.as_deref(),
-                issue_type.as_deref(),
+                commands::TaskAddFields {
+                    id: id.as_deref(),
+                    desc: desc.as_deref(),
+                    complexity,
+                    effort: effort.as_deref(),
+                    tags: tags.as_deref(),
+                    issue_type: issue_type.as_deref(),
+                    parent: parent.as_deref(),
+                },
             )?,
             fmt,
         ),
@@ -467,6 +487,7 @@ fn dispatch_task(action: TaskAction, fmt: render::OutputFormat) -> Result<()> {
             desc,
             tags,
             issue_type,
+            parent,
         } => render::emit(
             &cmd_task_update(
                 &id,
@@ -475,10 +496,14 @@ fn dispatch_task(action: TaskAction, fmt: render::OutputFormat) -> Result<()> {
                     desc: desc.as_deref(),
                     tags: tags.as_deref(),
                     issue_type: issue_type.as_deref(),
+                    parent: parent.as_deref(),
                 },
             )?,
             fmt,
         ),
+        TaskAction::Unparent { id } => {
+            render::emit(&cmd_task_unparent(&id)?, fmt)
+        }
         TaskAction::List {
             available,
             active,

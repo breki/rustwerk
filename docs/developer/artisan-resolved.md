@@ -6,6 +6,108 @@ findings.
 
 ---
 
+### PLG-JIRA-PARENT review sweep (2026-04-20)
+
+Six findings raised and fixed in the same commit
+(v0.53.0):
+
+#### AQ-122 — `MappingWarning::InvalidParentKey` Display used `{raw:?}`
+
+- **Date:** 2026-04-20
+- **Category:** Error messages
+- **Where:** `crates/rustwerk-jira-plugin/src/warnings.rs`
+- **Description:** The newly-added variant used
+  `{raw:?}` (Debug formatting), which escapes
+  non-ASCII as `\u{...}`. Direct mirror of the
+  AQ-120 regression fixed one commit earlier; every
+  other `MappingWarning` arm already used plain `{}`.
+- **Resolution:** Changed to `'{raw}'` with single
+  quotes.
+
+#### AQ-123 — `project/mod.rs` exceeded 500 lines with parent-forest logic
+
+- **Date:** 2026-04-20
+- **Category:** Module size
+- **Where:** `crates/rustwerk/src/domain/project/mod.rs`
+- **Description:** Five new parent-forest methods
+  (`set_parent`, `unparent`, `is_ancestor_of`,
+  `parent_push_levels`, `validate_parent_forest`)
+  plus ~120 lines of tests pushed `mod.rs` past the
+  500-line threshold while mixing two structurally
+  distinct graph concepts (parent forest vs.
+  dependency DAG).
+- **Resolution:** Extracted `domain/project/parent.rs`
+  submodule mirroring the existing
+  `domain/project/scheduling.rs` pattern. All five
+  methods + 14 focused tests moved; `mod.rs` shrinks
+  by ~270 lines.
+
+#### AQ-124 — `parent_push_levels` returned raw `Vec<Vec<TaskId>>`
+
+- **Date:** 2026-04-20
+- **Category:** Type safety / API design
+- **Where:** `domain/project/parent.rs`
+- **Description:** Outer-vs-inner Vec semantics
+  (levels vs tasks-within-level) and the
+  non-empty-levels invariant were prose-only.
+- **Resolution:** Introduced a `pub struct
+  PushLevels(Vec<Vec<TaskId>>)` newtype with `len`,
+  `is_empty`, `iter`, and `IntoIterator` impls.
+  Invariants (no empty levels, deterministic ordering
+  within each level) documented on the type. Follows
+  Rust API Guidelines C-NEWTYPE.
+
+#### AQ-125 — `cmd_plugin_push` level loop mixed concerns
+
+- **Date:** 2026-04-20
+- **Category:** Abstraction boundaries
+- **Where:** `crates/rustwerk/src/bin/rustwerk/commands/plugin.rs`
+- **Description:** A ~140-line function held config
+  assembly, plugin lookup, level loop with reload,
+  state persistence, and result aggregation — hard
+  to unit-test any piece in isolation.
+- **Resolution:** Extracted `fn execute_levels`
+  returning a typed `LevelExecution { combined_results,
+  save_warnings, any_failure, levels_completed }` and
+  `fn build_aggregate_result`. Both unit-testable
+  without the full command. Folds in RT-137 and
+  RT-139 fixes.
+
+#### AQ-126 — `apply_parent` had a stringly-typed cross-plugin contract
+
+- **Date:** 2026-04-20
+- **Category:** Type safety
+- **Where:** `crates/rustwerk-jira-plugin/src/mapping.rs` + `push.rs`
+- **Description:** The `"key"` literal appeared in
+  four places — `build_created_state` (write),
+  `existing_issue_key_validated` (read),
+  `build_refreshed_state` (read), and
+  `apply_parent` (cross-task read). A typo on any
+  one would fail silently.
+- **Resolution:** Introduced `const STATE_KEY_FIELD:
+  &str = "key"` in `push.rs` and reference it from
+  every write / read site.
+
+#### AQ-127 — `--parent ""` caught at runtime instead of clap parse time
+
+- **Date:** 2026-04-20
+- **Category:** API design
+- **Where:** `crates/rustwerk/src/bin/rustwerk/main.rs` + `commands/task.rs`
+- **Description:** The empty-string check ran after
+  `load_project()`, so a user with a broken project
+  couldn't learn they'd typo'd. Also inconsistent
+  between `task add` (fell through to `TaskId::new`
+  error) and `task update` (custom `bail!` pointing
+  at `task unparent`).
+- **Resolution:** Added
+  `.value_parser(clap::builder::NonEmptyStringValueParser::new())`
+  on both `--parent` arg definitions. Clap rejects
+  the empty string at parse time. Runtime check
+  removed from `cmd_task_update`. Help text already
+  says "Use `task unparent` to clear."
+
+---
+
 ### PLG-JIRA-FIELDS review sweep (2026-04-20)
 
 Nine findings raised and fixed in the same commit

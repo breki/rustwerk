@@ -235,6 +235,18 @@ recorded as `plugin_state.jira.last_status`; repeated
 pushes skip the transition when the task's status is
 unchanged since `last_status`.
 
+Tasks carry an optional `parent: TaskId` edge (distinct
+from the dependency DAG) forming a WBS forest. Set via
+`task add --parent`, `task update --parent`, or
+`task unparent`. `plugin push jira` pushes parent-first
+in levels and emits `fields.parent.key` on children
+using the parent's stored `plugin_state.jira.key`. For
+legacy Jira sites, `epic_link_custom_field:
+"customfield_XXXXX"` mirrors the same key into the
+configured custom field alongside `parent.key`.
+Invalid/missing parent keys emit a non-fatal warning
+and the child is created as an orphan.
+
 ## Batch Commands (Atomic JSON)
 
 Pipe a JSON array to `rustwerk batch`. All commands

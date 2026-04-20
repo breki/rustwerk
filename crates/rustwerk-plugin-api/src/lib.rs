@@ -365,6 +365,16 @@ pub struct TaskDto {
     /// entry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_state: Option<Value>,
+    /// Parent task's per-plugin state blob for the plugin
+    /// currently being invoked, sliced in by the host
+    /// from the parent's `plugin_state.<plugin-name>` —
+    /// `None` when this task is a root, or when the
+    /// parent has never been pushed. Deliberately opaque:
+    /// the plugin extracts whatever it persisted for
+    /// itself (e.g. `parent_plugin_state.get("key")` for
+    /// the jira plugin). The host never peeks inside.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_plugin_state: Option<Value>,
 }
 
 // ---------------------------------------------------------------
@@ -679,6 +689,48 @@ mod tests {
     }
 
     #[test]
+    fn task_dto_carries_parent_plugin_state() {
+        let t = TaskDto {
+            id: "CHILD".into(),
+            title: "t".into(),
+            description: String::new(),
+            status: TaskStatusDto::Todo,
+            dependencies: vec![],
+            effort_estimate: None,
+            complexity: None,
+            assignee: None,
+            tags: vec![],
+            issue_type: None,
+            plugin_state: None,
+            parent_plugin_state: Some(serde_json::json!({ "key": "PROJ-99" })),
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(json.contains("parent_plugin_state"));
+        let back: TaskDto = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, t);
+    }
+
+    #[test]
+    fn task_dto_omits_parent_plugin_state_when_none() {
+        let t = TaskDto {
+            id: "ROOT".into(),
+            title: "t".into(),
+            description: String::new(),
+            status: TaskStatusDto::Todo,
+            dependencies: vec![],
+            effort_estimate: None,
+            complexity: None,
+            assignee: None,
+            tags: vec![],
+            issue_type: None,
+            plugin_state: None,
+            parent_plugin_state: None,
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("parent_plugin_state"));
+    }
+
+    #[test]
     fn task_status_dto_as_wire_matches_serde_wire_format() {
         // Guards against a serde-attr drift (e.g. accidentally
         // switching `rename_all = "snake_case"` to kebab-case)
@@ -710,6 +762,7 @@ mod tests {
             tags: vec!["plugin".into(), "api".into()],
             issue_type: None,
             plugin_state: None,
+            parent_plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         let back: TaskDto = serde_json::from_str(&json).unwrap();
@@ -730,6 +783,7 @@ mod tests {
             tags: vec![],
             issue_type: None,
             plugin_state: None,
+            parent_plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         let back: TaskDto = serde_json::from_str(&json).unwrap();
@@ -750,6 +804,7 @@ mod tests {
             tags: vec![],
             issue_type: None,
             plugin_state: Some(serde_json::json!({ "key": "PROJ-7" })),
+            parent_plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         let back: TaskDto = serde_json::from_str(&json).unwrap();
@@ -771,6 +826,7 @@ mod tests {
             tags: vec![],
             issue_type: None,
             plugin_state: None,
+            parent_plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         assert!(!json.contains("plugin_state"), "got: {json}");
@@ -790,6 +846,7 @@ mod tests {
             tags: vec![],
             issue_type: Some("sub-task".into()),
             plugin_state: None,
+            parent_plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         assert!(json.contains("\"issue_type\":\"sub-task\""));
@@ -811,6 +868,7 @@ mod tests {
             tags: vec![],
             issue_type: None,
             plugin_state: None,
+            parent_plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         assert!(!json.contains("issue_type"), "got: {json}");

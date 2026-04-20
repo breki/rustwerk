@@ -241,6 +241,7 @@ mod tests {
             assignee_map: std::collections::HashMap::new(),
             priority_map: std::collections::HashMap::new(),
             labels_from_tags: false,
+            epic_link_custom_field: None,
         }
     }
 
@@ -257,6 +258,7 @@ mod tests {
             tags: vec![],
             issue_type: None,
             plugin_state: None,
+            parent_plugin_state: None,
         }
     }
 

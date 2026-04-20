@@ -5,6 +5,89 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-JIRA-PARENT review sweep (2026-04-20)
+
+Five findings raised and fixed in the same commit
+(v0.53.0):
+
+#### RT-136 — `parent_push_levels` silently truncated runtime cycles
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `crates/rustwerk/src/domain/project/parent.rs::parent_push_levels`
+- **Description:** A defensive `if d > self.tasks.len()
+  { break; }` capped depth when an in-memory cycle
+  somehow survived load validation (e.g. a future
+  code path that bypasses `file_store::load`). The
+  task then landed in a truncated level and got
+  pushed out of parent/child order.
+- **Resolution:** Changed return type to
+  `Result<PushLevels, DomainError>`. A revisit in the
+  ancestor walk now returns `CycleDetected` loudly.
+  Regression test
+  `parent_push_levels_rejects_runtime_cycle`.
+
+#### RT-137 — Partial-run aggregate message claimed full level count
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `crates/rustwerk/src/bin/rustwerk/commands/plugin.rs`
+- **Description:** When the between-levels project
+  reload failed at level N > 0, the loop broke but
+  the aggregate message still reported
+  `"pushed across {levels.len()} level(s)"` — the
+  planned count, not the executed count.
+- **Resolution:** Extracted a `LevelExecution` outcome
+  struct with `levels_completed`; new
+  `build_aggregate_result` helper reports
+  `"X of Y level(s) completed"` when partial and
+  flags success = false. Tests
+  `aggregate_result_flags_partial_run_when_reload_failed`
+  and `aggregate_result_reports_full_count_on_clean_run`.
+
+#### RT-138 — Empty task selection silently succeeded
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (UX)
+- **Where:** `cmd_plugin_push`
+- **Description:** `rustwerk plugin push --tasks
+  "status=typo'd"` produced `0 task(s) pushed across
+  0 level(s)` with `success: true` and exit code 0 —
+  indistinguishable from "everything already done."
+- **Resolution:** Empty selection now returns a
+  `PluginResult` with `success: false` and message
+  `"no matching tasks to push (filter produced empty
+  selection)"`.
+
+#### RT-139 — `save_warning.get_or_insert` swallowed later level warnings
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (minor)
+- **Where:** `cmd_plugin_push`
+- **Description:** Only the first save warning across
+  the level loop was retained; later levels' failures
+  were lost. Operator would see one problem, fix it,
+  run again, discover another unrelated one.
+- **Resolution:** Collected into `Vec<String>`;
+  `LevelExecution::save_warning` joins with `" | "`
+  (a separator none of the individual messages
+  produce). Test
+  `level_execution_save_warning_joins_with_pipe`.
+
+#### RT-140 — `is_ancestor_of` could infinite-loop on runtime-corrupted forest
+
+- **Date:** 2026-04-20
+- **Category:** Hardening (minor)
+- **Where:** `crates/rustwerk/src/domain/project/parent.rs::is_ancestor_of`
+- **Description:** If load-time cycle validation was
+  ever bypassed (future refactor), the ancestor-walk
+  would hang the CLI.
+- **Resolution:** Added a `HashSet<TaskId> seen` guard
+  that returns `false` on revisit. Regression test
+  `is_ancestor_of_handles_runtime_cycle_without_hanging`.
+
+---
+
 ### PLG-JIRA-FIELDS review sweep (2026-04-20)
 
 Three findings raised and fixed in the same commit

@@ -37,6 +37,11 @@ pub(crate) enum MappingWarning {
         transition_id: String,
         message: String,
     },
+    /// The parent task's `plugin_state.jira.key` was
+    /// present but did not parse as a valid Jira issue
+    /// key. The child is pushed without a `parent.key`
+    /// field (orphan) rather than failing the whole task.
+    InvalidParentKey(String),
 }
 
 impl std::fmt::Display for MappingWarning {
@@ -68,6 +73,11 @@ impl std::fmt::Display for MappingWarning {
             } => write!(
                 f,
                 "transition to {transition_id} failed: {message}"
+            ),
+            Self::InvalidParentKey(raw) => write!(
+                f,
+                "parent plugin state has invalid Jira issue key '{raw}'; \
+                 issue pushed without parent link"
             ),
         }
     }
