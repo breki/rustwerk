@@ -4,7 +4,62 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-106
+**Next ID:** RT-110
+
+---
+
+### RT-109 — TOCTOU between `dest.exists()` and `fs::copy`
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (racy `--force` gate)
+- **Commit context:** feat: add `rustwerk plugin
+  install` subcommand (v0.47.0)
+- **Description:** `install_from_path` checks
+  `dest.exists()` then calls `fs::copy(source, &dest)`.
+  On the `!force` path, a concurrent writer can create
+  `dest` between the two calls and `fs::copy` silently
+  overwrites (uses `O_TRUNC` / `CREATE_ALWAYS`
+  semantics). The advertised protection "passing
+  `--force` is required to overwrite an existing
+  plugin" can therefore be defeated by a race.
+- **Why not fixed in-commit:** `plugin install` is a
+  local, single-project, developer-initiated
+  operation — two concurrent `plugin install` runs
+  aren't a realistic threat model. The symlink vector
+  that shared this code path (RT-106) *was* fixed in
+  this commit. When the install flow migrates to a
+  temp-file + `fs::rename` pattern, this finding gets
+  closed automatically.
+- **Suggested fix:** Write to
+  `dest_dir/.<filename>.tmp`, verify, then atomically
+  `fs::rename` into place. Closes this finding and
+  any remaining variants of RT-106 in one stroke.
+
+### RT-108 — Windows-reserved filenames + trailing-dot names pass validation
+
+- **Date:** 2026-04-20
+- **Category:** Platform-specific UX
+- **Commit context:** feat: add `rustwerk plugin
+  install` subcommand (v0.47.0)
+- **Description:** `source.file_name()` is copied
+  verbatim into `dest_dir.join(filename)`. A source
+  named `CON.dll`, `AUX.dll`, `COM1.dll`, or a
+  filename with a trailing dot/space on Windows
+  either produces a cryptic OS error or results in a
+  file that later `discover_plugins` can't find
+  (Windows silently strips trailing dots at the
+  filesystem level, so the installed and looked-up
+  paths diverge).
+- **Why not fixed in-commit:** No plugin author has
+  produced a reserved-name cdylib yet; surfacing this
+  to the validation layer is a pure hardening task,
+  not a user-facing bug today.
+- **Suggested fix:** In `validate_cdylib_extension`
+  (or a sibling `validate_cdylib_filename`), reject
+  Windows-reserved stems (`CON`, `PRN`, `AUX`, `NUL`,
+  `COM1..9`, `LPT1..9`) and filenames ending in `.`
+  or space. Reuse the same allowlist shape as
+  `validate_plugin_name` in `plugin_host`.
 
 **Threshold:** when 10+ findings are open, a full-codebase
 red team review is required before continuing feature work.

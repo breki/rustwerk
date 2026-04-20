@@ -4,7 +4,64 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-082
+**Next ID:** AQ-089
+
+---
+
+### AQ-088 — Visibility bumps on `plugin_host` widen the crate-internal surface
+
+- **Date:** 2026-04-20
+- **Category:** Abstraction boundaries
+- **Commit context:** feat: add `rustwerk plugin
+  install` subcommand (v0.47.0)
+- **Description:** `DYLIB_EXT`, `home_dir`, and
+  `load_plugin` in `plugin_host.rs` were promoted to
+  `pub(crate)` to serve `commands::plugin::install`.
+  `load_plugin` genuinely needs this — the install
+  verifier needs the single-file load entry point.
+  The other two are primitives that could be hidden
+  behind higher-level operations (e.g. a
+  `plugin_host::validate_dylib_extension(&Path)` that
+  owns both `DYLIB_EXT` and the extension check, and
+  a `plugin_host::user_plugin_dir() -> Option<PathBuf>`
+  that wraps `home_dir`).
+- **Why not fixed in-commit:** Coupled with the
+  module-split in AQ-087, the cleanest shape emerges
+  after both changes; doing this visibility cleanup
+  standalone would just churn `plugin_host.rs`.
+- **Suggested fix:** Move `validate_cdylib_extension`
+  (currently in `commands/plugin.rs`) into
+  `plugin_host`, similarly wrap the home lookup as a
+  named operation. Revert `DYLIB_EXT` and `home_dir`
+  to module-private.
+
+### AQ-087 — `commands/plugin.rs` is 1200+ lines and hosts three independent subcommands
+
+- **Date:** 2026-04-20
+- **Category:** Module size
+- **Commit context:** feat: add `rustwerk plugin
+  install` subcommand (v0.47.0)
+- **Description:** After PLG-INSTALL,
+  `commands/plugin.rs` hosts `list`, `push`, and
+  `install` — three subcommands with their own output
+  structs, `RenderText` impls, helpers, and test
+  sections. CLAUDE.md flags >500 lines + multiple
+  structs-with-impls as a split trigger. `install`
+  shares almost nothing with `push` (no task DTO, no
+  config assembly, no exit-code gymnastics); they're
+  colocated only because they share the `plugin` noun.
+- **Why not fixed in-commit:** Clean split is a
+  mechanical but non-trivial refactor (~1200 lines to
+  re-distribute). Out of scope for a feature
+  landing; belongs in its own `refactor:` commit.
+- **Suggested fix:** Split into
+  `commands/plugin/mod.rs` (shared `PluginListItem`,
+  `to_list_item`, `RenderText` glue),
+  `commands/plugin/list.rs`,
+  `commands/plugin/push.rs`,
+  `commands/plugin/install.rs`. Each lands in the
+  200–400 line band. Tests travel with the code they
+  cover.
 
 **Threshold:** when 10+ findings are open, a full-codebase
 Artisan review is required before continuing feature work.

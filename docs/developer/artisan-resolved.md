@@ -6,6 +6,70 @@ findings.
 
 ---
 
+### PLG-INSTALL review sweep (2026-04-20)
+
+Five findings raised and fixed in the same commit
+(`feat: add rustwerk plugin install subcommand`,
+v0.47.0). Two more from the same sweep (AQ-087
+module split, AQ-088 visibility) were logged open
+as deferred refactors.
+
+- **AQ-082 — `--scope project` silently falls back
+  to the current directory.** `cmd_plugin_install`
+  did `load_project().or_else(|_| env::current_dir())`,
+  so running `rustwerk plugin install foo.dll` from
+  outside a rustwerk project would create a stray
+  `.rustwerk/plugins/` tree in whatever directory the
+  user happened to be in. **Fix:** restructured to
+  require `load_project()` only when `scope ==
+  Project`; `User` scope runs independent of cwd.
+  `resolve_scope_dir` signature updated from
+  `project_root: &Path` to `Option<&Path>` and bails
+  with a named error when the scope needs a project
+  but none was found. Regression test
+  `resolve_scope_dir_project_errors_without_project_root`
+  pins the behavior.
+
+- **AQ-083 — `PluginInstallOutput::scope` was
+  stringly-typed.** The field stored `"project"` /
+  `"user"` as a `String`, populated via a hand-rolled
+  `InstallScope::as_str().to_string()`. **Fix:**
+  `scope: InstallScope` with `#[derive(Serialize)]
+  #[serde(rename_all = "snake_case")]` on the enum;
+  added `fmt::Display` for text rendering; dropped
+  `as_str`. JSON consumers now see the same
+  `"project"` / `"user"` values typed through serde.
+
+- **AQ-084 — `verify: &dyn Fn(…)` forced needless
+  dynamic dispatch.** The verifier closure is called
+  once per `plugin install` invocation in a non-hot
+  path; the trait-object indirection existed purely
+  for test injection. **Fix:** signature changed to
+  `verify: impl Fn(&Path) -> Result<PluginListItem>`.
+  All four test call sites work unchanged (closures
+  coerce identically).
+
+- **AQ-085 — Tuple return
+  `(PluginListItem, PathBuf, bool)` obscured
+  meaning.** `install_from_path` returned a 3-tuple
+  ending in a bare `bool`, the canonical "mixed up at
+  the call site" anti-pattern. **Fix:** introduced a
+  private `struct InstallOutcome { info, replaced }`
+  and now returns that directly. The `PathBuf` was
+  dropped from the outcome because `info.path`
+  already carries it (see AQ-086).
+
+- **AQ-086 — `PluginInstallOutput.destination`
+  duplicated `installed.path`.** `to_list_item` fills
+  `PluginListItem.path` from `loaded.source_path()`,
+  which is the final destination after the copy;
+  `PluginInstallOutput` was storing the same string
+  again in a parallel `destination` field. JSON
+  consumers saw two fields with identical values.
+  **Fix:** dropped the duplicated field; the
+  renderer and JSON output now both read
+  `installed.path` as the single source of truth.
+
 ### PLG-MAP review sweep (2026-04-20)
 
 Three findings raised and fixed in the same commit

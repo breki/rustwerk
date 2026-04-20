@@ -11,7 +11,7 @@ use std::env;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use rustwerk::domain::project::Project;
 use rustwerk::domain::task::Status;
@@ -33,7 +33,9 @@ fn resolve_developer(explicit: Option<String>) -> Result<String> {
 }
 
 #[cfg(feature = "plugins")]
-use commands::{cmd_plugin_list, cmd_plugin_push};
+use commands::{
+    cmd_plugin_install, cmd_plugin_list, cmd_plugin_push, InstallScope,
+};
 use commands::{
     cmd_depend, cmd_dev_add, cmd_dev_list, cmd_dev_remove, cmd_effort_estimate,
     cmd_effort_log, cmd_init, cmd_report_bottlenecks, cmd_report_complete,
@@ -143,6 +145,43 @@ enum PluginAction {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Install a pre-built plugin cdylib into the
+    /// plugin discovery directory.
+    Install {
+        /// Path to the built `.dll` / `.so` / `.dylib`.
+        source: PathBuf,
+        /// Where to install the plugin. `project`
+        /// writes to `./.rustwerk/plugins/` (the
+        /// default); `user` writes to
+        /// `$HOME/.rustwerk/plugins/`.
+        #[arg(long, value_enum, default_value_t = InstallScopeArg::Project)]
+        scope: InstallScopeArg,
+        /// Overwrite an existing plugin with the same
+        /// filename.
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+/// CLI-side mirror of [`commands::InstallScope`]. A
+/// separate type so `clap::ValueEnum` derivation stays
+/// in the binary crate and the `commands` module does
+/// not pick up a clap dependency.
+#[cfg(feature = "plugins")]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+enum InstallScopeArg {
+    Project,
+    User,
+}
+
+#[cfg(feature = "plugins")]
+impl From<InstallScopeArg> for InstallScope {
+    fn from(v: InstallScopeArg) -> Self {
+        match v {
+            InstallScopeArg::Project => InstallScope::Project,
+            InstallScopeArg::User => InstallScope::User,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -563,6 +602,14 @@ fn dispatch_plugin(
                 bail!("plugin '{name}' reported an aggregate failure");
             }
             Ok(())
+        }
+        PluginAction::Install {
+            source,
+            scope,
+            force,
+        } => {
+            let output = cmd_plugin_install(&source, scope.into(), force)?;
+            render::emit(&output, fmt)
         }
     }
 }

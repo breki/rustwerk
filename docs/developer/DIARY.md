@@ -7,6 +7,53 @@ reverse chronological order.
 
 ### 2026-04-20
 
+- Add `rustwerk plugin install` subcommand (v0.47.0)
+
+    PLG-INSTALL. The new command
+    `rustwerk plugin install <SOURCE> [--scope
+    project|user] [--force]` copies a pre-built cdylib
+    into the plugin discovery directory and
+    load-verifies it via the same host entry point
+    `plugin list` uses. Failed verification rolls back
+    the copy so a botched install never leaves a
+    half-installed plugin behind. Wrong-extension
+    sources are rejected before any filesystem
+    mutation.
+
+    Delivered source kind: path-to-already-built
+    cdylib only. The cargo-build variants
+    (`--from <package-name>`, cargo-project-dir
+    source) are deferred to a follow-up task
+    `PLG-INSTALL-BUILD` — the c=2 rating for
+    PLG-INSTALL couldn't absorb a cargo-subprocess
+    wrapper.
+
+    Red team / Artisan sweep (RT-106..RT-107,
+    AQ-082..AQ-086, all fixed in-commit): reject
+    symlink destinations so `fs::copy` can't write
+    plugin bytes outside `plugins/`; reject
+    source == dest canonicalisation so
+    re-installing from the discovery dir can't
+    truncate and delete the already-installed plugin;
+    require `load_project` to succeed for
+    `--scope project` instead of silently falling
+    back to cwd; type `PluginInstallOutput.scope` as
+    `InstallScope` with `serde(rename_all = "snake_case")`
+    instead of `String`; switch `verify` from
+    `&dyn Fn` to `impl Fn`; replace the
+    `(PluginListItem, PathBuf, bool)` tuple return
+    with a named `InstallOutcome` struct; drop
+    `PluginInstallOutput.destination` as redundant
+    with `installed.path`.
+
+    Four findings from the same sweep logged open
+    for separate refactors: AQ-087 (split
+    `commands/plugin.rs` at 1200+ lines into
+    per-subcommand modules), AQ-088 (narrow
+    `plugin_host` visibility leaks), RT-108 (reject
+    Windows-reserved cdylib filenames), RT-109
+    (migrate install to temp-file + atomic rename).
+
 - Render Jira description as ADF (v0.46.0)
 
     PLG-MAP. The jira plugin's `description` field now

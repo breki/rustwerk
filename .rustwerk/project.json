@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T05:01:47.724253Z"
+    "modified_at": "2026-04-20T05:18:50.294078500Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -488,7 +488,7 @@
     "PLG-INSTALL": {
       "title": "rustwerk plugin install subcommand",
       "description": "rustwerk plugin install <source> [--scope project|user] [--force].",
-      "status": "todo",
+      "status": "done",
       "complexity": 2,
       "tags": [
         "cli",

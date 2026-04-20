@@ -72,7 +72,7 @@ const MAX_PLUGIN_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
 const DEV_DIRS_ENV: &str = "RUSTWERK_PLUGIN_DEV";
 
 /// Platform-specific dynamic library extension.
-const DYLIB_EXT: &str = if cfg!(target_os = "windows") {
+pub(crate) const DYLIB_EXT: &str = if cfg!(target_os = "windows") {
     "dll"
 } else if cfg!(target_os = "macos") {
     "dylib"
@@ -229,7 +229,7 @@ fn dev_dirs_enabled() -> bool {
 /// values the same as absent ones so that
 /// `HOME=` / `USERPROFILE=` cannot cause a
 /// CWD-relative plugin scan.
-fn home_dir() -> Option<PathBuf> {
+pub(crate) fn home_dir() -> Option<PathBuf> {
     let raw = if cfg!(target_os = "windows") {
         env::var_os("USERPROFILE")
     } else {
@@ -298,7 +298,7 @@ pub(crate) fn discover_plugins(project_root: &Path) -> Vec<LoadedPlugin> {
 /// Load a single plugin from `path`. Rejects anything
 /// that does not export all four FFI entry points or
 /// reports a different API version.
-fn load_plugin(path: &Path) -> Result<LoadedPlugin> {
+pub(crate) fn load_plugin(path: &Path) -> Result<LoadedPlugin> {
     // Safety: `Library::new` executes the shared
     // object's constructors. See the module trust-model
     // notes — every file in a discovery directory is

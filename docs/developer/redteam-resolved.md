@@ -5,6 +5,46 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-INSTALL review sweep (2026-04-20)
+
+Two findings raised and fixed in the same commit
+(`feat: add rustwerk plugin install subcommand`,
+v0.47.0). Two more (RT-108, RT-109) from the same
+sweep were logged open as deferred hardening.
+
+- **RT-106 — Symlink destination allows writing
+  plugin bytes outside `plugins/`.** `install_from_path`
+  checked `dest.exists()` then called `fs::copy`,
+  which on every platform follows symlinks at the
+  destination. A pre-existing symlink like
+  `.rustwerk/plugins/evil.dll -> ~/.bashrc` on the
+  `--force` path would cause `rustwerk plugin
+  install` to overwrite `~/.bashrc` with plugin bytes.
+  **Fix:** added `reject_symlink_dest` which calls
+  `fs::symlink_metadata` and bails when the
+  destination is a symlink. `NotFound` passes through
+  (fresh install is legal); other stat errors are
+  surfaced instead of silently swallowed. Regression
+  test `install_from_path_rejects_symlink_destination`
+  (Unix-only; Windows symlink creation requires
+  elevation) proves the link target is preserved.
+
+- **RT-107 — `source == dest` silently deletes an
+  existing plugin.** Running
+  `rustwerk plugin install .rustwerk/plugins/foo.dll
+  --force` took a shortcut through `fs::copy(src, dst)`
+  where `src == dst`: on Linux this truncates the
+  file to zero bytes before copying, then the
+  follow-up `verify(&dest)` fails on the empty file
+  and the verify-cleanup branch deletes it — silently
+  wiping the user's installed plugin. **Fix:** added
+  `reject_self_copy` which canonicalises both paths
+  (only when `dest` already exists) and bails when
+  they resolve to the same inode/file-id. Regression
+  test `install_from_path_rejects_self_copy` proves
+  the existing file survives intact when the guard
+  triggers.
+
 ### PLG-MAP review sweep (2026-04-20)
 
 Two findings raised and fixed in the same commit

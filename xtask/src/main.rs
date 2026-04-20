@@ -49,6 +49,11 @@ const MODULE_COVERAGE_EXEMPT: &[&str] = &[
     // Plugin host: most unsafe FFI paths need a real
     // cdylib to exercise.
     "bin/rustwerk/plugin_host.rs",
+    // CLI dispatch glue: clap-wired command arms can
+    // only be exercised by spawning the binary, which
+    // is integration-test territory (covered by
+    // cli_integration.rs and upcoming PLG-HOST-E2E).
+    "bin/rustwerk/main.rs",
     // Main rustwerk lib.rs is module re-exports only.
     "rustwerk/src/lib.rs",
     // Plugin API is covered by its own package's unit

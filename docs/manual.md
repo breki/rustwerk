@@ -794,6 +794,45 @@ capabilities, and path on disk. Reports
 "No plugins installed." when no plugins are found (not
 an error).
 
+### Install a Plugin
+
+```bash
+rustwerk plugin install <SOURCE> \
+    [--scope <project|user>] \
+    [--force]
+```
+
+Copies a pre-built cdylib into the plugin discovery
+directory and verifies it loads.
+
+- `<SOURCE>`: path to a built `.dll` (Windows), `.so`
+  (Linux), or `.dylib` (macOS) — typically
+  `target/debug/rustwerk_jira_plugin.dll` after running
+  `cargo build -p rustwerk-jira-plugin`.
+- `--scope project` (default): install into
+  `./.rustwerk/plugins/`.
+- `--scope user`: install into
+  `$HOME/.rustwerk/plugins/` (or
+  `%USERPROFILE%\.rustwerk\plugins\`) so the plugin is
+  available to every project.
+- `--force`: overwrite an existing plugin with the
+  same filename. Without `--force`, an existing
+  install is a clear error.
+
+On success, the command prints the discovered
+`name/version/capabilities` — the same thing
+`plugin list` would show next. If the copy succeeds
+but the library fails to load (wrong API version,
+missing FFI symbols, not a valid dynamic library),
+the partial install is removed automatically.
+
+`rustwerk plugin install` only installs already-built
+cdylibs. Building from source (e.g. `--from
+<crate-name>`) is intentionally deferred to a
+follow-up subcommand; use
+`cargo build -p <plugin-crate>` followed by
+`rustwerk plugin install <path>`.
+
 ### Push Tasks to a Plugin Backend
 
 ```bash

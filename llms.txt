@@ -165,6 +165,9 @@ Feature-gated on the `plugins` feature (default on).
 
 ```
 rustwerk plugin list
+rustwerk plugin install <SOURCE> \
+    [--scope <project|user>] \
+    [--force]
 rustwerk plugin push <NAME> \
     [--project-key <KEY>] \
     [--tasks <ID,ID,...>] \
@@ -176,6 +179,16 @@ highest precedence) and `~/.rustwerk/plugins/`
 (user-scoped). Extension filter: `.dll` / `.so` /
 `.dylib` by platform. Same-named plugins are shadowed
 by the higher-precedence directory.
+
+`plugin install` copies a pre-built cdylib into the
+target directory (`project` or `user` scope), then
+load-verifies it via the same host entry point used by
+`plugin list`. Failed verification rolls back the copy,
+so a botched install never leaves a half-installed
+plugin behind. Wrong-extension sources are rejected
+before any file is touched. Building from source is
+deferred; pipe `cargo build -p <plugin-crate>` into
+`rustwerk plugin install <built-path>`.
 
 `plugin push` assembles a config JSON from:
 - `JIRA_URL` env → `jira_url`
