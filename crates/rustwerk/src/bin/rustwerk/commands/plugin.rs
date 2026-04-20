@@ -386,6 +386,7 @@ fn task_to_dto(id: &TaskId, task: &Task) -> TaskDto {
         complexity: task.complexity,
         assignee: task.assignee.clone(),
         tags: task.tags.iter().map(|t| t.as_str().to_string()).collect(),
+        issue_type: task.issue_type.map(|t| t.as_wire_str().to_string()),
         plugin_state: None,
     }
 }
@@ -832,7 +833,7 @@ fn render_dry_run_text(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rustwerk::domain::task::{Effort, EffortUnit, Tag};
+    use rustwerk::domain::task::{Effort, EffortUnit, IssueType, Tag};
 
     fn task_fixture() -> Task {
         Task {
@@ -848,6 +849,7 @@ mod tests {
             assignee: Some("igor".into()),
             effort_entries: vec![],
             tags: vec![Tag::new("plugin").unwrap(), Tag::new("api").unwrap()],
+            issue_type: Some(IssueType::Story),
             plugin_state: std::collections::BTreeMap::new(),
         }
     }
@@ -865,6 +867,7 @@ mod tests {
         assert_eq!(dto.complexity, Some(5));
         assert_eq!(dto.assignee.as_deref(), Some("igor"));
         assert_eq!(dto.tags, vec!["plugin".to_string(), "api".to_string()]);
+        assert_eq!(dto.issue_type.as_deref(), Some("story"));
         assert!(dto.plugin_state.is_none());
     }
 
@@ -878,6 +881,7 @@ mod tests {
         t.assignee = None;
         t.tags.clear();
         t.dependencies.clear();
+        t.issue_type = None;
         let dto = task_to_dto(&id, &t);
         assert_eq!(dto.description, "");
         assert!(dto.dependencies.is_empty());
@@ -885,6 +889,16 @@ mod tests {
         assert_eq!(dto.effort_estimate, None);
         assert_eq!(dto.complexity, None);
         assert_eq!(dto.assignee, None);
+        assert_eq!(dto.issue_type, None);
+    }
+
+    #[test]
+    fn task_to_dto_propagates_issue_type_as_kebab_case() {
+        let id = TaskId::new("T1").unwrap();
+        let mut t = task_fixture();
+        t.issue_type = Some(IssueType::SubTask);
+        let dto = task_to_dto(&id, &t);
+        assert_eq!(dto.issue_type.as_deref(), Some("sub-task"));
     }
 
     #[test]

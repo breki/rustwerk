@@ -111,9 +111,10 @@ JSON shapes (success only):
 
 ```
 rustwerk task add "Title" [--id ID] [--desc DESC] \
-  [--complexity N] [--effort AMT] [--tags TAGS]
+  [--complexity N] [--effort AMT] [--tags TAGS] \
+  [--type epic|story|task|sub-task]
 rustwerk task update <ID> [--title T] [--desc D] \
-  [--tags T]
+  [--tags T] [--type epic|story|task|sub-task|""]
 rustwerk task remove <ID>
 rustwerk task rename <OLD_ID> <NEW_ID>
 rustwerk task status <ID> <STATUS> [--force]
@@ -199,6 +200,14 @@ deferred; pipe `cargo build -p <plugin-crate>` into
 Absent values are omitted. `--dry-run` prints the task
 list and resolved config **key names** (never the
 token value) without invoking the plugin.
+
+The jira plugin also accepts optional
+`default_issue_type` (Jira-side name used when a task
+has no `--type`; defaults to `"Task"`) and
+`issue_type_map` (overrides for rustwerk's wire names
+→ the exact Jira strings, e.g.
+`{"sub-task": "Subtask"}` for sites that dropped the
+hyphen).
 
 The binary exits non-zero when the plugin reports an
 aggregate failure, so CI can gate on the push result.

@@ -19,7 +19,7 @@ pub(crate) use report::{
 pub(crate) use task::{
     cmd_depend, cmd_task_add, cmd_task_assign, cmd_task_describe,
     cmd_task_list, cmd_task_remove, cmd_task_rename, cmd_task_status,
-    cmd_task_unassign, cmd_task_update, cmd_undepend,
+    cmd_task_unassign, cmd_task_update, cmd_undepend, TaskUpdateFields,
 };
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use rustwerk::domain::developer::{Developer, DeveloperId};
 use rustwerk::domain::project::Project;
-use rustwerk::domain::task::{Effort, EffortEntry, Task, TaskId};
+use rustwerk::domain::task::{Effort, EffortEntry, IssueType, Task, TaskId};
 use rustwerk::persistence::file_store;
 
 use crate::{load_project, parse_status, save_project};
@@ -90,6 +90,13 @@ fn execute_one(
                 let tag_strs = parse_batch_tags(tags)?;
                 task.set_tags(&tag_strs)?;
             }
+            if let Some(t) = args
+                .get("issue_type")
+                .or_else(|| args.get("type"))
+                .and_then(|v| v.as_str())
+            {
+                task.issue_type = Some(IssueType::parse(t)?);
+            }
             let task_id =
                 if let Some(id_str) = args.get("id").and_then(|v| v.as_str()) {
                     let tid = TaskId::new(id_str)?;
@@ -116,10 +123,18 @@ fn execute_one(
             let title = args.get("title").and_then(|v| v.as_str());
             let desc = args.get("desc").and_then(|v| v.as_str());
             let tags = args.get("tags").and_then(|v| v.as_array());
-            if title.is_none() && desc.is_none() && tags.is_none() {
+            let issue_type = args
+                .get("issue_type")
+                .or_else(|| args.get("type"))
+                .and_then(|v| v.as_str());
+            if title.is_none()
+                && desc.is_none()
+                && tags.is_none()
+                && issue_type.is_none()
+            {
                 bail!(
                     "task.update requires at least one \
-                     of 'title', 'desc', or 'tags'"
+                     of 'title', 'desc', 'tags', or 'issue_type'"
                 );
             }
             let description =
@@ -128,6 +143,14 @@ fn execute_one(
             if let Some(tag_arr) = tags {
                 let tag_strs = parse_batch_tags(tag_arr)?;
                 project.set_task_tags(&task_id, &tag_strs)?;
+            }
+            if let Some(t) = issue_type {
+                let parsed = if t.is_empty() {
+                    None
+                } else {
+                    Some(IssueType::parse(t)?)
+                };
+                project.set_task_issue_type(&task_id, parsed)?;
             }
             Ok(format!("Updated {task_id}"))
         }

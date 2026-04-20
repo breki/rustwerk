@@ -114,7 +114,12 @@ use serde_json::Value;
 ///   `TaskPushResult.plugin_state_update` added to
 ///   let plugins persist opaque per-task state
 ///   (e.g. a Jira issue key) across pushes.
-pub const API_VERSION: u32 = 2;
+/// - **v3**: `TaskDto.issue_type` added so plugins
+///   can map rustwerk's abstract issue-type enum
+///   (`epic` / `story` / `task` / `sub-task`) to the
+///   target tracker's equivalent (e.g. Jira
+///   `"Epic"` or a renamed `"Subtask"`).
+pub const API_VERSION: u32 = 3;
 
 /// Return code: success.
 pub const ERR_OK: i32 = 0;
@@ -285,6 +290,39 @@ pub struct TaskDto {
     pub assignee: Option<String>,
     /// Free-form tags.
     pub tags: Vec<String>,
+    /// Issue-type classification as the kebab-case wire
+    /// name (`"epic"`, `"story"`, `"task"`, `"sub-task"`).
+    /// `None` means "let the plugin's config-level default
+    /// decide".
+    ///
+    /// # Why `String` and not an enum?
+    ///
+    /// Note the deliberate asymmetry with [`TaskStatusDto`]
+    /// on the same DTO: `status` is a closed enum while
+    /// `issue_type` is stringly-typed. The two classify
+    /// along different axes:
+    ///
+    /// - `Status` is a finite workflow enumeration
+    ///   controlled by the host; a plugin written today
+    ///   must see the same set of statuses six months
+    ///   from now, so a closed enum gives plugins
+    ///   exhaustive matching for free.
+    /// - `issue_type` is an open classification that
+    ///   tends to grow: new domain variants will ship
+    ///   (and `PLG-JIRA-PARENT` already expects "epic"
+    ///   semantics to extend). Keeping the wire type
+    ///   stringly-typed here lets the host send a new
+    ///   kebab name without recompiling every installed
+    ///   v3 plugin — plugins that don't recognize the
+    ///   string apply their `default_issue_type`
+    ///   fallback.
+    ///
+    /// Plugins are expected to validate this string
+    /// (length, charset) and fall back to their own
+    /// default when they don't recognize it, rather than
+    /// forwarding unknown values to the external system.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_type: Option<String>,
     /// Opaque state previously returned by THIS plugin
     /// for THIS task via `plugin_state_update`. `None`
     /// on first push or when no prior state was
@@ -415,8 +453,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn api_version_is_two() {
-        assert_eq!(API_VERSION, 2);
+    fn api_version_is_three() {
+        assert_eq!(API_VERSION, 3);
     }
 
     #[test]
@@ -619,6 +657,7 @@ mod tests {
             complexity: Some(5),
             assignee: Some("igor".into()),
             tags: vec!["plugin".into(), "api".into()],
+            issue_type: None,
             plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
@@ -638,6 +677,7 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            issue_type: None,
             plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
@@ -657,6 +697,7 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            issue_type: None,
             plugin_state: Some(serde_json::json!({ "key": "PROJ-7" })),
         };
         let json = serde_json::to_string(&t).unwrap();
@@ -677,10 +718,63 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            issue_type: None,
             plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         assert!(!json.contains("plugin_state"), "got: {json}");
+    }
+
+    #[test]
+    fn task_dto_carries_issue_type() {
+        let t = TaskDto {
+            id: "T".into(),
+            title: "t".into(),
+            description: String::new(),
+            status: TaskStatusDto::Todo,
+            dependencies: vec![],
+            effort_estimate: None,
+            complexity: None,
+            assignee: None,
+            tags: vec![],
+            issue_type: Some("sub-task".into()),
+            plugin_state: None,
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(json.contains("\"issue_type\":\"sub-task\""));
+        let back: TaskDto = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.issue_type.as_deref(), Some("sub-task"));
+    }
+
+    #[test]
+    fn task_dto_omits_issue_type_when_none() {
+        let t = TaskDto {
+            id: "T".into(),
+            title: "t".into(),
+            description: String::new(),
+            status: TaskStatusDto::Todo,
+            dependencies: vec![],
+            effort_estimate: None,
+            complexity: None,
+            assignee: None,
+            tags: vec![],
+            issue_type: None,
+            plugin_state: None,
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("issue_type"), "got: {json}");
+    }
+
+    #[test]
+    fn task_dto_accepts_missing_issue_type() {
+        let json = r#"{
+            "id":"T","title":"t","description":"",
+            "status":"todo","dependencies":[],
+            "effort_estimate":null,"complexity":null,
+            "assignee":null,"tags":[]
+        }"#;
+        let t: TaskDto = serde_json::from_str(json).unwrap();
+        assert!(t.issue_type.is_none());
     }
 
     #[test]

@@ -5,6 +5,84 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-JIRA-ISSUETYPE review sweep (2026-04-20)
+
+Four findings raised and fixed in the same commit
+(v0.51.0):
+
+#### RT-129 — Unknown kebab bypasses `default_issue_type` fallback
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `crates/rustwerk-jira-plugin/src/config.rs`
+- **Description:** `resolve_issue_type_name` used to
+  pass an unrecognized kebab name through verbatim
+  (e.g. `"bug"` → `{"name":"bug"}`), bypassing the
+  user-configured `default_issue_type` safety net.
+- **Impact:** Future domain variant or corrupted
+  `project.json` would produce a JSON payload Jira
+  rejects (HTTP 400) instead of falling back to the
+  configured default.
+- **Resolution:** Unknown / implausible kebab wire
+  values now fall through to
+  `default_issue_type` → `"Task"`. The fallback chain
+  doc-comment was rewritten to match.
+
+#### RT-130 — `"subtask"` alias asymmetry
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `crates/rustwerk-jira-plugin/src/config.rs`
+- **Description:** CLI accepted `"subtask"` and
+  `"sub-task"` as aliases, but the plugin looked up
+  `issue_type_map` with an exact match. A user who
+  wrote `issue_type_map: { "subtask": "Subtask" }`
+  silently got the built-in `"Sub-task"` instead.
+- **Impact:** Silent map-override drop.
+- **Resolution:** Added
+  `canonicalize_issue_type_kebab` which folds
+  `"subtask"` → `"sub-task"`; applied at config
+  load-time (normalizes user-supplied keys) and at
+  resolve-time (normalizes incoming wire values).
+
+#### RT-131 — `task update --type story` alone could regress
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `crates/rustwerk/src/bin/rustwerk/commands/task.rs`
+- **Description:** The CLI called `project.update_task`
+  unconditionally even when only `--type` was set,
+  then did a second `tasks.get_mut(...)` for the
+  `issue_type` mutation. If `update_task(None, None)`
+  ever began returning `Err`, type-only updates would
+  fail before the type landed.
+- **Impact:** Fragile coupling; unreachable
+  `TaskNotFound` branch in the binary.
+- **Resolution:** Subsumed by AQ-108 — `cmd_task_update`
+  now calls `project.set_task_issue_type` through the
+  domain API, which owns the existence check.
+
+#### RT-132 — No length/charset validation on wire `issue_type`
+
+- **Date:** 2026-04-20
+- **Category:** Security (low)
+- **Where:** `crates/rustwerk-jira-plugin/src/config.rs`
+- **Description:** `TaskDto.issue_type: Option<String>`
+  is intentionally stringly-typed on the wire, but
+  the plugin forwarded whatever arrived straight into
+  the Jira payload with no length or charset cap.
+- **Impact:** Low — `serde_json` blocks JSON breakout,
+  but a malicious/buggy upstream could push arbitrarily
+  long or control-char-laden strings that land in
+  Jira's validator as opaque 400s.
+- **Resolution:** Added
+  `is_plausible_issue_type_wire` (bounded 64 bytes,
+  no control chars, non-empty); implausible values
+  fall through to the default fallback rather than
+  being forwarded.
+
+---
+
 ### PLG-JIRA-UPDATE review sweep (2026-04-20)
 
 Three findings raised and fixed in the same commit

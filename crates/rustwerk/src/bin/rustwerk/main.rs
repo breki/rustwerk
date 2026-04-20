@@ -266,6 +266,10 @@ enum TaskAction {
         /// alphanumeric and hyphens).
         #[arg(long)]
         tags: Option<String>,
+        /// Issue type for external trackers (e.g. Jira):
+        /// `epic`, `story`, `task`, or `sub-task`.
+        #[arg(long = "type")]
+        issue_type: Option<String>,
     },
     /// Set task status.
     Status {
@@ -330,6 +334,10 @@ enum TaskAction {
         /// tags; use "" to clear).
         #[arg(long)]
         tags: Option<String>,
+        /// New issue type (`epic`, `story`, `task`,
+        /// `sub-task`). Pass `""` to clear.
+        #[arg(long = "type")]
+        issue_type: Option<String>,
     },
     /// Assign a developer to a task. Falls back to the
     /// `RUSTWERK_USER` environment variable when no
@@ -424,6 +432,7 @@ fn dispatch_task(action: TaskAction, fmt: render::OutputFormat) -> Result<()> {
             complexity,
             effort,
             tags,
+            issue_type,
         } => render::emit(
             &cmd_task_add(
                 &title,
@@ -432,6 +441,7 @@ fn dispatch_task(action: TaskAction, fmt: render::OutputFormat) -> Result<()> {
                 complexity,
                 effort.as_deref(),
                 tags.as_deref(),
+                issue_type.as_deref(),
             )?,
             fmt,
         ),
@@ -456,12 +466,16 @@ fn dispatch_task(action: TaskAction, fmt: render::OutputFormat) -> Result<()> {
             title,
             desc,
             tags,
+            issue_type,
         } => render::emit(
             &cmd_task_update(
                 &id,
-                title.as_deref(),
-                desc.as_deref(),
-                tags.as_deref(),
+                commands::TaskUpdateFields {
+                    title: title.as_deref(),
+                    desc: desc.as_deref(),
+                    tags: tags.as_deref(),
+                    issue_type: issue_type.as_deref(),
+                },
             )?,
             fmt,
         ),

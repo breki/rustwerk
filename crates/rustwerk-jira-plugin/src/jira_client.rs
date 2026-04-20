@@ -622,6 +622,8 @@ mod tests {
             jira_token: "tok".into(),
             username: "user@example.com".into(),
             project_key: "PROJ".into(),
+            default_issue_type: None,
+            issue_type_map: std::collections::HashMap::new(),
         }
     }
 

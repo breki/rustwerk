@@ -7,6 +7,89 @@ reverse chronological order.
 
 ### 2026-04-20
 
+- Per-task Jira issue type — `--type epic|story|task|sub-task` (v0.51.0)
+
+    PLG-JIRA-ISSUETYPE. The jira plugin's hardcoded
+    `"issuetype": {"name": "Task"}` is gone. The domain
+    gains an `IssueType` enum (`Epic` / `Story` /
+    `Task` / `SubTask`, serialized kebab-case), stored
+    as `Task.issue_type: Option<IssueType>` and
+    surfaced on the CLI via `--type` on `task add` /
+    `task update` (and the batch API's `type` arg). An
+    empty `""` on update clears the type. `task list`
+    renders a single-letter prefix (`E:` / `S:` / `T:`
+    / `s:`) so the WBS view shows type at a glance.
+
+    The plugin API bumps to **v3** — `TaskDto` gains
+    a stringly-typed `issue_type: Option<String>`
+    carrying the kebab-case wire name. Host rejects
+    v2 plugins with a rebuild-required message at
+    load. The jira plugin's `JiraConfig` grows two
+    optional fields: `default_issue_type` (Jira-side
+    name used when the task has no explicit type;
+    defaults to `"Task"`) and `issue_type_map` (wire
+    name → exact Jira string, for sites that renamed
+    `"Sub-task"` to `"Subtask"` or localized
+    names). `build_issue_payload` now takes
+    `&JiraConfig` and resolves per task via
+    `JiraConfig::resolve_issue_type_name` — task
+    override → config default → `"Task"`, with map
+    overrides applied on the first leg.
+
+    Parent/epic linking (the hierarchy that the issue
+    type often implies) stays out of scope — it lands
+    in PLG-JIRA-PARENT.
+
+    Same-commit review sweep (nine findings, all fixed):
+
+    - **RT-129:** unknown kebab values (future domain
+      variants, corrupted `project.json`) used to be
+      forwarded to Jira verbatim, bypassing the
+      `default_issue_type` safety net and producing
+      HTTP 400. The plugin's `resolve_issue_type_name`
+      now falls through to the configured default
+      whenever the incoming kebab is not recognized by
+      the map or the built-in table.
+    - **RT-130:** `IssueType::parse` accepted `subtask`
+      as an alias for `sub-task`, but the plugin did
+      exact-match map lookups. Added
+      `canonicalize_issue_type_kebab`, applied at
+      config load-time (so user-entered map keys
+      normalize) and at resolve-time.
+    - **RT-131 / AQ-108:** the CLI and batch paths
+      mutated `task.issue_type` through
+      `project.tasks.get_mut(...)` directly, skipping
+      the `modified_at` bump every other update went
+      through. Added
+      `Project::set_task_issue_type(&mut self, id,
+      Option<IssueType>)` to the domain layer; both
+      `cmd_task_update` and the batch dispatcher now
+      go through it.
+    - **RT-132:** plugin-side validation of the wire
+      `issue_type` — added
+      `is_plausible_issue_type_wire` (≤64 bytes, no
+      control chars, non-empty); anything else falls
+      back to the default.
+    - **AQ-109:** the `Option<String>` wire type vs
+      closed `TaskStatusDto` enum was deliberate
+      (forward-compat for new domain variants) but
+      undocumented. Expanded the doc comment on
+      `TaskDto.issue_type` to spell out the intent.
+    - **AQ-110:** `cmd_task_update` had grown to five
+      positional args, four `Option<&str>`; swapping
+      two would not be caught by the compiler.
+      Introduced `TaskUpdateFields<'a>` struct;
+      future fields become a one-field extension.
+    - **AQ-111:** the batch API key `"type"` was the
+      only surface disagreeing with `project.json`'s
+      serialized `"issue_type"`. Handlers now accept
+      `"issue_type"` as canonical and `"type"` as a
+      documented alias.
+    - **AQ-112:** `IssueType::list_marker` was tested
+      for variant-uniqueness but never used — the
+      renderer hand-rolled a parallel match.
+      Deleted the method and its test.
+
 - Idempotent `plugin push jira` — probe → update or recreate (v0.50.0)
 
     PLG-JIRA-UPDATE. The second (and Nth) push of a

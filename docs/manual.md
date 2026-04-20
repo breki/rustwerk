@@ -249,6 +249,13 @@ Options:
   categorization. Tags are slug-like (lowercase
   alphanumeric + hyphens, max 50 chars each, max 20
   per task).
+- `--type <TYPE>` — Issue type for external trackers
+  (e.g. Jira). One of `epic`, `story`, `task`,
+  `sub-task`. When omitted, the external tracker plugin
+  falls back to its configured default (or `task` if
+  no default is set). `task list` renders the type as a
+  single-letter prefix: `E:` epic, `S:` story, `T:`
+  task, `s:` sub-task.
 
 Examples:
 
@@ -333,6 +340,8 @@ rustwerk task update AUTH-LOGIN --desc "New description"
 rustwerk task update AUTH-LOGIN --desc ""  # clear desc
 rustwerk task update AUTH-LOGIN --tags "backend,auth"
 rustwerk task update AUTH-LOGIN --tags ""  # clear tags
+rustwerk task update AUTH-LOGIN --type story
+rustwerk task update AUTH-LOGIN --type ""  # clear type
 ```
 
 ### View Task Description
@@ -862,6 +871,19 @@ needs:
   variable
 - `username` from `git config user.email`
 - `project_key` from `--project-key`
+
+The jira plugin also accepts two optional config keys
+for per-task issue-type selection:
+
+- `default_issue_type` — Jira-side name to use when a
+  task has no `--type` set (e.g. `"Story"`). Defaults
+  to `"Task"`.
+- `issue_type_map` — object mapping rustwerk's wire
+  names (`epic` / `story` / `task` / `sub-task`) to the
+  exact string your Jira site expects. Useful for sites
+  that localize or rename (e.g. `{ "sub-task":
+  "Subtask" }`). Omitted keys fall through to Jira's
+  standard names.
 
 Absent keys are omitted entirely. `--dry-run` prints
 only the **key names** present — never the token

@@ -253,6 +253,25 @@ impl Project {
         Ok(())
     }
 
+    /// Set (or clear, with `None`) a task's issue-type.
+    /// Refreshes the project's `modified_at` — the direct
+    /// `tasks.get_mut(...).issue_type = ...` shortcut
+    /// would silently skip that, so CLI and batch callers
+    /// must go through this method.
+    pub fn set_task_issue_type(
+        &mut self,
+        id: &TaskId,
+        issue_type: Option<crate::domain::task::IssueType>,
+    ) -> Result<(), DomainError> {
+        let task = self
+            .tasks
+            .get_mut(id)
+            .ok_or_else(|| DomainError::TaskNotFound(id.to_string()))?;
+        task.issue_type = issue_type;
+        self.metadata.modified_at = Utc::now();
+        Ok(())
+    }
+
     /// Assign a registered developer to a task.
     /// The developer must exist in the project's
     /// developer registry.
@@ -614,6 +633,43 @@ mod tests {
         let (mut p, _) = project_with_tasks(&["A"]);
         let id = TaskId::new("NOPE").unwrap();
         assert!(p.update_task(&id, Some("X"), None).is_err());
+    }
+
+    #[test]
+    fn set_task_issue_type_sets_and_clears() {
+        use crate::domain::task::IssueType;
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        p.set_task_issue_type(&ids[0], Some(IssueType::Epic))
+            .unwrap();
+        assert_eq!(
+            p.tasks.get(&ids[0]).unwrap().issue_type,
+            Some(IssueType::Epic)
+        );
+        p.set_task_issue_type(&ids[0], None).unwrap();
+        assert!(p.tasks.get(&ids[0]).unwrap().issue_type.is_none());
+    }
+
+    #[test]
+    fn set_task_issue_type_bumps_modified_at() {
+        use crate::domain::task::IssueType;
+        let (mut p, ids) = project_with_tasks(&["A"]);
+        let before = p.metadata.modified_at;
+        // Sleep a beat so the timestamp comparison is robust
+        // on low-resolution clocks.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        p.set_task_issue_type(&ids[0], Some(IssueType::Story))
+            .unwrap();
+        assert!(p.metadata.modified_at > before);
+    }
+
+    #[test]
+    fn set_task_issue_type_nonexistent_errors() {
+        use crate::domain::task::IssueType;
+        let (mut p, _) = project_with_tasks(&["A"]);
+        let id = TaskId::new("NOPE").unwrap();
+        assert!(p
+            .set_task_issue_type(&id, Some(IssueType::Task))
+            .is_err());
     }
 
     /// Helper to add a developer to a test project.

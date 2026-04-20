@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use rustwerk::domain::developer::DeveloperId;
-use rustwerk::domain::task::{Effort, Status, Tag, Task, TaskId};
+use rustwerk::domain::task::{Effort, IssueType, Status, Tag, Task, TaskId};
 use rustwerk::persistence::file_store;
 
 use crate::render::RenderText;
@@ -53,6 +53,7 @@ pub(crate) fn cmd_task_add(
     complexity: Option<u32>,
     effort: Option<&str>,
     tags: Option<&str>,
+    issue_type: Option<&str>,
 ) -> Result<TaskAddOutput> {
     let (root, mut project) = load_project()?;
     let mut task = Task::new(title)?;
@@ -66,6 +67,9 @@ pub(crate) fn cmd_task_add(
     if let Some(t) = tags {
         let tag_list = parse_tags(t);
         task.set_tags(&tag_list)?;
+    }
+    if let Some(t) = issue_type {
+        task.issue_type = Some(IssueType::parse(t)?);
     }
     let task_id = if let Some(id_str) = id {
         let tid = TaskId::new(id_str)?;
@@ -200,25 +204,52 @@ impl RenderText for TaskUpdateOutput {
     }
 }
 
+/// Named collection of optional update fields for
+/// `cmd_task_update`. Using a struct instead of five
+/// positional `Option<&str>` parameters eliminates the
+/// foot-gun of swapping two same-typed arguments and
+/// keeps the signature stable as new optional fields
+/// (e.g. `parent`) are added.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct TaskUpdateFields<'a> {
+    pub(crate) title: Option<&'a str>,
+    pub(crate) desc: Option<&'a str>,
+    pub(crate) tags: Option<&'a str>,
+    pub(crate) issue_type: Option<&'a str>,
+}
+
+impl TaskUpdateFields<'_> {
+    fn is_empty(&self) -> bool {
+        self.title.is_none()
+            && self.desc.is_none()
+            && self.tags.is_none()
+            && self.issue_type.is_none()
+    }
+}
+
 pub(crate) fn cmd_task_update(
     id: &str,
-    title: Option<&str>,
-    desc: Option<&str>,
-    tags: Option<&str>,
+    fields: TaskUpdateFields<'_>,
 ) -> Result<TaskUpdateOutput> {
-    if title.is_none() && desc.is_none() && tags.is_none() {
+    if fields.is_empty() {
         anyhow::bail!(
             "task update requires at least one of \
-             --title, --desc, or --tags"
+             --title, --desc, --tags, or --type"
         );
     }
     let (root, mut project) = load_project()?;
     let task_id = TaskId::new(id)?;
-    let description = desc.map(|d| if d.is_empty() { None } else { Some(d) });
-    project.update_task(&task_id, title, description)?;
-    if let Some(t) = tags {
+    let description =
+        fields.desc.map(|d| if d.is_empty() { None } else { Some(d) });
+    project.update_task(&task_id, fields.title, description)?;
+    if let Some(t) = fields.tags {
         let tag_list = parse_tags(t);
         project.set_task_tags(&task_id, &tag_list)?;
+    }
+    if let Some(t) = fields.issue_type {
+        let parsed =
+            if t.is_empty() { None } else { Some(IssueType::parse(t)?) };
+        project.set_task_issue_type(&task_id, parsed)?;
     }
     save_project(&root, &project)?;
     let title = project.tasks[&task_id].title.clone();
@@ -266,6 +297,8 @@ pub(crate) struct TaskListItem {
     pub(crate) assignee: Option<String>,
     pub(crate) critical: bool,
     pub(crate) tags: Vec<Tag>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) issue_type: Option<IssueType>,
 }
 
 /// `task list` output.
@@ -303,10 +336,18 @@ impl RenderText for TaskListOutput {
                 .complexity
                 .map_or(String::new(), |c| format!(" [{c}]"));
             let marker = if task.critical { "*" } else { " " };
+            let type_prefix = task
+                .issue_type
+                .map_or("  ", |t| match t {
+                    IssueType::Epic => "E:",
+                    IssueType::Story => "S:",
+                    IssueType::Task => "T:",
+                    IssueType::SubTask => "s:",
+                });
             if self.show_status {
                 writeln!(
                     w,
-                    " {marker}{:<iw$} {:<14} {}{complexity}",
+                    " {marker}{type_prefix} {:<iw$} {:<14} {}{complexity}",
                     task.id.as_str(),
                     task.status,
                     task.title,
@@ -315,7 +356,7 @@ impl RenderText for TaskListOutput {
             } else {
                 writeln!(
                     w,
-                    " {marker}{:<iw$} {}{complexity}",
+                    " {marker}{type_prefix} {:<iw$} {}{complexity}",
                     task.id.as_str(),
                     task.title,
                     iw = id_width,
@@ -430,6 +471,7 @@ pub(crate) fn cmd_task_list(
             assignee: task.assignee.clone(),
             critical: crit.contains(id),
             tags: task.tags.clone(),
+            issue_type: task.issue_type,
         })
         .collect();
 

@@ -80,6 +80,63 @@ impl fmt::Display for TaskId {
     }
 }
 
+/// Issue-type classification for external trackers
+/// (e.g. Jira). The domain layer keeps this abstract —
+/// the string a given Jira site expects is owned by the
+/// Jira plugin (via its `issue_type_map` config).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum IssueType {
+    /// A large body of work that contains stories / tasks.
+    Epic,
+    /// A user-facing story.
+    Story,
+    /// A regular task.
+    Task,
+    /// A child of a parent task.
+    SubTask,
+}
+
+impl IssueType {
+    /// Parse the kebab-case wire name
+    /// (`epic` | `story` | `task` | `sub-task`), case-
+    /// insensitive. Also accepts `subtask` as an alias
+    /// for `sub-task` so CLI users don't have to remember
+    /// the hyphen.
+    pub fn parse(s: &str) -> Result<Self, DomainError> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "epic" => Ok(Self::Epic),
+            "story" => Ok(Self::Story),
+            "task" => Ok(Self::Task),
+            "sub-task" | "subtask" => Ok(Self::SubTask),
+            _ => Err(DomainError::ValidationError(format!(
+                "unknown issue type: {s} \
+                 (expected epic, story, task, or sub-task)"
+            ))),
+        }
+    }
+
+    /// Kebab-case wire name used in `project.json`, the
+    /// CLI, and the plugin DTO.
+    pub fn as_wire_str(self) -> &'static str {
+        match self {
+            Self::Epic => "epic",
+            Self::Story => "story",
+            Self::Task => "task",
+            Self::SubTask => "sub-task",
+        }
+    }
+
+}
+
+impl fmt::Display for IssueType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_wire_str())
+    }
+}
+
 /// Task status in the workflow.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default,
@@ -355,6 +412,11 @@ pub struct Task {
     /// Optional tags for categorization and filtering.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<Tag>,
+    /// External-tracker issue-type classification. `None`
+    /// means the plugin falls back to its config-level
+    /// default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_type: Option<IssueType>,
     /// Opaque per-plugin state, keyed by plugin name
     /// (e.g. `"jira"`). The domain layer never
     /// interprets the inner `Value`s — plugins own
@@ -470,6 +532,7 @@ impl Task {
             assignee: None,
             effort_entries: Vec::new(),
             tags: Vec::new(),
+            issue_type: None,
             plugin_state: BTreeMap::new(),
         })
     }
@@ -895,6 +958,74 @@ mod tests {
         let json = r#"{"title": "Test"}"#;
         let t: Task = serde_json::from_str(json).unwrap();
         assert!(t.plugin_state.is_empty());
+    }
+
+    // --- IssueType tests ---
+
+    #[test]
+    fn issue_type_serializes_as_kebab_case() {
+        for (variant, expected) in [
+            (IssueType::Epic, "\"epic\""),
+            (IssueType::Story, "\"story\""),
+            (IssueType::Task, "\"task\""),
+            (IssueType::SubTask, "\"sub-task\""),
+        ] {
+            let json = serde_json::to_string(&variant).unwrap();
+            assert_eq!(json, expected);
+            let back: IssueType = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, variant);
+        }
+    }
+
+    #[test]
+    fn issue_type_parse_accepts_canonical_and_aliases() {
+        assert_eq!(IssueType::parse("epic").unwrap(), IssueType::Epic);
+        assert_eq!(IssueType::parse("Story").unwrap(), IssueType::Story);
+        assert_eq!(IssueType::parse("TASK").unwrap(), IssueType::Task);
+        assert_eq!(IssueType::parse("sub-task").unwrap(), IssueType::SubTask);
+        assert_eq!(IssueType::parse("subtask").unwrap(), IssueType::SubTask);
+    }
+
+    #[test]
+    fn issue_type_parse_rejects_unknown() {
+        assert!(IssueType::parse("bug").is_err());
+        assert!(IssueType::parse("").is_err());
+    }
+
+    #[test]
+    fn issue_type_display_and_wire_match() {
+        assert_eq!(IssueType::SubTask.to_string(), "sub-task");
+        assert_eq!(IssueType::SubTask.as_wire_str(), "sub-task");
+    }
+
+    #[test]
+    fn task_issue_type_default_is_none() {
+        let t = Task::new("T").unwrap();
+        assert!(t.issue_type.is_none());
+    }
+
+    #[test]
+    fn task_issue_type_round_trips_through_json() {
+        let mut t = Task::new("T").unwrap();
+        t.issue_type = Some(IssueType::Epic);
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(json.contains("\"issue_type\":\"epic\""));
+        let back: Task = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.issue_type, Some(IssueType::Epic));
+    }
+
+    #[test]
+    fn task_issue_type_omitted_when_none() {
+        let t = Task::new("T").unwrap();
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("issue_type"));
+    }
+
+    #[test]
+    fn task_issue_type_deserializes_from_missing_field() {
+        let json = r#"{"title":"T"}"#;
+        let t: Task = serde_json::from_str(json).unwrap();
+        assert!(t.issue_type.is_none());
     }
 
     #[test]

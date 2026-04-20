@@ -264,7 +264,7 @@ fn push_one<C: HttpClient, K: Clock>(
     cfg: &JiraConfig,
     task: &TaskDto,
 ) -> TaskPushResult {
-    let payload = mapping::build_issue_payload(task, &cfg.project_key);
+    let payload = mapping::build_issue_payload(task, cfg);
     let body = payload.to_string();
     match existing_issue_key_validated(task) {
         ExistingKey::None => push_one_create(http, clock, cfg, task, &body),
@@ -586,6 +586,8 @@ mod tests {
             jira_token: "tok".into(),
             username: "u@example.com".into(),
             project_key: "PROJ".into(),
+            default_issue_type: None,
+            issue_type_map: std::collections::HashMap::new(),
         }
     }
 
@@ -600,6 +602,7 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            issue_type: None,
             plugin_state: None,
         }
     }

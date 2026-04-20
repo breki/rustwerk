@@ -6,6 +6,8 @@
 //! non-empty so downstream HTTP code can rely on the
 //! shape.
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 use url::Url;
 
@@ -32,6 +34,109 @@ pub(crate) struct JiraConfig {
     /// Jira project key to create issues under, e.g.
     /// `PROJ`.
     pub project_key: String,
+    /// Jira-side issue type to use when a task has no
+    /// `issue_type` set. Written as Jira sees it (e.g.
+    /// `"Task"`, `"Story"`). `None` falls through to the
+    /// built-in `"Task"` so an unconfigured plugin stays
+    /// backwards-compatible.
+    #[serde(default)]
+    pub default_issue_type: Option<String>,
+    /// Overrides for the kebab-case rustwerk issue-type
+    /// names → the exact string Jira expects. Exists
+    /// because some Jira sites rename `"Sub-task"` to
+    /// `"Subtask"` or localize names. Keys are the wire
+    /// names emitted by rustwerk
+    /// (`epic` / `story` / `task` / `sub-task`);
+    /// omitted keys fall through to the built-in
+    /// defaults in [`BUILT_IN_ISSUE_TYPE_NAMES`].
+    #[serde(default)]
+    pub issue_type_map: HashMap<String, String>,
+}
+
+/// Built-in mapping from rustwerk's kebab-case wire name
+/// to the exact string Jira uses out of the box. Applied
+/// when the user's `issue_type_map` omits an entry.
+const BUILT_IN_ISSUE_TYPE_NAMES: &[(&str, &str)] = &[
+    ("epic", "Epic"),
+    ("story", "Story"),
+    ("task", "Task"),
+    ("sub-task", "Sub-task"),
+];
+
+/// Upper bound on the length of an incoming
+/// `TaskDto.issue_type` wire string. 64 chars is more
+/// than any canonical Jira issue-type name; anything
+/// longer is almost certainly a corrupted or hostile
+/// `project.json` and should not be forwarded.
+const MAX_ISSUE_TYPE_WIRE_LEN: usize = 64;
+
+/// Normalize an incoming kebab-case issue-type string
+/// before map lookup. Collapses CLI-level aliases (e.g.
+/// `"subtask"` → `"sub-task"`) so a user who writes
+/// `issue_type_map: { "subtask": "Subtask" }` in their
+/// config gets the expected override.
+fn canonicalize_issue_type_kebab(raw: &str) -> String {
+    let lower = raw.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "subtask" => "sub-task".to_string(),
+        _ => lower,
+    }
+}
+
+/// Reject issue-type wire strings that are absurdly long
+/// or contain control characters. `serde_json` already
+/// escapes any payload, so there is no JSON-breakout
+/// vector here — but forwarding junk to Jira yields
+/// confusing errors, so fail fast and make the problem
+/// visible.
+fn is_plausible_issue_type_wire(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= MAX_ISSUE_TYPE_WIRE_LEN
+        && s.chars().all(|c| !c.is_control())
+}
+
+impl JiraConfig {
+    /// Resolve the Jira-side issue-type name for a task.
+    ///
+    /// Fallback chain:
+    /// 1. The task's own `issue_type`, looked up in
+    ///    [`Self::issue_type_map`] (after alias
+    ///    normalization) and falling through to
+    ///    [`BUILT_IN_ISSUE_TYPE_NAMES`].
+    /// 2. If the task carries an *unknown* kebab name
+    ///    (something the plugin doesn't recognize from
+    ///    either the map or the built-in table), fall
+    ///    through to the config default — better to push
+    ///    the user's configured safety net than to
+    ///    forward a string Jira will reject.
+    /// 3. [`Self::default_issue_type`] when the task has
+    ///    no issue-type at all.
+    /// 4. The literal `"Task"`.
+    pub(crate) fn resolve_issue_type_name(
+        &self,
+        task_issue_type: Option<&str>,
+    ) -> String {
+        if let Some(raw) = task_issue_type {
+            if is_plausible_issue_type_wire(raw) {
+                let kebab = canonicalize_issue_type_kebab(raw);
+                if let Some(mapped) = self.issue_type_map.get(&kebab) {
+                    return mapped.clone();
+                }
+                if let Some((_, default)) = BUILT_IN_ISSUE_TYPE_NAMES
+                    .iter()
+                    .find(|(k, _)| *k == kebab)
+                {
+                    return (*default).to_string();
+                }
+            }
+            // Unknown / implausible kebab — fall through
+            // to the config default rather than forwarding
+            // a value Jira is almost certain to reject.
+        }
+        self.default_issue_type
+            .clone()
+            .unwrap_or_else(|| "Task".to_string())
+    }
 }
 
 /// Errors produced while parsing/validating plugin
@@ -74,8 +179,17 @@ impl JiraConfig {
     /// string. Returns [`ConfigError::MissingField`] if
     /// any required field is empty.
     pub(crate) fn from_json(json: &str) -> Result<Self, ConfigError> {
-        let cfg: Self = serde_json::from_str(json)?;
+        let mut cfg: Self = serde_json::from_str(json)?;
         cfg.validate()?;
+        // Rewrite user-supplied `issue_type_map` keys into
+        // their canonical kebab form so that a config
+        // written with `"subtask"` resolves to the same
+        // entry as one written with `"sub-task"`.
+        cfg.issue_type_map = cfg
+            .issue_type_map
+            .into_iter()
+            .map(|(k, v)| (canonicalize_issue_type_kebab(&k), v))
+            .collect();
         Ok(cfg)
     }
 
@@ -298,5 +412,131 @@ mod tests {
     fn error_display_for_insecure_scheme_mentions_scheme() {
         let err = ConfigError::InsecureScheme("http".into());
         assert!(format!("{err}").contains("http"));
+    }
+
+    // --- issue-type resolution ---
+
+    fn plain_cfg() -> JiraConfig {
+        JiraConfig {
+            jira_url: "https://x.atlassian.net".into(),
+            jira_token: "t".into(),
+            username: "u".into(),
+            project_key: "P".into(),
+            default_issue_type: None,
+            issue_type_map: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn resolve_falls_back_to_task_when_no_signal() {
+        let cfg = plain_cfg();
+        assert_eq!(cfg.resolve_issue_type_name(None), "Task");
+    }
+
+    #[test]
+    fn resolve_uses_config_default_when_task_has_no_type() {
+        let mut cfg = plain_cfg();
+        cfg.default_issue_type = Some("Story".into());
+        assert_eq!(cfg.resolve_issue_type_name(None), "Story");
+    }
+
+    #[test]
+    fn resolve_uses_builtin_name_for_each_variant() {
+        let cfg = plain_cfg();
+        assert_eq!(cfg.resolve_issue_type_name(Some("epic")), "Epic");
+        assert_eq!(cfg.resolve_issue_type_name(Some("story")), "Story");
+        assert_eq!(cfg.resolve_issue_type_name(Some("task")), "Task");
+        assert_eq!(cfg.resolve_issue_type_name(Some("sub-task")), "Sub-task");
+    }
+
+    #[test]
+    fn resolve_applies_map_override() {
+        let mut cfg = plain_cfg();
+        cfg.issue_type_map
+            .insert("sub-task".into(), "Subtask".into());
+        cfg.issue_type_map.insert("epic".into(), "Initiative".into());
+        assert_eq!(cfg.resolve_issue_type_name(Some("sub-task")), "Subtask");
+        assert_eq!(cfg.resolve_issue_type_name(Some("epic")), "Initiative");
+        // Unmapped entries still use the built-in name.
+        assert_eq!(cfg.resolve_issue_type_name(Some("story")), "Story");
+    }
+
+    #[test]
+    fn resolve_task_type_wins_over_config_default() {
+        let mut cfg = plain_cfg();
+        cfg.default_issue_type = Some("Ignored".into());
+        assert_eq!(cfg.resolve_issue_type_name(Some("epic")), "Epic");
+    }
+
+    #[test]
+    fn resolve_unknown_kebab_falls_through_to_default() {
+        // Future variant on a fresh rustwerk with an older
+        // plugin installed: push the configured default
+        // rather than a literal string Jira will reject.
+        let cfg = plain_cfg();
+        assert_eq!(cfg.resolve_issue_type_name(Some("bug")), "Task");
+        let mut cfg2 = plain_cfg();
+        cfg2.default_issue_type = Some("Story".into());
+        assert_eq!(cfg2.resolve_issue_type_name(Some("bug")), "Story");
+    }
+
+    #[test]
+    fn resolve_normalizes_subtask_alias_for_map_lookup() {
+        // A user-written config key using the `subtask`
+        // alias must resolve the same as `sub-task`. Go
+        // through `from_json` so the load-time key
+        // canonicalization runs.
+        let json = serde_json::json!({
+            "jira_url": "https://x.atlassian.net",
+            "jira_token": "t",
+            "username": "u",
+            "project_key": "P",
+            "issue_type_map": { "subtask": "Subtask" },
+        })
+        .to_string();
+        let cfg = JiraConfig::from_json(&json).unwrap();
+        assert_eq!(cfg.resolve_issue_type_name(Some("sub-task")), "Subtask");
+        // An incoming wire name "subtask" (e.g. from a
+        // future client that relaxes kebab rules) must
+        // also resolve through the same override.
+        assert_eq!(cfg.resolve_issue_type_name(Some("subtask")), "Subtask");
+    }
+
+    #[test]
+    fn resolve_rejects_implausible_wire_values() {
+        // Oversized / control-char / empty wire strings
+        // must not leak into the payload. The default
+        // kicks in instead.
+        let cfg = plain_cfg();
+        assert_eq!(cfg.resolve_issue_type_name(Some("")), "Task");
+        let long = "a".repeat(65);
+        assert_eq!(cfg.resolve_issue_type_name(Some(&long)), "Task");
+        assert_eq!(cfg.resolve_issue_type_name(Some("has\nnewline")), "Task");
+    }
+
+    #[test]
+    fn config_parses_optional_issue_type_fields() {
+        let json = serde_json::json!({
+            "jira_url": "https://x.atlassian.net",
+            "jira_token": "t",
+            "username": "u",
+            "project_key": "P",
+            "default_issue_type": "Story",
+            "issue_type_map": { "sub-task": "Subtask" },
+        })
+        .to_string();
+        let cfg = JiraConfig::from_json(&json).unwrap();
+        assert_eq!(cfg.default_issue_type.as_deref(), Some("Story"));
+        assert_eq!(
+            cfg.issue_type_map.get("sub-task").map(String::as_str),
+            Some("Subtask")
+        );
+    }
+
+    #[test]
+    fn config_defaults_issue_type_fields_when_absent() {
+        let cfg = JiraConfig::from_json(&full_json()).unwrap();
+        assert!(cfg.default_issue_type.is_none());
+        assert!(cfg.issue_type_map.is_empty());
     }
 }

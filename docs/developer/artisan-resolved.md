@@ -6,6 +6,115 @@ findings.
 
 ---
 
+### PLG-JIRA-ISSUETYPE review sweep (2026-04-20)
+
+Five findings raised and fixed in the same commit
+(v0.51.0):
+
+#### AQ-108 — `issue_type` update bypassed the `Project` domain API
+
+- **Date:** 2026-04-20
+- **Category:** Abstraction boundaries
+- **Where:** `commands/task.rs`, `batch.rs`
+- **Description:** Title/desc flowed through
+  `Project::update_task` and tags through
+  `Project::set_task_tags` (both bump
+  `modified_at`), but the new `issue_type` path
+  reached into `project.tasks.get_mut(&id)` from
+  the binary, skipping the `modified_at` refresh and
+  putting business logic in the wrong layer.
+- **Impact:** Project mtime stayed stale after a
+  type-only update (regression vs. every other field);
+  `DomainError::TaskNotFound` construction duplicated
+  between CLI and batch.
+- **Resolution:** Added
+  `Project::set_task_issue_type(&mut self, id,
+  Option<IssueType>)` modeled on `set_task_tags`.
+  Both the CLI (`cmd_task_update`) and batch
+  (`task.update` dispatch) now go through it. Unit
+  tests cover set / clear / `modified_at` bump /
+  nonexistent-id error.
+
+#### AQ-109 — `TaskDto.issue_type: Option<String>` vs closed `TaskStatusDto`
+
+- **Date:** 2026-04-20
+- **Category:** Type safety
+- **Where:** `crates/rustwerk-plugin-api/src/lib.rs`
+- **Description:** Sibling classification fields used
+  opposite strategies on the same DTO — `status` was
+  a closed enum, `issue_type` was stringly-typed —
+  with no documented rationale for the asymmetry.
+  Future readers would be tempted to "fix" the
+  inconsistency by closing the enum, losing
+  forward-compat.
+- **Impact:** Design-intent leak; drift risk.
+- **Resolution:** Expanded the field's doc comment to
+  spell out the asymmetry: `Status` is a finite,
+  host-controlled workflow; `issue_type` is an open
+  classification that the `default_issue_type`
+  fallback deliberately accommodates. Plugins are
+  documented as responsible for validating and
+  falling back on unknown kebab names.
+
+#### AQ-110 — `cmd_task_update` five positional `Option<&str>` arguments
+
+- **Date:** 2026-04-20
+- **Category:** API design
+- **Where:** `crates/rustwerk/src/bin/rustwerk/commands/task.rs`
+- **Description:** The growing `cmd_task_update`
+  signature
+  (`id, title, desc, tags, issue_type` —
+  four same-typed `Option<&str>`) let callers swap
+  two arguments without a compiler error. Every new
+  optional field (PLG-JIRA-PARENT is next) would
+  force another positional shuffle.
+- **Impact:** Latent bug class; mechanical
+  call-site churn.
+- **Resolution:** Introduced `TaskUpdateFields<'a>`
+  struct with named fields + an `is_empty()` method
+  that drives the "at least one of" check. The
+  dispatcher in `main.rs` now builds one struct
+  literal instead of juggling positional args.
+  Adding a `parent` field later becomes a
+  one-field struct extension.
+
+#### AQ-111 — Batch key `"type"` diverged from serialized field `"issue_type"`
+
+- **Date:** 2026-04-20
+- **Category:** API design
+- **Where:** `crates/rustwerk/src/bin/rustwerk/batch.rs`
+- **Description:** Every other batch arg key matched
+  the domain field name (`tags`, `desc`, `title`,
+  `id`). Using `"type"` for issue-type made the
+  batch API the only surface where the key
+  disagreed with `project.json`'s `"issue_type"`.
+- **Impact:** Foot-gun for anyone scripting batch
+  input from templates that also write
+  `project.json`.
+- **Resolution:** Batch handlers now accept
+  `"issue_type"` as canonical and fall back to
+  `"type"` as a documented alias via
+  `args.get("issue_type").or_else(|| args.get("type"))`.
+
+#### AQ-112 — `IssueType::list_marker` + parallel hand-rolled renderer match
+
+- **Date:** 2026-04-20
+- **Category:** Duplication / dead code
+- **Where:** `domain/task.rs`, `commands/task.rs`
+- **Description:** `list_marker` was defined and
+  covered by a uniqueness test, but the `task list`
+  renderer ignored it and hand-rolled a parallel
+  `match`. Two sources of truth for the same
+  mapping; future variants would drift silently
+  (uniqueness test would pass, UI would be wrong).
+- **Impact:** `list_marker` was dead weight; real
+  mapping had no test coverage.
+- **Resolution:** Deleted `list_marker` and its
+  uniqueness test. The single mapping lives at the
+  one call site in `commands/task.rs`.
+
+---
+
 ### PLG-JIRA-UPDATE review sweep (2026-04-20)
 
 One finding raised and fixed in the same commit

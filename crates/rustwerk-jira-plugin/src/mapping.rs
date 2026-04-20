@@ -12,15 +12,25 @@
 use rustwerk_plugin_api::TaskDto;
 use serde_json::{json, Value};
 
+use crate::config::JiraConfig;
+
 /// Build the JSON payload for `POST /rest/api/3/issue`
 /// for a single task.
-pub(crate) fn build_issue_payload(task: &TaskDto, project_key: &str) -> Value {
+///
+/// Takes the whole [`JiraConfig`] rather than individual
+/// fields so per-task issue-type resolution (task-level
+/// override → config-level default → `"Task"`) and any
+/// future policy can be looked up here without fanning
+/// the call sites out again.
+pub(crate) fn build_issue_payload(task: &TaskDto, cfg: &JiraConfig) -> Value {
+    let issue_type_name =
+        cfg.resolve_issue_type_name(task.issue_type.as_deref());
     json!({
         "fields": {
-            "project": { "key": project_key },
+            "project": { "key": cfg.project_key },
             "summary": summary_for(task),
             "description": adf_doc(description_text(task)),
-            "issuetype": { "name": "Task" },
+            "issuetype": { "name": issue_type_name },
         }
     })
 }
@@ -95,6 +105,8 @@ fn adf_paragraph(line: &str) -> Value {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use rustwerk_plugin_api::TaskStatusDto;
 
@@ -109,25 +121,37 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            issue_type: None,
             plugin_state: None,
+        }
+    }
+
+    fn cfg(key: &str) -> JiraConfig {
+        JiraConfig {
+            jira_url: "https://x.atlassian.net".into(),
+            jira_token: "t".into(),
+            username: "u".into(),
+            project_key: key.into(),
+            default_issue_type: None,
+            issue_type_map: HashMap::new(),
         }
     }
 
     #[test]
     fn payload_contains_project_key() {
-        let v = build_issue_payload(&task(), "PROJ");
+        let v = build_issue_payload(&task(), &cfg("PROJ"));
         assert_eq!(v["fields"]["project"]["key"], "PROJ");
     }
 
     #[test]
     fn payload_summary_includes_id_and_title() {
-        let v = build_issue_payload(&task(), "PROJ");
+        let v = build_issue_payload(&task(), &cfg("PROJ"));
         assert_eq!(v["fields"]["summary"], "[PLG-JIRA] Jira plugin");
     }
 
     #[test]
     fn payload_description_is_adf_doc() {
-        let v = build_issue_payload(&task(), "PROJ");
+        let v = build_issue_payload(&task(), &cfg("PROJ"));
         let desc = &v["fields"]["description"];
         assert_eq!(desc["type"], "doc");
         assert_eq!(desc["version"], 1);
@@ -136,7 +160,7 @@ mod tests {
 
     #[test]
     fn payload_description_wraps_text_in_paragraph() {
-        let v = build_issue_payload(&task(), "PROJ");
+        let v = build_issue_payload(&task(), &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content[0]["type"], "paragraph");
         assert_eq!(content[0]["content"][0]["type"], "text");
@@ -147,7 +171,7 @@ mod tests {
     fn payload_description_one_paragraph_per_line() {
         let mut t = task();
         t.description = "first line\nsecond line\nthird".into();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content.as_array().unwrap().len(), 3);
         assert_eq!(content[0]["content"][0]["text"], "first line");
@@ -159,7 +183,7 @@ mod tests {
     fn payload_description_blank_line_is_empty_paragraph() {
         let mut t = task();
         t.description = "first\n\nthird".into();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content.as_array().unwrap().len(), 3);
         assert_eq!(content[1]["type"], "paragraph");
@@ -170,7 +194,7 @@ mod tests {
     fn payload_description_normalizes_crlf() {
         let mut t = task();
         t.description = "line one\r\nline two".into();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content.as_array().unwrap().len(), 2);
         assert_eq!(content[0]["content"][0]["text"], "line one");
@@ -181,7 +205,7 @@ mod tests {
     fn payload_description_normalizes_bare_cr() {
         let mut t = task();
         t.description = "line one\rline two".into();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content.as_array().unwrap().len(), 2);
         assert_eq!(content[0]["content"][0]["text"], "line one");
@@ -192,7 +216,7 @@ mod tests {
     fn payload_description_strips_control_chars() {
         let mut t = task();
         t.description = "hello\x0cworld\x1b[31m!".into();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content[0]["content"][0]["text"], "helloworld[31m!");
     }
@@ -201,7 +225,7 @@ mod tests {
     fn payload_description_preserves_tabs() {
         let mut t = task();
         t.description = "col1\tcol2".into();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content[0]["content"][0]["text"], "col1\tcol2");
     }
@@ -210,7 +234,7 @@ mod tests {
     fn payload_description_falls_back_to_title_when_description_empty() {
         let mut t = task();
         t.description = String::new();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         let content = &v["fields"]["description"]["content"];
         assert_eq!(content[0]["content"][0]["text"], "Jira plugin");
     }
@@ -219,14 +243,41 @@ mod tests {
     fn payload_marks_untitled_summary_when_title_blank() {
         let mut t = task();
         t.title = "   ".into();
-        let v = build_issue_payload(&t, "PROJ");
+        let v = build_issue_payload(&t, &cfg("PROJ"));
         assert_eq!(v["fields"]["summary"], "[PLG-JIRA] (untitled)");
     }
 
     #[test]
-    fn payload_issue_type_is_task() {
-        let v = build_issue_payload(&task(), "PROJ");
+    fn payload_issue_type_defaults_to_task_when_unset() {
+        let v = build_issue_payload(&task(), &cfg("PROJ"));
         assert_eq!(v["fields"]["issuetype"]["name"], "Task");
+    }
+
+    #[test]
+    fn payload_issue_type_uses_per_task_value_over_default() {
+        let mut t = task();
+        t.issue_type = Some("epic".into());
+        let v = build_issue_payload(&t, &cfg("PROJ"));
+        assert_eq!(v["fields"]["issuetype"]["name"], "Epic");
+    }
+
+    #[test]
+    fn payload_issue_type_uses_config_default_when_task_unset() {
+        let mut c = cfg("PROJ");
+        c.default_issue_type = Some("Story".into());
+        let v = build_issue_payload(&task(), &c);
+        assert_eq!(v["fields"]["issuetype"]["name"], "Story");
+    }
+
+    #[test]
+    fn payload_issue_type_respects_map_override() {
+        let mut c = cfg("PROJ");
+        c.issue_type_map
+            .insert("sub-task".into(), "Subtask".into());
+        let mut t = task();
+        t.issue_type = Some("sub-task".into());
+        let v = build_issue_payload(&t, &c);
+        assert_eq!(v["fields"]["issuetype"]["name"], "Subtask");
     }
 
     #[test]
