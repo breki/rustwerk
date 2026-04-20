@@ -7,6 +7,52 @@ reverse chronological order.
 
 ### 2026-04-20
 
+- Jira plugin records created-issue state on first push (v0.49.0)
+
+    PLG-JIRA-STATE. The jira plugin now parses the
+    Jira create-issue response into a typed
+    `CreatedIssue { key, self_url }` and, on success,
+    attaches a `plugin_state_update` blob
+    (`{ "key", "self", "last_pushed_at" }`) to the
+    per-task result. The host persists this under
+    `plugin_state.jira` via PLG-API-STATE's round-trip,
+    giving PLG-JIRA-UPDATE the idempotency anchor it
+    needs. `last_pushed_at` is ISO-8601 UTC with seconds
+    precision (e.g. `2026-04-22T09:14:07Z`).
+
+    Same-commit review sweep (RT-118/119/120,
+    AQ-095..100) tightened the parse path so a
+    misbehaving Jira cannot cause silent duplication:
+    `parse_created_issue` now returns
+    `Result<CreatedIssue, ParseIssueError>` with
+    explicit `EmptyBody` / `Malformed` / `EmptyField` /
+    `InvalidSelfUrl` variants. Only `EmptyBody` (204)
+    stays a silent skip; every other failure appends a
+    visible `WARNING: …; plugin state not recorded`
+    to the task message so operators catch schema
+    drift before duplicate issues pile up. `self` URLs
+    are validated through `url::Url` and rejected
+    unless the scheme is `http`/`https`, closing a
+    `javascript:` / `file:` injection vector into
+    persisted state.
+
+    Alongside the feature: `HttpClient` now returns
+    `Result<_, HttpError>` (a `thiserror` enum with
+    `Transport`, `TenantInfo`, `TenantInfoDecode`
+    variants) instead of `String`, killing the
+    double-prefix "HTTP error: HTTP transport error:
+    …" the old call site used to emit. `Clock`
+    returns `DateTime<Utc>` rather than a preformatted
+    `String`, moving the format choice into
+    `build_jira_state` where the wire shape lives.
+    And the recording `MockHttp`/`FakeHttp` fakes from
+    the two test modules were merged into a shared
+    `src/test_support.rs` so adding `put_json` for
+    PLG-JIRA-UPDATE will only touch one fake.
+
+    `chrono` (no-default-features, `clock` + `std`)
+    joins `rustwerk-jira-plugin` dependencies.
+
 - Per-task plugin-state round-trip in the plugin API (v0.48.0)
 
     PLG-API-STATE. Bumps `rustwerk_plugin_api`'s

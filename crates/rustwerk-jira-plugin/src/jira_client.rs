@@ -24,8 +24,44 @@ use std::time::Duration;
 use base64::engine::general_purpose::STANDARD as B64_STANDARD;
 use base64::Engine;
 use serde::Deserialize;
+use thiserror::Error;
 
 use crate::config::JiraConfig;
+
+/// Errors surfaced by [`HttpClient`] implementations
+/// and by [`create_issue`]. Implements
+/// [`std::fmt::Display`] so call sites can format the
+/// error once without re-prefixing classifications
+/// (previously task messages accumulated two `"HTTP
+/// error:"` prefixes).
+#[derive(Debug, Error)]
+pub(crate) enum HttpError {
+    #[error("HTTP transport error: {0}")]
+    Transport(String),
+    #[error("tenant_info returned HTTP {0} while resolving cloudId")]
+    TenantInfo(u16),
+    #[error("tenant_info JSON parse error: {0}")]
+    TenantInfoDecode(serde_json::Error),
+}
+
+/// Errors produced by [`parse_created_issue`] when a
+/// 2xx body cannot be turned into a usable
+/// [`CreatedIssue`]. Each variant has a distinct
+/// `Display` so `task_result_from_outcome` can surface
+/// the *reason* plugin state wasn't recorded — silent
+/// `Option::None` previously let broken responses cause
+/// unlimited duplicate Jira issues on repeat pushes.
+#[derive(Debug, Error)]
+pub(crate) enum ParseIssueError {
+    #[error("response body was empty")]
+    EmptyBody,
+    #[error("response body could not be parsed: {0}")]
+    Malformed(#[from] serde_json::Error),
+    #[error("response field `{field}` was empty")]
+    EmptyField { field: &'static str },
+    #[error("response `self` URL has unsupported scheme: {0}")]
+    InvalidSelfUrl(String),
+}
 
 /// Base URL for Atlassian Platform API Gateway used when
 /// a scoped token cannot authenticate against the direct
@@ -62,7 +98,7 @@ pub(crate) struct HttpResponse {
 pub(crate) trait HttpClient {
     /// `GET url` with the given `Authorization` header
     /// value.
-    fn get(&self, url: &str, auth: &str) -> Result<HttpResponse, String>;
+    fn get(&self, url: &str, auth: &str) -> Result<HttpResponse, HttpError>;
 
     /// `POST url` with the given `Authorization` header
     /// value and JSON body.
@@ -71,7 +107,7 @@ pub(crate) trait HttpClient {
         url: &str,
         auth: &str,
         body: &str,
-    ) -> Result<HttpResponse, String>;
+    ) -> Result<HttpResponse, HttpError>;
 }
 
 /// Build the `Authorization` header value for HTTP Basic
@@ -104,6 +140,50 @@ struct TenantInfo {
     cloud_id: String,
 }
 
+/// Typed view of the two fields of Jira's
+/// `POST /rest/api/3/issue` success body that the
+/// plugin actually persists into plugin state. Serde
+/// ignores unknown fields by default, so `id` and
+/// everything else in the response simply flow past.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct CreatedIssue {
+    pub key: String,
+    #[serde(rename = "self")]
+    pub self_url: String,
+}
+
+/// Parse a Jira create-issue response body into a
+/// [`CreatedIssue`], rejecting bodies that would
+/// produce an unusable idempotency anchor:
+///
+/// - empty body (`204 No Content`, silent skip by the
+///   caller);
+/// - malformed JSON or missing fields (a possible
+///   Jira/proxy schema drift);
+/// - empty-string `key` or `self` (would defeat
+///   [`PLG-JIRA-UPDATE`]'s dispatch table);
+/// - `self` URL with a non-`http(s)` scheme (would
+///   let a compromised Jira poison persisted project
+///   state with `javascript:` / `file:` URLs).
+pub(crate) fn parse_created_issue(body: &str) -> Result<CreatedIssue, ParseIssueError> {
+    if body.trim().is_empty() {
+        return Err(ParseIssueError::EmptyBody);
+    }
+    let created: CreatedIssue = serde_json::from_str(body)?;
+    if created.key.is_empty() {
+        return Err(ParseIssueError::EmptyField { field: "key" });
+    }
+    if created.self_url.is_empty() {
+        return Err(ParseIssueError::EmptyField { field: "self" });
+    }
+    let parsed = url::Url::parse(&created.self_url)
+        .map_err(|_| ParseIssueError::InvalidSelfUrl(created.self_url.clone()))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(ParseIssueError::InvalidSelfUrl(created.self_url));
+    }
+    Ok(created)
+}
+
 /// Outcome of a create-issue call. Carries the final
 /// status + body so callers can parse the Jira issue
 /// response.
@@ -124,7 +204,7 @@ pub(crate) fn create_issue<C: HttpClient>(
     http: &C,
     config: &JiraConfig,
     payload_json: &str,
-) -> Result<CreateIssueOutcome, String> {
+) -> Result<CreateIssueOutcome, HttpError> {
     let auth = basic_auth_header(&config.username, &config.jira_token);
     let direct = http.post_json(
         &direct_create_issue_url(&config.jira_url),
@@ -140,14 +220,11 @@ pub(crate) fn create_issue<C: HttpClient>(
     }
 
     let tenant = http.get(&tenant_info_url(&config.jira_url), &auth)?;
-    if tenant.status < 200 || tenant.status >= 300 {
-        return Err(format!(
-            "tenant_info returned HTTP {} while resolving cloudId",
-            tenant.status
-        ));
+    if !(200..300).contains(&tenant.status) {
+        return Err(HttpError::TenantInfo(tenant.status));
     }
     let info: TenantInfo = serde_json::from_str(&tenant.body)
-        .map_err(|e| format!("tenant_info JSON parse error: {e}"))?;
+        .map_err(HttpError::TenantInfoDecode)?;
 
     let retried = http.post_json(
         &gateway_create_issue_url(&info.cloud_id),
@@ -183,7 +260,7 @@ impl Default for UreqClient {
 }
 
 impl HttpClient for UreqClient {
-    fn get(&self, url: &str, auth: &str) -> Result<HttpResponse, String> {
+    fn get(&self, url: &str, auth: &str) -> Result<HttpResponse, HttpError> {
         let response = self
             .agent
             .get(url)
@@ -198,7 +275,7 @@ impl HttpClient for UreqClient {
         url: &str,
         auth: &str,
         body: &str,
-    ) -> Result<HttpResponse, String> {
+    ) -> Result<HttpResponse, HttpError> {
         let response = self
             .agent
             .post(url)
@@ -212,14 +289,17 @@ impl HttpClient for UreqClient {
 
 /// Normalise a `ureq` response (or error carrying a
 /// response) into our small [`HttpResponse`] shape.
-/// Transport errors map to `Err`; HTTP status errors
-/// preserve the response for caller inspection.
+/// Transport errors map to [`HttpError::Transport`];
+/// HTTP status errors preserve the response for caller
+/// inspection.
 fn ureq_to_response(
     result: Result<ureq::Response, ureq::Error>,
-) -> Result<HttpResponse, String> {
+) -> Result<HttpResponse, HttpError> {
     match result {
         Ok(resp) | Err(ureq::Error::Status(_, resp)) => Ok(to_response(resp)),
-        Err(ureq::Error::Transport(t)) => Err(transport_error_message(&t)),
+        Err(ureq::Error::Transport(t)) => {
+            Err(HttpError::Transport(transport_error_message(&t)))
+        }
     }
 }
 
@@ -229,8 +309,8 @@ fn ureq_to_response(
 /// error kind plus the short message.
 fn transport_error_message(t: &ureq::Transport) -> String {
     match t.message() {
-        Some(msg) => format!("HTTP transport error ({:?}): {msg}", t.kind()),
-        None => format!("HTTP transport error ({:?})", t.kind()),
+        Some(msg) => format!("({:?}): {msg}", t.kind()),
+        None => format!("({:?})", t.kind()),
     }
 }
 
@@ -263,70 +343,7 @@ fn truncate_body(mut body: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    enum Call {
-        Get { url: String, auth: String },
-        Post { url: String, auth: String, body: String },
-    }
-
-    struct MockHttp {
-        calls: RefCell<Vec<Call>>,
-        queue: RefCell<Vec<Result<HttpResponse, String>>>,
-    }
-
-    impl MockHttp {
-        fn new(queue: Vec<Result<HttpResponse, String>>) -> Self {
-            Self {
-                calls: RefCell::new(Vec::new()),
-                queue: RefCell::new(queue),
-            }
-        }
-
-        fn calls(&self) -> Vec<Call> {
-            self.calls.borrow().clone()
-        }
-
-        fn next(&self) -> Result<HttpResponse, String> {
-            self.queue
-                .borrow_mut()
-                .drain(..1)
-                .next()
-                .expect("MockHttp queue drained")
-        }
-    }
-
-    impl HttpClient for MockHttp {
-        fn get(&self, url: &str, auth: &str) -> Result<HttpResponse, String> {
-            self.calls.borrow_mut().push(Call::Get {
-                url: url.into(),
-                auth: auth.into(),
-            });
-            self.next()
-        }
-
-        fn post_json(
-            &self,
-            url: &str,
-            auth: &str,
-            body: &str,
-        ) -> Result<HttpResponse, String> {
-            self.calls.borrow_mut().push(Call::Post {
-                url: url.into(),
-                auth: auth.into(),
-                body: body.into(),
-            });
-            self.next()
-        }
-    }
-
-    fn ok(status: u16, body: &str) -> Result<HttpResponse, String> {
-        Ok(HttpResponse {
-            status,
-            body: body.into(),
-        })
-    }
+    use crate::test_support::{ok, transport_err, Call, MockHttp};
 
     fn cfg() -> JiraConfig {
         JiraConfig {
@@ -438,13 +455,9 @@ mod tests {
 
     #[test]
     fn create_issue_errors_when_tenant_info_fails() {
-        let http = MockHttp::new(vec![
-            ok(401, "nope"),
-            ok(500, "tenant down"),
-        ]);
+        let http = MockHttp::new(vec![ok(401, "nope"), ok(500, "tenant down")]);
         let err = create_issue(&http, &cfg(), "{}").unwrap_err();
-        assert!(err.contains("tenant_info"));
-        assert!(err.contains("500"));
+        assert!(matches!(err, HttpError::TenantInfo(500)));
     }
 
     #[test]
@@ -454,14 +467,14 @@ mod tests {
             ok(200, r#"{"not":"cloudId"}"#),
         ]);
         let err = create_issue(&http, &cfg(), "{}").unwrap_err();
-        assert!(err.to_lowercase().contains("tenant_info"));
+        assert!(matches!(err, HttpError::TenantInfoDecode(_)));
     }
 
     #[test]
     fn create_issue_propagates_transport_error_from_first_call() {
-        let http = MockHttp::new(vec![Err("dns failed".into())]);
+        let http = MockHttp::new(vec![transport_err("dns failed")]);
         let err = create_issue(&http, &cfg(), "{}").unwrap_err();
-        assert!(err.contains("dns failed"));
+        assert!(matches!(&err, HttpError::Transport(m) if m.contains("dns failed")));
     }
 
     #[test]
@@ -505,6 +518,92 @@ mod tests {
         };
         assert!(resp.body.len() < MAX_RESPONSE_BODY_BYTES * 3);
         assert!(resp.body.ends_with("…[truncated]"));
+    }
+
+    #[test]
+    fn parse_created_issue_reads_key_and_self() {
+        let body = r#"{"id":"10042","key":"PROJ-142","self":"https://x.atlassian.net/rest/api/3/issue/10042"}"#;
+        let created = parse_created_issue(body).unwrap();
+        assert_eq!(created.key, "PROJ-142");
+        assert_eq!(
+            created.self_url,
+            "https://x.atlassian.net/rest/api/3/issue/10042"
+        );
+    }
+
+    #[test]
+    fn parse_created_issue_empty_body_returns_empty_body_error() {
+        assert!(matches!(
+            parse_created_issue(""),
+            Err(ParseIssueError::EmptyBody)
+        ));
+        assert!(matches!(
+            parse_created_issue("   \n\t "),
+            Err(ParseIssueError::EmptyBody)
+        ));
+    }
+
+    #[test]
+    fn parse_created_issue_missing_field_returns_malformed() {
+        assert!(matches!(
+            parse_created_issue(r#"{"key":"P-1"}"#),
+            Err(ParseIssueError::Malformed(_))
+        ));
+        assert!(matches!(
+            parse_created_issue(r#"{"id":"1"}"#),
+            Err(ParseIssueError::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn parse_created_issue_invalid_json_returns_malformed() {
+        assert!(matches!(
+            parse_created_issue("not json"),
+            Err(ParseIssueError::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn parse_created_issue_empty_key_is_rejected() {
+        let body =
+            r#"{"key":"","self":"https://x.atlassian.net/rest/api/3/issue/1"}"#;
+        assert!(matches!(
+            parse_created_issue(body),
+            Err(ParseIssueError::EmptyField { field: "key" })
+        ));
+    }
+
+    #[test]
+    fn parse_created_issue_empty_self_is_rejected() {
+        assert!(matches!(
+            parse_created_issue(r#"{"key":"P-1","self":""}"#),
+            Err(ParseIssueError::EmptyField { field: "self" })
+        ));
+    }
+
+    #[test]
+    fn parse_created_issue_rejects_non_http_scheme() {
+        let body = r#"{"key":"P-1","self":"javascript:alert(1)"}"#;
+        assert!(matches!(
+            parse_created_issue(body),
+            Err(ParseIssueError::InvalidSelfUrl(_))
+        ));
+    }
+
+    #[test]
+    fn parse_created_issue_rejects_file_scheme() {
+        let body = r#"{"key":"P-1","self":"file:///etc/passwd"}"#;
+        assert!(matches!(
+            parse_created_issue(body),
+            Err(ParseIssueError::InvalidSelfUrl(_))
+        ));
+    }
+
+    #[test]
+    fn parse_created_issue_accepts_plain_http() {
+        let body = r#"{"key":"P-1","self":"http://jira.example/rest/api/3/issue/1"}"#;
+        let created = parse_created_issue(body).unwrap();
+        assert_eq!(created.key, "P-1");
     }
 
     #[test]

@@ -5,6 +5,56 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-JIRA-STATE review sweep (2026-04-20)
+
+Three findings raised and fixed in the same commit
+(`feat: jira plugin records created-issue state on
+first push`, v0.49.0). All centered on
+`parse_created_issue` being silently permissive.
+
+- **RT-118 — Silent parse failure on 2xx body lets a
+  Jira/proxy schema drift cause unbounded duplicate
+  issues.** `parse_created_issue` was `Option`-based
+  and swallowed every failure as `None`; the caller
+  still reported `success: true` with no state update,
+  so the next push would create a second issue, then
+  a third, with no log or warning. **Fix:** changed
+  the return type to `Result<CreatedIssue,
+  ParseIssueError>`. In `task_result_from_outcome`,
+  `EmptyBody` (e.g. 204) stays a silent skip, but any
+  other variant appends a visible `(WARNING: …; plugin
+  state not recorded — next push may create a
+  duplicate Jira issue)` to the `TaskPushResult`
+  message. Regression test
+  `success_with_malformed_body_warns_in_message`.
+
+- **RT-119 — Empty-string `key` / `self` accepted and
+  persisted as idempotency anchor.** A response of
+  `{"key":"","self":""}` deserialized cleanly and set
+  `external_key: Some("")`, breaking PLG-JIRA-UPDATE's
+  create-vs-update dispatch. **Fix:**
+  `parse_created_issue` now returns
+  `ParseIssueError::EmptyField { field: "key" | "self" }`
+  on empty values. Regression tests
+  `parse_created_issue_empty_key_is_rejected`,
+  `parse_created_issue_empty_self_is_rejected`,
+  `success_with_empty_key_warns_in_message`.
+
+- **RT-120 — `self` URL written to persisted project
+  state without scheme validation.** A compromised
+  Jira or MitM could inject `javascript:`, `file:///`,
+  or phishing URLs into plugin state, which downstream
+  viewers (UI, reports, AI-agent prompts) would treat
+  as trusted. **Fix:** `parse_created_issue` now
+  parses `self_url` via `url::Url` and rejects any
+  scheme other than `http`/`https` as
+  `ParseIssueError::InvalidSelfUrl`. Regression tests
+  `parse_created_issue_rejects_non_http_scheme`,
+  `parse_created_issue_rejects_file_scheme`,
+  `success_with_non_http_self_url_warns_in_message`.
+
+---
+
 ### PLG-API-STATE review sweep (2026-04-20)
 
 Five findings raised and fixed in the same commit

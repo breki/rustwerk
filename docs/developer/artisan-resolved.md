@@ -6,6 +6,72 @@ findings.
 
 ---
 
+### PLG-JIRA-STATE review sweep (2026-04-20)
+
+Six findings raised and fixed in the same commit
+(`feat: jira plugin records created-issue state on
+first push`, v0.49.0). AQ-095 / AQ-096 were flagged as
+preexisting but folded into this PR's scope since the
+error-type change ripples through the new call sites.
+
+- **AQ-095 — `HttpClient` returned
+  `Result<HttpResponse, String>`.** Stringly-typed
+  errors could not be matched, and callers kept
+  re-prefixing (`"HTTP error: HTTP transport error:
+  …"`). **Fix:** introduced `HttpError` (via
+  `thiserror::Error`) with `Transport`, `TenantInfo`,
+  and `TenantInfoDecode` variants; `HttpClient` and
+  `create_issue` now return `Result<_, HttpError>`.
+  `push_one` formats the error once via `Display`
+  with no classification prefix. Regression asserted
+  in `push_all_handles_http_errors` (checks the
+  double-prefix pattern is gone).
+
+- **AQ-096 — `tenant_info` failures rendered as
+  "HTTP error: tenant_info …" (double classification
+  prefix).** Subsumed by AQ-095: `HttpError::TenantInfo(500)`
+  and `HttpError::TenantInfoDecode(_)` have their own
+  `Display` impls, and the caller no longer wraps.
+  Assertions in `create_issue_errors_when_tenant_info_fails` /
+  `…_missing_cloud_id` updated to `matches!` on the
+  typed variants.
+
+- **AQ-097 — `parse_created_issue` returned
+  `Option`, collapsing "empty body" and "malformed
+  body" into one branch.** Subsumed by RT-118's fix:
+  the function now returns `Result<CreatedIssue,
+  ParseIssueError>` with distinct `EmptyBody`,
+  `Malformed`, `EmptyField`, and `InvalidSelfUrl`
+  variants so the caller can decide (silent skip vs.
+  visible warning) per category.
+
+- **AQ-098 — `Clock::now_iso8601` returned `String`,
+  forcing allocation at the trait boundary.** **Fix:**
+  `Clock::now(&self) -> chrono::DateTime<chrono::Utc>`;
+  `build_jira_state` owns the `to_rfc3339_opts(Secs,
+  true)` formatting call, co-located with the JSON
+  blob shape. `FixedClock` now stores a `DateTime<Utc>`
+  built via `TimeZone::with_ymd_and_hms`, and
+  `build_jira_state_formats_timestamp_as_utc_iso8601_seconds`
+  pins the wire format independently of `SystemClock`.
+
+- **AQ-099 — `CreatedIssue.id` was unused
+  ("retained for future use").** **Fix:** deleted the
+  field. Serde ignores unknown keys by default, so
+  `id` can return trivially when a future iteration
+  needs it. `parse_created_issue_reads_id_key_and_self`
+  renamed to `…_reads_key_and_self`.
+
+- **AQ-100 — `FakeHttp` (lib.rs) duplicated `MockHttp`
+  (jira_client.rs).** **Fix:** hoisted to
+  `src/test_support.rs` (`#[cfg(test)] mod
+  test_support`), with shared `MockHttp`, `Call`,
+  `ok`, and `transport_err` helpers. When
+  PLG-JIRA-UPDATE adds `put_json` to `HttpClient`,
+  only one fake has to change.
+
+---
+
 ### PLG-API-STATE review sweep (2026-04-20)
 
 Four findings raised and fixed in the same commit

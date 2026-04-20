@@ -4,7 +4,7 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-118
+**Next ID:** RT-121
 
 ---
 

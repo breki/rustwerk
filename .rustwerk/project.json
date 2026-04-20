@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T06:11:21.908725200Z"
+    "modified_at": "2026-04-20T06:56:45.865010500Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -547,7 +547,7 @@
     "PLG-JIRA-STATE": {
       "title": "Remember the Jira issue key per task",
       "description": "Jira plugin records the created issue key in plugin_state.jira on successful push.",
-      "status": "todo",
+      "status": "done",
       "dependencies": [
         "PLG-API-STATE"
       ],

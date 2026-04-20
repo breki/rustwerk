@@ -40,14 +40,19 @@ use rustwerk_plugin_api::{
     PluginResult, TaskDto, TaskPushResult, API_VERSION, ERR_GENERIC,
     ERR_INVALID_INPUT, ERR_OK,
 };
-use serde_json::Value;
+use serde_json::json;
 
 use crate::config::JiraConfig;
-use crate::jira_client::{create_issue, CreateIssueOutcome, HttpClient, UreqClient};
+use crate::jira_client::{
+    create_issue, parse_created_issue, CreateIssueOutcome, CreatedIssue,
+    HttpClient, ParseIssueError, UreqClient,
+};
 
 mod config;
 mod jira_client;
 mod mapping;
+#[cfg(test)]
+mod test_support;
 
 /// Maximum accepted size, in bytes, of the plugin config
 /// and tasks payloads supplied by the host. Matches the
@@ -135,8 +140,36 @@ pub unsafe extern "C" fn rustwerk_plugin_push_tasks(
             }
         };
 
-    let result = push_all(&UreqClient::default(), &cfg, &task_list);
+    let result = push_all(
+        &UreqClient::default(),
+        &SystemClock,
+        &cfg,
+        &task_list,
+    );
     write_json(out, &result)
+}
+
+/// Abstraction over "what is the current wall-clock
+/// UTC instant". The jira plugin needs to stamp
+/// `last_pushed_at` into per-task plugin state;
+/// returning a typed [`chrono::DateTime<chrono::Utc>`]
+/// rather than a preformatted `String` keeps the
+/// allocation / format choice in one place
+/// ([`build_jira_state`]) and avoids forcing a fresh
+/// `String` allocation on every successful push.
+pub(crate) trait Clock {
+    /// Return the current UTC instant.
+    fn now(&self) -> chrono::DateTime<chrono::Utc>;
+}
+
+/// Production [`Clock`] backed by the OS wall clock
+/// via `chrono::Utc::now`.
+pub(crate) struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> chrono::DateTime<chrono::Utc> {
+        chrono::Utc::now()
+    }
 }
 
 /// Release a C string previously returned by this plugin
@@ -189,13 +222,14 @@ fn error_payload(out: *mut *mut c_char, code: i32, message: &str) -> i32 {
 /// Walk every task, attempt to create its Jira issue,
 /// collect per-task results, and aggregate into a
 /// [`PluginResult`].
-fn push_all<C: HttpClient>(
+fn push_all<C: HttpClient, K: Clock>(
     http: &C,
+    clock: &K,
     cfg: &JiraConfig,
     tasks: &[TaskDto],
 ) -> PluginResult {
     let results: Vec<TaskPushResult> =
-        tasks.iter().map(|t| push_one(http, cfg, t)).collect();
+        tasks.iter().map(|t| push_one(http, clock, cfg, t)).collect();
     let all_ok = results.iter().all(|r| r.success);
     let message = if all_ok {
         format!("{} task(s) pushed to Jira", results.len())
@@ -214,40 +248,60 @@ fn push_all<C: HttpClient>(
 /// non-2xx responses into a failed [`TaskPushResult`]
 /// rather than propagating so one bad task does not
 /// abort the batch.
-fn push_one<C: HttpClient>(
+fn push_one<C: HttpClient, K: Clock>(
     http: &C,
+    clock: &K,
     cfg: &JiraConfig,
     task: &TaskDto,
 ) -> TaskPushResult {
     let payload = mapping::build_issue_payload(task, &cfg.project_key);
     let body = payload.to_string();
     match create_issue(http, cfg, &body) {
-        Ok(outcome) => task_result_from_outcome(task, &outcome),
-        Err(e) => TaskPushResult::fail(task.id.clone(), format!("HTTP error: {e}")),
+        Ok(outcome) => task_result_from_outcome(task, clock, &outcome),
+        Err(e) => TaskPushResult::fail(task.id.clone(), e.to_string()),
     }
 }
 
 /// Translate a low-level [`CreateIssueOutcome`] into the
-/// per-task public result DTO.
-fn task_result_from_outcome(
+/// per-task public result DTO. On a 2xx whose body
+/// parses into a [`CreatedIssue`], attaches the external
+/// key and the `plugin_state_update` blob the host
+/// persists under `plugin_state.jira`. On a 2xx whose
+/// body fails to parse for any reason **other than**
+/// being empty, appends a visible warning to the
+/// message — a silent skip would let a malformed Jira
+/// response cause unbounded duplicate issues on repeat
+/// pushes.
+fn task_result_from_outcome<K: Clock>(
     task: &TaskDto,
+    clock: &K,
     outcome: &CreateIssueOutcome,
 ) -> TaskPushResult {
     if (200..300).contains(&outcome.status) {
-        let key = extract_issue_key(&outcome.body);
-        let message = if outcome.used_gateway {
-            format!(
-                "created (HTTP {}, via gateway)",
-                outcome.status
-            )
+        let mut message = if outcome.used_gateway {
+            format!("created (HTTP {}, via gateway)", outcome.status)
         } else {
             format!("created (HTTP {})", outcome.status)
         };
-        let mut result = TaskPushResult::ok(task.id.clone(), message);
-        if let Some(k) = key {
-            result = result.with_external_key(k);
+        match parse_created_issue(&outcome.body) {
+            Ok(created) => {
+                let state = build_jira_state(&created, clock.now());
+                return TaskPushResult::ok(task.id.clone(), message)
+                    .with_external_key(created.key)
+                    .with_plugin_state_update(state);
+            }
+            Err(ParseIssueError::EmptyBody) => {
+                // 204 / no-body success — nothing to
+                // anchor state against, silent skip.
+            }
+            Err(e) => {
+                message = format!(
+                    "{message} (WARNING: {e}; plugin state not recorded — \
+                     next push may create a duplicate Jira issue)"
+                );
+            }
         }
-        result
+        TaskPushResult::ok(task.id.clone(), message)
     } else {
         TaskPushResult::fail(
             task.id.clone(),
@@ -256,63 +310,49 @@ fn task_result_from_outcome(
     }
 }
 
-/// Pull the `key` field (e.g. `"PROJ-123"`) out of the
-/// Jira issue-creation response body, if present.
-fn extract_issue_key(body: &str) -> Option<String> {
-    let v: Value = serde_json::from_str(body).ok()?;
-    v.get("key")?.as_str().map(str::to_string)
+/// Build the `plugin_state.jira` blob persisted under
+/// the task. Fields are additive — future iterations
+/// (`last_hash`, `last_response_etag`, …) can extend
+/// without breaking the host, which treats the value
+/// opaquely. `last_pushed_at` is formatted ISO-8601 UTC
+/// with seconds precision so the stored timestamp stays
+/// diff-stable across hosts with differing default
+/// serializers.
+fn build_jira_state(
+    created: &CreatedIssue,
+    now: chrono::DateTime<chrono::Utc>,
+) -> serde_json::Value {
+    json!({
+        "key": created.key,
+        "self": created.self_url,
+        "last_pushed_at": now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{ok, transport_err, MockHttp};
+    use chrono::TimeZone;
     use rustwerk_plugin_api::TaskStatusDto;
-    use std::cell::RefCell;
     use std::ptr;
 
-    struct FakeHttp {
-        responses: RefCell<Vec<Result<jira_client::HttpResponse, String>>>,
-    }
+    struct FixedClock(chrono::DateTime<chrono::Utc>);
 
-    impl FakeHttp {
-        fn new(r: Vec<Result<jira_client::HttpResponse, String>>) -> Self {
-            Self {
-                responses: RefCell::new(r),
-            }
-        }
-
-        fn pop(&self) -> Result<jira_client::HttpResponse, String> {
-            self.responses
-                .borrow_mut()
-                .drain(..1)
-                .next()
-                .expect("FakeHttp exhausted")
+    impl Clock for FixedClock {
+        fn now(&self) -> chrono::DateTime<chrono::Utc> {
+            self.0
         }
     }
 
-    impl HttpClient for FakeHttp {
-        fn get(
-            &self,
-            _url: &str,
-            _auth: &str,
-        ) -> Result<jira_client::HttpResponse, String> {
-            self.pop()
-        }
-        fn post_json(
-            &self,
-            _url: &str,
-            _auth: &str,
-            _body: &str,
-        ) -> Result<jira_client::HttpResponse, String> {
-            self.pop()
-        }
-    }
+    const FIXED_NOW_STR: &str = "2026-04-22T09:14:07Z";
 
-    fn ok(status: u16, body: &str) -> Result<jira_client::HttpResponse, String> {
-        Ok(jira_client::HttpResponse {
-            status,
-            body: body.into(),
-        })
+    fn clock() -> FixedClock {
+        FixedClock(
+            chrono::Utc
+                .with_ymd_and_hms(2026, 4, 22, 9, 14, 7)
+                .unwrap(),
+        )
     }
 
     fn cfg() -> JiraConfig {
@@ -344,13 +384,20 @@ mod tests {
         assert_eq!(rustwerk_plugin_api_version(), API_VERSION);
     }
 
+    fn created_body(id: &str, key: &str) -> String {
+        format!(
+            r#"{{"id":"{id}","key":"{key}","self":"https://x.atlassian.net/rest/api/3/issue/{id}"}}"#
+        )
+    }
+
     #[test]
     fn push_all_reports_all_success() {
-        let http = FakeHttp::new(vec![
-            ok(201, r#"{"key":"PROJ-1"}"#),
-            ok(201, r#"{"key":"PROJ-2"}"#),
+        let http = MockHttp::new(vec![
+            ok(201, &created_body("1", "PROJ-1")),
+            ok(201, &created_body("2", "PROJ-2")),
         ]);
-        let result = push_all(&http, &cfg(), &[task("A"), task("B")]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task("A"), task("B")]);
         assert!(result.success);
         let rs = result.task_results.unwrap();
         assert_eq!(rs.len(), 2);
@@ -360,11 +407,12 @@ mod tests {
 
     #[test]
     fn push_all_marks_partial_failure() {
-        let http = FakeHttp::new(vec![
-            ok(201, r#"{"key":"PROJ-1"}"#),
+        let http = MockHttp::new(vec![
+            ok(201, &created_body("1", "PROJ-1")),
             ok(500, "boom"),
         ]);
-        let result = push_all(&http, &cfg(), &[task("A"), task("B")]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task("A"), task("B")]);
         assert!(!result.success);
         assert!(result.message.contains("1 of 2"));
         let rs = result.task_results.unwrap();
@@ -375,12 +423,12 @@ mod tests {
 
     #[test]
     fn push_all_reports_gateway_use_in_message() {
-        let http = FakeHttp::new(vec![
+        let http = MockHttp::new(vec![
             ok(401, ""),
             ok(200, r#"{"cloudId":"cid"}"#),
-            ok(201, r#"{"key":"PROJ-9"}"#),
+            ok(201, &created_body("9", "PROJ-9")),
         ]);
-        let result = push_all(&http, &cfg(), &[task("A")]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
         let rs = result.task_results.unwrap();
         assert!(rs[0].success);
         assert!(rs[0].message.contains("gateway"));
@@ -389,35 +437,138 @@ mod tests {
 
     #[test]
     fn push_all_handles_http_errors() {
-        let http = FakeHttp::new(vec![Err("dns".into())]);
-        let result = push_all(&http, &cfg(), &[task("A")]);
+        let http = MockHttp::new(vec![transport_err("dns")]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
         assert!(!result.success);
         let rs = result.task_results.unwrap();
         assert!(!rs[0].success);
-        assert!(rs[0].message.contains("HTTP error"));
+        // Clean one-prefix Display from HttpError — no
+        // longer accumulates "HTTP error: HTTP transport
+        // error: …".
+        assert!(rs[0].message.contains("HTTP transport error"));
+        assert!(rs[0].message.contains("dns"));
+        assert!(!rs[0].message.contains("HTTP error: HTTP"));
     }
 
     #[test]
     fn push_all_empty_task_list_is_success() {
-        let http = FakeHttp::new(vec![]);
-        let result = push_all(&http, &cfg(), &[]);
+        let http = MockHttp::new(vec![]);
+        let result = push_all(&http, &clock(), &cfg(), &[]);
         assert!(result.success);
         assert!(result.message.contains("0 task"));
         assert_eq!(result.task_results.unwrap().len(), 0);
     }
 
     #[test]
-    fn extract_issue_key_reads_field() {
+    fn successful_push_emits_plugin_state_update_with_key_self_and_timestamp() {
+        let http =
+            MockHttp::new(vec![ok(201, &created_body("10042", "PROJ-142"))]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
+        let rs = result.task_results.unwrap();
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["key"], "PROJ-142");
         assert_eq!(
-            extract_issue_key(r#"{"id":"1","key":"PROJ-1"}"#),
-            Some("PROJ-1".into())
+            state["self"],
+            "https://x.atlassian.net/rest/api/3/issue/10042"
         );
+        assert_eq!(state["last_pushed_at"], FIXED_NOW_STR);
     }
 
     #[test]
-    fn extract_issue_key_missing_returns_none() {
-        assert_eq!(extract_issue_key(r#"{"id":"1"}"#), None);
-        assert_eq!(extract_issue_key("not json"), None);
+    fn failed_push_leaves_plugin_state_update_none() {
+        let http = MockHttp::new(vec![ok(500, "boom")]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
+        let rs = result.task_results.unwrap();
+        assert!(!rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+    }
+
+    #[test]
+    fn http_error_leaves_plugin_state_update_none() {
+        let http = MockHttp::new(vec![transport_err("dns")]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].plugin_state_update.is_none());
+    }
+
+    #[test]
+    fn success_with_empty_body_silently_omits_plugin_state_update() {
+        // 204 No Content is a legitimate Jira outcome —
+        // no body to anchor state against, so silently
+        // skip. Still reported as success.
+        let http = MockHttp::new(vec![ok(204, "")]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+        assert!(rs[0].external_key.is_none());
+        assert!(!rs[0].message.contains("WARNING"));
+    }
+
+    #[test]
+    fn success_with_malformed_body_warns_in_message() {
+        // 2xx with a non-empty but unparseable body is a
+        // schema-drift signal — the push counts as a
+        // success, but without the issue key the NEXT
+        // push would create a duplicate. Surface that
+        // loudly in the task message so the operator
+        // notices before duplicate issues pile up.
+        let http = MockHttp::new(vec![ok(201, "not json at all")]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+        assert!(rs[0].external_key.is_none());
+        assert!(rs[0].message.contains("WARNING"));
+        assert!(rs[0].message.contains("duplicate"));
+    }
+
+    #[test]
+    fn success_with_empty_key_warns_in_message() {
+        let body = r#"{"key":"","self":"https://x.atlassian.net/x"}"#;
+        let http = MockHttp::new(vec![ok(201, body)]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+        assert!(rs[0].message.contains("WARNING"));
+    }
+
+    #[test]
+    fn success_with_non_http_self_url_warns_in_message() {
+        let body = r#"{"key":"P-1","self":"javascript:steal()"}"#;
+        let http = MockHttp::new(vec![ok(201, body)]);
+        let result = push_all(&http, &clock(), &cfg(), &[task("A")]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+        assert!(rs[0].message.contains("WARNING"));
+    }
+
+    #[test]
+    fn system_clock_returns_utc_instant() {
+        // Formatting is the concern of build_jira_state;
+        // SystemClock.now() just returns a DateTime<Utc>.
+        // Sanity-check it's plausibly "now" (within the
+        // last minute) and in UTC.
+        let now = SystemClock.now();
+        let wall = chrono::Utc::now();
+        assert!((wall - now).num_seconds().abs() < 60);
+        assert_eq!(now.offset(), &chrono::Utc);
+    }
+
+    #[test]
+    fn build_jira_state_formats_timestamp_as_utc_iso8601_seconds() {
+        let created = CreatedIssue {
+            key: "PROJ-1".into(),
+            self_url: "https://x.atlassian.net/rest/api/3/issue/1".into(),
+        };
+        let state = build_jira_state(&created, clock().now());
+        let stamp = state["last_pushed_at"].as_str().unwrap();
+        assert_eq!(stamp, FIXED_NOW_STR);
+        assert_eq!(stamp.len(), 20);
+        assert!(stamp.ends_with('Z'));
+        assert!(!stamp.contains('.'));
     }
 
     #[test]
@@ -427,9 +578,10 @@ mod tests {
             body: r#"{"errorMessages":["nope"]}"#.into(),
             used_gateway: false,
         };
-        let r = task_result_from_outcome(&task("A"), &outcome);
+        let r = task_result_from_outcome(&task("A"), &clock(), &outcome);
         assert!(!r.success);
         assert!(r.message.contains("400"));
+        assert!(r.plugin_state_update.is_none());
     }
 
     #[test]
