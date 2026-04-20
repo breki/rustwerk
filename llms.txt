@@ -203,6 +203,16 @@ token value) without invoking the plugin.
 The binary exits non-zero when the plugin reports an
 aggregate failure, so CI can gate on the push result.
 
+Repeated pushes of the jira plugin are idempotent: on
+first push the returned Jira issue key is stored under
+`plugin_state.jira` in `project.json`; subsequent
+pushes `PUT` the existing issue (refreshing
+`last_pushed_at`, preserving `key`/`self`), or `POST`
+to recreate if Jira returns 404 for the stored key
+(with the new key overwriting the stored state). A
+failed `PUT` never discards the stored idempotency
+anchor.
+
 ## Batch Commands (Atomic JSON)
 
 Pipe a JSON array to `rustwerk batch`. All commands

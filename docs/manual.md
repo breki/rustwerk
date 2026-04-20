@@ -870,6 +870,31 @@ value.
 On failure (`result.success == false`) the process
 exits non-zero so the command composes with CI.
 
+#### Idempotent Push (Jira)
+
+The jira plugin is idempotent across repeated pushes.
+After the first successful `plugin push jira`, each
+task's returned issue key is stored under
+`plugin_state.jira` in `project.json`. Subsequent
+pushes branch per task:
+
+- **Never pushed** (no stored key) → `POST` creates
+  a new Jira issue.
+- **Stored key still resolves in Jira** → `PUT`
+  updates the existing issue; `last_pushed_at` is
+  refreshed, `key`/`self` are preserved.
+- **Stored key returns 404 in Jira** (issue deleted
+  from the Jira side) → `POST` recreates a new
+  issue and overwrites the stored `key`/`self`.
+
+A failed `PUT` (non-2xx or transport error) leaves
+the stored state untouched so a transient Jira
+outage never discards the idempotency anchor. A 2xx
+response whose body cannot be parsed appends a
+visible `WARNING: …` to the task message so
+schema-drift regressions surface before duplicates
+accumulate.
+
 ### Feature Flag
 
 The `plugins` feature is enabled by default. To build

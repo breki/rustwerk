@@ -7,6 +7,90 @@ reverse chronological order.
 
 ### 2026-04-20
 
+- Idempotent `plugin push jira` — probe → update or recreate (v0.50.0)
+
+    PLG-JIRA-UPDATE. The second (and Nth) push of a
+    task no longer creates duplicate Jira issues.
+    `HttpClient` gained `put_json`; `jira_client`
+    gained `get_issue` (probe) and `update_issue`
+    (PUT), all three verbs sharing a
+    `resolve_cloud_id` helper so the Platform API
+    Gateway fallback behavior is identical across
+    create / probe / update. `push_one` now
+    dispatches on the task's existing
+    `plugin_state.jira.key`: absent → create (the
+    existing path); present → probe `GET
+    /issue/{key}`, then update `PUT` (refreshing
+    `last_pushed_at`, preserving `key`/`self`) or
+    recreate via POST if the issue was deleted
+    Jira-side.
+
+    Same-commit review sweep hardened the update
+    path against a handful of duplicate-creation and
+    data-loss failure modes found by the red team:
+
+    - **RT-121:** stored Jira keys could previously
+      contain path-traversal segments
+      (`../../admin`) and be spliced straight into
+      URL builders. The fix introduced a
+      `pub(crate) struct IssueKey(String)` newtype
+      validated against `[A-Z][A-Z0-9_]*-[0-9]+`
+      with a 64-char length cap; every URL builder
+      and verb signature now takes `&IssueKey`. A
+      malformed stored value is surfaced as
+      `ExistingKey::Invalid(raw)` and fails the task
+      loudly rather than silently recreating.
+    - **RT-122:** direct-URL 401 plus gateway 404 is
+      not proof of absence — the direct read was
+      blocked, so the gateway's "missing" answer
+      could just mean scoped-token restriction.
+      Before the fix this triggered a silent
+      recreate and produced a second Jira issue
+      while the original stayed alive. `get_issue`
+      now returns a `ProbeOutcome` enum with
+      explicit `Exists` / `MissingConfirmed`
+      (direct 404 + gateway 404) /
+      `MissingAmbiguous` (direct 401 + gateway 404)
+      / `OtherStatus` variants; only
+      `MissingConfirmed` triggers recreate,
+      `MissingAmbiguous` fails the task with a
+      message telling the operator to verify token
+      scope.
+    - **RT-123:** the refresh path silently dropped
+      any additive state fields
+      (`last_hash`, `last_response_etag`, …) that a
+      future plugin version might add, because it
+      rebuilt the blob from scratch. Now refresh
+      clones the existing `Object` and mutates only
+      `last_pushed_at` in place, preserving every
+      other field verbatim — matching the
+      "additive fields" contract in
+      `build_created_state`'s docstring.
+    - **RT-125 (fold-in):** the update-path task
+      message used to omit `via gateway` when only
+      the probe (not the PUT) fell back. Now
+      `push_one_update` threads the probe's
+      `used_gateway` into
+      `task_result_from_update_outcome`, which ORs
+      it with the PUT's flag.
+    - **AQ-105:** the `IssueKey` newtype is the
+      type-safe encoding of RT-121's defense —
+      C-NEWTYPE from the Rust API Guidelines. A
+      malformed value cannot reach URL construction
+      because it cannot even be constructed.
+
+    Four red-team findings (RT-124 probe-body
+    validation, RT-126 TOCTOU regression test,
+    RT-127 `jira_url` scheme check, RT-128 flaky
+    env-race in `plugin_host` tests) and six
+    Artisan findings (AQ-101..104, AQ-106, AQ-107)
+    are logged open as deferred polish — module
+    size at the top of the list.
+
+    `docs/manual.md` and `llms.txt` document the
+    idempotency contract so the end-user view
+    matches the new behavior.
+
 - Jira plugin records created-issue state on first push (v0.49.0)
 
     PLG-JIRA-STATE. The jira plugin now parses the

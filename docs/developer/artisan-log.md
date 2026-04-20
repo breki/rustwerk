@@ -4,7 +4,175 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-101
+**Next ID:** AQ-108
+
+---
+
+### AQ-107 — `MockHttp::new(Vec<Result<_, _>>)` is noisy at call sites
+
+- **Date:** 2026-04-20
+- **Category:** Test ergonomics
+- **Commit context:** PLG-JIRA-UPDATE review sweep (v0.50.0).
+- **Description:** `test_support::MockHttp::new`
+  takes `Vec<Result<HttpResponse, HttpError>>`, so
+  every test wraps with `ok(...)` / `transport_err(...)`
+  helpers precisely because the raw `Result` is
+  awkward. Across ~30 call sites the `vec![ok(...),
+  ok(...), ...]` pattern is pure noise.
+- **Impact:** Minor; only test readability.
+- **Suggested fix:** Fluent builder
+  `MockHttp::new().respond(status, body).transport_err("dns")`.
+  Skip if the explicit queue reads better to you.
+
+---
+
+### AQ-106 — `ParseIssueError::InvalidSelfUrl` leaks an untruncated URL into error messages
+
+- **Date:** 2026-04-20
+- **Category:** Error messages + invariant violation
+- **Commit context:** PLG-JIRA-UPDATE review sweep (v0.50.0).
+- **Description:** `MAX_RESPONSE_BODY_BYTES`
+  (`jira_client.rs:81`) caps response bodies at
+  4 KiB so error messages stay bounded. But the
+  parsed `self` URL bypasses that cap via the
+  `InvalidSelfUrl(String)` variant — a 1 MB
+  `javascript:…` URL lands whole in the task error
+  message. *Partial* fix already in place: the
+  `Display` for `InvalidSelfUrl` uses
+  `{0:.256}` formatting, so printed messages are
+  bounded — but the underlying `String` inside the
+  variant is still unbounded. Same story for
+  `InvalidIssueKey(String)` which uses `{0:.64}`.
+- **Impact:** Memory pressure inside the plugin
+  process on a hostile response; log/telemetry
+  readers see bounded Display output, so the
+  user-facing impact is already minimized.
+- **Suggested fix:** Change the variants to store
+  only the truncated prefix:
+  `InvalidSelfUrl(String)` → `{ prefix: String }`
+  built from `created.self_url.chars().take(256).collect()`.
+  Or store `{ scheme: String }` which is the
+  actually-interesting part.
+
+---
+
+### AQ-104 — `TaskPushResult::with_external_key` ownership inconsistency across call sites
+
+- **Date:** 2026-04-20
+- **Category:** API design consistency
+- **Commit context:** PLG-JIRA-UPDATE review sweep (v0.50.0).
+- **Description:** The create path passes
+  `created.key.as_str()` (a borrow), the update
+  path passes `key.as_str()` (also a borrow — now
+  consistent after AQ-105 landed). But
+  `TaskPushResult::with_external_key` lives in
+  `rustwerk-plugin-api` and its signature should
+  be audited for `impl Into<String>` so future
+  callers with either `&str` or `String` at hand
+  Just Work.
+- **Impact:** Non-blocking. Today both call sites
+  pass `&str`, so the signature is fine as long as
+  it's `impl Into<String>`. Worth confirming.
+- **Suggested fix:** Verify and (if needed) widen
+  the signature to `impl Into<String>`. Rust API
+  Guidelines C-GENERIC.
+
+---
+
+### AQ-103 — `existing_issue_key_validated` forces no allocation, but key cloning into `ExistingKey::Valid` still happens
+
+- **Date:** 2026-04-20
+- **Category:** API design / unnecessary allocation
+- **Commit context:** PLG-JIRA-UPDATE review sweep (v0.50.0).
+- **Description:** AQ-103 (original: return `&str`
+  not `String`) was superseded by AQ-105's
+  `IssueKey` newtype introduction, which
+  necessarily owns a `String`. The
+  `existing_issue_key_validated` function
+  constructs an `IssueKey` per validated call —
+  one allocation per task. Acceptable for the
+  number of tasks we expect, but worth noting if
+  we later run into an N-heavy batch.
+- **Impact:** Trivial today; flag if batch sizes
+  grow into the thousands.
+- **Suggested fix:** Consider `IssueKey<'a>(&'a str)`
+  borrowed variant for the read-only path, but
+  almost certainly not worth the API-surface
+  doubling.
+
+---
+
+### AQ-102 — `create_issue` / `get_issue` / `update_issue` share identical fallback shape but do not dedup
+
+- **Date:** 2026-04-20
+- **Category:** API design / DRY
+- **Commit context:** PLG-JIRA-UPDATE review sweep (v0.50.0).
+- **Description:** Three functions in
+  `jira_client.rs` (`create_issue`, `get_issue`,
+  `update_issue`) are structurally identical:
+  direct call → if not 401/404 return wrapped; else
+  `resolve_cloud_id` + retry against gateway URL.
+  Only the HTTP verb closure and URL-builder pair
+  differ. The duplication scanner reports 3.8%
+  exact duplication (up from 2.8% pre-PLG-JIRA-UPDATE).
+  **Deferred** because `get_issue` now returns
+  `ProbeOutcome` (different shape from the other
+  two's `JiraOpOutcome`), so the cleanest
+  factoring is no longer a single generic helper —
+  two helpers may be right (`with_gateway_fallback_op`
+  for create/update, inline for probe).
+- **Impact:** Every future change (429 retry,
+  logging, new fallback class) has to be applied
+  three times. High odds of drift over time.
+- **Suggested fix:**
+  ```rust
+  fn with_gateway_fallback<C, F>(
+      http: &C, config: &JiraConfig,
+      direct_url: &str,
+      gateway_url_for_cloud_id: impl FnOnce(&str) -> String,
+      call: F,
+  ) -> Result<JiraOpOutcome, HttpError>
+  where F: Fn(&C, &str, &str) -> Result<HttpResponse, HttpError>
+  ```
+  `get_issue` stays distinct because its probe
+  semantics differ.
+
+---
+
+### AQ-101 — `lib.rs` (1138 lines) and `jira_client.rs` (933 lines) cross the 500-line split threshold
+
+- **Date:** 2026-04-20
+- **Category:** Module size
+- **Commit context:** PLG-JIRA-UPDATE review sweep (v0.50.0).
+- **Description:**
+  `crates/rustwerk-jira-plugin/src/lib.rs` now
+  1138 lines, `jira_client.rs` 933 lines. Both
+  contain multiple struct/enum-impl clusters.
+  `lib.rs` mixes FFI exports, `Clock`/`SystemClock`,
+  push orchestration (`push_one`,
+  `push_one_create`, `push_one_update`), result
+  translation, and state-building.
+  `jira_client.rs` contains two error enums + the
+  `IssueKey` newtype + 4 structs + `HttpClient`
+  trait + 6 URL builders + 3 verb fns +
+  `resolve_cloud_id` + `ureq` translator layer +
+  `parse_created_issue` validator.
+- **Impact:** Cognitive load growing; adding a 4th
+  Jira verb (delete, list, transition for
+  PLG-JIRA-FIELDS) will balloon further.
+- **Suggested fix:** Dedicated refactor task,
+  probably one per file:
+  - Split `lib.rs` into `ffi.rs` (FFI entry
+    points + `write_json`/`error_payload`),
+    `push.rs` (`push_all`, `push_one`,
+    `push_one_create`, `push_one_update`,
+    `existing_issue_key_validated`), `state.rs`
+    (`build_created_state`, `build_refreshed_state`,
+    `format_last_pushed_at`, `Clock`,
+    `SystemClock`), `result.rs` (the two
+    `task_result_from_*_outcome` translators).
+  - Split `jira_client.rs` into
+    `jira_client/{mod, errors, urls, http, verbs, parse}.rs`.
 
 ---
 

@@ -6,6 +6,38 @@ findings.
 
 ---
 
+### PLG-JIRA-UPDATE review sweep (2026-04-20)
+
+One finding raised and fixed in the same commit
+(`feat: idempotent plugin push jira (probe → update
+or recreate)`, v0.50.0). Six more (AQ-101 module
+size, AQ-102 verb dedup, AQ-103 borrow-not-own,
+AQ-104 ownership consistency, AQ-106 URL truncation,
+AQ-107 `MockHttp` builder) were logged open as
+deferred polish.
+
+- **AQ-105 — Stringly-typed Jira issue key across
+  the whole call chain.** Raw `&str` flowed from
+  `plugin_state.key` → `existing_issue_key` →
+  `push_one_update` → `get_issue` → `update_issue` →
+  URL builders with no validation at any boundary.
+  **Fix:** introduced
+  `pub(crate) struct IssueKey(String)` with a
+  private constructor that enforces
+  `[A-Z][A-Z0-9_]*-[0-9]+` and a 64-char length cap.
+  `CreatedIssue.key` is now `IssueKey` (was
+  `String`); `direct_issue_url` / `gateway_issue_url`
+  / `get_issue` / `update_issue` all take
+  `&IssueKey`. This is the type-safe encoding of
+  the RT-121 defense — a malformed stored value
+  cannot reach `format!`-based URL construction
+  because it cannot even be constructed. Rust API
+  Guidelines C-NEWTYPE. Regression tests
+  `issue_key_parse_accepts_valid_keys`,
+  `issue_key_parse_rejects_path_traversal_and_other_garbage`.
+
+---
+
 ### PLG-JIRA-STATE review sweep (2026-04-20)
 
 Six findings raised and fixed in the same commit

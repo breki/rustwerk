@@ -24,6 +24,11 @@ pub(crate) enum Call {
         auth: String,
         body: String,
     },
+    Put {
+        url: String,
+        auth: String,
+        body: String,
+    },
 }
 
 /// Recording fake [`HttpClient`] driven by a pre-loaded
@@ -72,6 +77,20 @@ impl HttpClient for MockHttp {
         body: &str,
     ) -> Result<HttpResponse, HttpError> {
         self.calls.borrow_mut().push(Call::Post {
+            url: url.into(),
+            auth: auth.into(),
+            body: body.into(),
+        });
+        self.pop()
+    }
+
+    fn put_json(
+        &self,
+        url: &str,
+        auth: &str,
+        body: &str,
+    ) -> Result<HttpResponse, HttpError> {
+        self.calls.borrow_mut().push(Call::Put {
             url: url.into(),
             auth: auth.into(),
             body: body.into(),

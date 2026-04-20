@@ -5,6 +5,79 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-JIRA-UPDATE review sweep (2026-04-20)
+
+Three findings raised and fixed in the same commit
+(`feat: idempotent plugin push jira (probe → update
+or recreate)`, v0.50.0). Four more (RT-124 probe
+body not validated, RT-125 gateway flag in message,
+RT-126 TOCTOU test, RT-127 `jira_url` scheme check)
+were logged open as deferred hardening. RT-125 was
+folded into the RT-122 fix and is therefore resolved
+rather than logged open.
+
+- **RT-121 — Path traversal via stored Jira key.**
+  `existing_issue_key` read `plugin_state.jira.key`
+  with no validation and spliced it straight into
+  URL builders. A poisoned `project.json` with
+  `"key": "../../admin/application-properties"`
+  would cause the plugin to issue authenticated
+  `GET`/`PUT` requests against arbitrary Jira paths.
+  **Fix:** new `IssueKey(String)` newtype with a
+  private constructor validating
+  `[A-Z][A-Z0-9_]*-[0-9]+` and length ≤ 64 chars.
+  URL builders and verb signatures take
+  `&IssueKey`; a malformed stored value is surfaced
+  as `ExistingKey::Invalid(raw)` and fails the task
+  loudly (`"stored Jira key … is not a valid issue
+  key — refusing to splice it into a URL"`).
+  Regression tests
+  `existing_issue_key_malformed_value_returns_invalid_variant`,
+  `push_fails_loudly_when_stored_key_is_invalid`,
+  `issue_key_parse_rejects_path_traversal_and_other_garbage`,
+  `parse_created_issue_rejects_invalid_issue_key`.
+
+- **RT-122 — Ambiguous probe 404 (direct 401 +
+  gateway 404) silently created duplicate Jira
+  issues.** The old `push_one_update` only checked
+  `probe.status == 404`, ignoring whether the direct
+  read was authoritative. Direct 401 + gateway 404 →
+  recreate → duplicate issue while the original
+  stayed alive and orphaned. **Fix:** `get_issue`
+  now returns a `ProbeOutcome` enum (`Exists`,
+  `MissingConfirmed`, `MissingAmbiguous`,
+  `OtherStatus`). `MissingConfirmed` (direct 404 +
+  gateway 404) is the only state that triggers a
+  recreate; `MissingAmbiguous` fails the task with a
+  clear message telling the operator to check token
+  scope. Regression test
+  `ambiguous_probe_404_fails_without_recreating_duplicate`
+  (lib.rs) + `get_issue_direct_401_and_gateway_404_returns_missing_ambiguous`
+  (jira_client.rs).
+
+- **RT-123 — Refresh path silently dropped additive
+  state fields.** `build_refreshed_state`
+  reconstructed the state blob with only
+  `{key, self, last_pushed_at}`, violating the
+  `build_created_state` docstring's "additive
+  fields" contract. A future plugin version writing
+  `last_hash` would lose it on the first successful
+  `PUT`. **Fix:** refresh now clones the existing
+  `Object`, validates `key`/`self` are string-typed,
+  and mutates only `last_pushed_at` in place,
+  preserving every other field verbatim. Regression
+  test `refresh_preserves_additive_state_fields`.
+
+- **RT-125 — Update-path message omitted `via
+  gateway` when only the probe used it.** Folded
+  into the RT-122 fix: `push_one_update` now threads
+  the probe's `used_gateway` into
+  `task_result_from_update_outcome`, which ORs it
+  with the PUT's flag. Regression test
+  `update_message_reports_gateway_when_probe_alone_used_it`.
+
+---
+
 ### PLG-JIRA-STATE review sweep (2026-04-20)
 
 Three findings raised and fixed in the same commit

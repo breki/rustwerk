@@ -4,7 +4,119 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-121
+**Next ID:** RT-129
+
+---
+
+### RT-128 — Flaky env-var race between `plugin_host::tests::discovery_dirs_{without,includes}_target_with_env`
+
+- **Date:** 2026-04-20
+- **Category:** Test hygiene
+- **Commit context:** Observed during the
+  PLG-JIRA-UPDATE review sweep (v0.50.0). Unrelated
+  to the jira plugin; discovered while running the
+  full workspace test suite.
+- **Description:** The two tests at
+  `crates/rustwerk/src/bin/rustwerk/plugin_host.rs:425-456`
+  racily mutate the `RUSTWERK_DEV_DIRS` env var.
+  `discovery_dirs_without_env` calls `env::remove_var`,
+  `discovery_dirs_includes_target_with_env` calls
+  `env::set_var` and asserts the target-dir presence.
+  Running under `cargo test --workspace` (which does
+  not serialize tests in the same binary) produces
+  intermittent failures of the `…_with_env` test
+  because the sibling removes the var mid-run.
+  Pass/fail depends on scheduling.
+- **Impact:** Occasional CI red herrings on the
+  workspace test path; no production impact.
+- **Suggested fix:** `#[serial_test::serial]` (add
+  the `serial_test` dev-dep) or a `std::sync::Mutex`
+  guard shared by the two tests. Alternative: fold
+  both assertions into one `#[test]` that
+  set → assert → remove → assert, eliminating the
+  race.
+
+---
+
+### RT-127 — `jira_url` not validated for scheme / userinfo at config boundary
+
+- **Date:** 2026-04-20
+- **Category:** Security (token exfiltration via config poisoning)
+- **Commit context:** Raised during the
+  PLG-JIRA-UPDATE review sweep (v0.50.0); deferred
+  because the validation site is `JiraConfig::from_json`
+  (`crates/rustwerk-jira-plugin/src/config.rs`),
+  which is out of scope for this PR.
+- **Description:** `direct_issue_url` and
+  `gateway_issue_url` interpolate `jira_url` into
+  URLs with no scheme / userinfo check. A
+  `jira_url` embedding credentials
+  (`https://attacker:pwd@evil.com`) would cause
+  `basic_auth_header` to leak the user's Jira token
+  to `evil.com`. `ureq` rejects non-http(s) at
+  transport time, but defense-in-depth at the
+  config boundary is cheap.
+- **Impact:** Token exfiltration when an attacker
+  controls config-file content.
+- **Suggested fix:** In `JiraConfig::from_json`,
+  parse `jira_url` with `url::Url::parse`, assert
+  scheme ∈ `{http, https}` and
+  `username().is_empty() && password().is_none()`.
+  Reject with a clear error otherwise.
+
+---
+
+### RT-126 — No regression test for probe-then-delete TOCTOU race
+
+- **Date:** 2026-04-20
+- **Category:** Test coverage of documented behavior
+- **Commit context:** Noted during the
+  PLG-JIRA-UPDATE review sweep (v0.50.0); the
+  behavior is correct but unpinned.
+- **Description:** If an issue is deleted between
+  the probe (200) and the subsequent PUT (404), the
+  current behavior is "fail this push, recreate on
+  next push." That's the right call — the PUT 404
+  is a late signal and we can't distinguish it from
+  a genuine write-scope 404 — but nothing in the
+  test suite locks the behavior in.
+- **Impact:** A future refactor could silently flip
+  PUT-404 → recreate without any test failing.
+- **Suggested fix:** Add
+  `probe_200_put_404_fails_without_touching_state`
+  at `lib.rs` test module: queue
+  `ok(200, probe_body)` + `ok(404, "gone")`; assert
+  `!rs[0].success`, `plugin_state_update.is_none()`,
+  message mentions `"update"` and `"404"`.
+
+---
+
+### RT-124 — Probe 2xx trusted without body validation
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (MITM / captive-portal false-success)
+- **Commit context:** Raised during the
+  PLG-JIRA-UPDATE review sweep (v0.50.0); deferred
+  as lower-priority than RT-121/122/123.
+- **Description:** `push_one_update`'s probe
+  dispatch (`lib.rs`, `ProbeOutcome::Exists` arm)
+  checks only the HTTP status. An intercepting
+  proxy returning 200 HTML ("please log in") for
+  the probe and 204 for the subsequent PUT would
+  produce a reported success while the Jira issue
+  is never touched — and `last_pushed_at` is
+  refreshed, suppressing future retries.
+- **Impact:** Silent no-op writes behind a corporate
+  MITM; harder to diagnose because
+  `plugin_state.jira` looks fresh.
+- **Suggested fix:** Parse the probe body minimally
+  and require `response.get("key").as_str() ==
+  Some(key.as_str())` before treating as
+  `Exists`. Reject `Content-Type: text/html` if we
+  add header inspection to `HttpResponse`. Low
+  priority; ship when we do PLG-JIRA-E2E and have
+  real-world evidence of what the response body
+  actually looks like.
 
 ---
 

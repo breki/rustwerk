@@ -44,8 +44,8 @@ use serde_json::json;
 
 use crate::config::JiraConfig;
 use crate::jira_client::{
-    create_issue, parse_created_issue, CreateIssueOutcome, CreatedIssue,
-    HttpClient, ParseIssueError, UreqClient,
+    create_issue, get_issue, parse_created_issue, update_issue, CreatedIssue,
+    HttpClient, IssueKey, JiraOpOutcome, ParseIssueError, ProbeOutcome, UreqClient,
 };
 
 mod config;
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn rustwerk_plugin_push_tasks(
 /// returning a typed [`chrono::DateTime<chrono::Utc>`]
 /// rather than a preformatted `String` keeps the
 /// allocation / format choice in one place
-/// ([`build_jira_state`]) and avoids forcing a fresh
+/// ([`build_created_state`]) and avoids forcing a fresh
 /// `String` allocation on every successful push.
 pub(crate) trait Clock {
     /// Return the current UTC instant.
@@ -244,10 +244,20 @@ fn push_all<C: HttpClient, K: Clock>(
     }
 }
 
-/// Push a single task. Converts HTTP-client errors and
-/// non-2xx responses into a failed [`TaskPushResult`]
-/// rather than propagating so one bad task does not
-/// abort the batch.
+/// Push a single task. Dispatches on whether the task
+/// already carries per-plugin state from a previous
+/// push:
+///
+/// | incoming `plugin_state.jira.key` | probe result     | action                                 |
+/// |----------------------------------|------------------|----------------------------------------|
+/// | `None`                           | —                | `POST /issue` (create)                 |
+/// | `Some(key)`                      | 2xx              | `PUT /issue/{key}` (update)            |
+/// | `Some(key)`                      | 404 after fallback | `POST /issue` (recreate + overwrite) |
+///
+/// HTTP-client errors and non-2xx Jira responses turn
+/// into a failed [`TaskPushResult`] rather than
+/// propagating, so one bad task does not abort the
+/// batch.
 fn push_one<C: HttpClient, K: Clock>(
     http: &C,
     clock: &K,
@@ -256,26 +266,153 @@ fn push_one<C: HttpClient, K: Clock>(
 ) -> TaskPushResult {
     let payload = mapping::build_issue_payload(task, &cfg.project_key);
     let body = payload.to_string();
-    match create_issue(http, cfg, &body) {
-        Ok(outcome) => task_result_from_outcome(task, clock, &outcome),
+    match existing_issue_key_validated(task) {
+        ExistingKey::None => push_one_create(http, clock, cfg, task, &body),
+        ExistingKey::Valid(key) => {
+            push_one_update(http, clock, cfg, task, &key, &body)
+        }
+        ExistingKey::Invalid(raw) => TaskPushResult::fail(
+            task.id.clone(),
+            format!(
+                "stored Jira key {raw:?} is not a valid issue key — refusing to \
+                 splice it into a URL; fix or clear plugin_state.jira.key and \
+                 re-push"
+            ),
+        ),
+    }
+}
+
+/// Outcome of reading `plugin_state.jira.key`.
+///
+/// - `None` → no prior push, go create.
+/// - `Valid(IssueKey)` → prior push, go probe+update.
+/// - `Invalid(raw)` → *something* was stored but it
+///   does not match Jira's issue-key grammar. Fail the
+///   task loudly rather than silently recreating: a
+///   poisoned `project.json` must not be able to
+///   coerce a duplicate issue by failing a
+///   validation check (RT-121).
+#[derive(Debug)]
+enum ExistingKey {
+    None,
+    Valid(IssueKey),
+    Invalid(String),
+}
+
+/// Extract and validate the Jira issue key stored
+/// under `plugin_state.jira.key` after a previous
+/// successful push. Empty state or a non-string `key`
+/// is treated as "never pushed" (create-path); a
+/// present-but-malformed string is treated as a
+/// poisoned / corrupted state entry and surfaced as
+/// `Invalid` so the caller can fail the task.
+fn existing_issue_key_validated(task: &TaskDto) -> ExistingKey {
+    let Some(state) = task.plugin_state.as_ref() else {
+        return ExistingKey::None;
+    };
+    let Some(key_value) = state.get("key") else {
+        return ExistingKey::None;
+    };
+    let Some(key_str) = key_value.as_str() else {
+        return ExistingKey::None;
+    };
+    match IssueKey::parse(key_str) {
+        Some(valid) => ExistingKey::Valid(valid),
+        None => ExistingKey::Invalid(key_str.to_string()),
+    }
+}
+
+/// Create path. Exists as a separate function so the
+/// recreate-on-404 branch inside `push_one_update` can
+/// reuse the exact same success / parse / warning
+/// semantics.
+fn push_one_create<C: HttpClient, K: Clock>(
+    http: &C,
+    clock: &K,
+    cfg: &JiraConfig,
+    task: &TaskDto,
+    body: &str,
+) -> TaskPushResult {
+    match create_issue(http, cfg, body) {
+        Ok(outcome) => task_result_from_create_outcome(task, clock, &outcome),
         Err(e) => TaskPushResult::fail(task.id.clone(), e.to_string()),
     }
 }
 
-/// Translate a low-level [`CreateIssueOutcome`] into the
-/// per-task public result DTO. On a 2xx whose body
-/// parses into a [`CreatedIssue`], attaches the external
-/// key and the `plugin_state_update` blob the host
-/// persists under `plugin_state.jira`. On a 2xx whose
-/// body fails to parse for any reason **other than**
-/// being empty, appends a visible warning to the
-/// message — a silent skip would let a malformed Jira
-/// response cause unbounded duplicate issues on repeat
-/// pushes.
-fn task_result_from_outcome<K: Clock>(
+/// Update path: probe via `GET /issue/{key}`, dispatch
+/// on the probe outcome.
+///
+/// - `Exists` → `PUT` to update.
+/// - `MissingConfirmed` → recreate (safe: direct URL
+///   authoritatively said the issue is gone).
+/// - `MissingAmbiguous` → fail the task. Direct-URL
+///   401 + gateway 404 is *not* proof of absence, and
+///   silently recreating would duplicate a live issue
+///   whose read scope the current token cannot see
+///   (RT-122).
+/// - `OtherStatus` → fail the task with the response
+///   body so the operator can diagnose.
+fn push_one_update<C: HttpClient, K: Clock>(
+    http: &C,
+    clock: &K,
+    cfg: &JiraConfig,
+    task: &TaskDto,
+    key: &IssueKey,
+    body: &str,
+) -> TaskPushResult {
+    let probe = match get_issue(http, cfg, key) {
+        Ok(o) => o,
+        Err(e) => return TaskPushResult::fail(task.id.clone(), e.to_string()),
+    };
+    match probe {
+        ProbeOutcome::Exists {
+            used_gateway: probe_used_gateway,
+            ..
+        } => match update_issue(http, cfg, key, body) {
+            Ok(outcome) => task_result_from_update_outcome(
+                task,
+                clock,
+                key,
+                &outcome,
+                probe_used_gateway,
+            ),
+            Err(e) => TaskPushResult::fail(task.id.clone(), e.to_string()),
+        },
+        ProbeOutcome::MissingConfirmed { .. } => {
+            // Direct + gateway both 404 → issue is
+            // truly gone. Recreate and overwrite state.
+            push_one_create(http, clock, cfg, task, body)
+        }
+        ProbeOutcome::MissingAmbiguous => TaskPushResult::fail(
+            task.id.clone(),
+            format!(
+                "Jira probe of issue {key} was ambiguous (direct HTTP 401, \
+                 gateway HTTP 404) — refusing to recreate: the issue may be \
+                 alive but unreadable with this token. Verify token scope, \
+                 then retry"
+            ),
+        ),
+        ProbeOutcome::OtherStatus { status, body, .. } => TaskPushResult::fail(
+            task.id.clone(),
+            format!("Jira probe of issue {key} returned HTTP {status}: {body}"),
+        ),
+    }
+}
+
+/// Translate a low-level [`JiraOpOutcome`] from a
+/// create call into the per-task public result DTO. On
+/// a 2xx whose body parses into a [`CreatedIssue`],
+/// attaches the external key and the
+/// `plugin_state_update` blob the host persists under
+/// `plugin_state.jira`. On a 2xx whose body fails to
+/// parse for any reason **other than** being empty,
+/// appends a visible warning to the message — a silent
+/// skip would let a malformed Jira response cause
+/// unbounded duplicate issues on repeat pushes.
+fn task_result_from_create_outcome<K: Clock>(
     task: &TaskDto,
     clock: &K,
-    outcome: &CreateIssueOutcome,
+    outcome: &JiraOpOutcome,
 ) -> TaskPushResult {
     if (200..300).contains(&outcome.status) {
         let mut message = if outcome.used_gateway {
@@ -285,9 +422,9 @@ fn task_result_from_outcome<K: Clock>(
         };
         match parse_created_issue(&outcome.body) {
             Ok(created) => {
-                let state = build_jira_state(&created, clock.now());
+                let state = build_created_state(&created, clock.now());
                 return TaskPushResult::ok(task.id.clone(), message)
-                    .with_external_key(created.key)
+                    .with_external_key(created.key.as_str())
                     .with_plugin_state_update(state);
             }
             Err(ParseIssueError::EmptyBody) => {
@@ -310,23 +447,111 @@ fn task_result_from_outcome<K: Clock>(
     }
 }
 
+/// Translate a low-level [`JiraOpOutcome`] from an
+/// update call into the per-task public result DTO.
+/// Jira typically returns `204 No Content` for a
+/// successful `PUT`, so we cannot re-derive the state
+/// blob from the response body — instead we reuse the
+/// previously stored `key`/`self` and only refresh
+/// `last_pushed_at`. On a non-2xx response the stored
+/// state is left untouched (`plugin_state_update: None`)
+/// so a transient update failure does not discard the
+/// idempotency anchor.
+fn task_result_from_update_outcome<K: Clock>(
+    task: &TaskDto,
+    clock: &K,
+    key: &IssueKey,
+    outcome: &JiraOpOutcome,
+    probe_used_gateway: bool,
+) -> TaskPushResult {
+    if (200..300).contains(&outcome.status) {
+        // Gateway flag reflects the *whole* push, not
+        // just the PUT, so the operator-facing message
+        // stays honest when only the probe (or only
+        // the PUT) had to fall back (RT-125).
+        let via_gateway = outcome.used_gateway || probe_used_gateway;
+        let message = if via_gateway {
+            format!("updated (HTTP {}, via gateway)", outcome.status)
+        } else {
+            format!("updated (HTTP {})", outcome.status)
+        };
+        let mut result = TaskPushResult::ok(task.id.clone(), message)
+            .with_external_key(key.as_str());
+        if let Some(refreshed) =
+            build_refreshed_state(task.plugin_state.as_ref(), clock.now())
+        {
+            result = result.with_plugin_state_update(refreshed);
+        }
+        result
+    } else {
+        TaskPushResult::fail(
+            task.id.clone(),
+            format!(
+                "Jira update of issue {key} returned HTTP {}: {}",
+                outcome.status, outcome.body
+            ),
+        )
+    }
+}
+
 /// Build the `plugin_state.jira` blob persisted under
-/// the task. Fields are additive — future iterations
-/// (`last_hash`, `last_response_etag`, …) can extend
-/// without breaking the host, which treats the value
-/// opaquely. `last_pushed_at` is formatted ISO-8601 UTC
-/// with seconds precision so the stored timestamp stays
+/// the task after a successful **create**. Fields are
+/// additive — future iterations (`last_hash`,
+/// `last_response_etag`, …) can extend without breaking
+/// the host, which treats the value opaquely.
+/// `last_pushed_at` is formatted ISO-8601 UTC with
+/// seconds precision so the stored timestamp stays
 /// diff-stable across hosts with differing default
 /// serializers.
-fn build_jira_state(
+fn build_created_state(
     created: &CreatedIssue,
     now: chrono::DateTime<chrono::Utc>,
 ) -> serde_json::Value {
     json!({
-        "key": created.key,
+        "key": created.key.as_str(),
         "self": created.self_url,
-        "last_pushed_at": now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "last_pushed_at": format_last_pushed_at(now),
     })
+}
+
+/// Build the `plugin_state.jira` blob persisted under
+/// the task after a successful **update**. `PUT
+/// /issue/{key}` returns 204 so we carry over the
+/// previously stored blob verbatim — only mutating
+/// `last_pushed_at` — which preserves any additive
+/// fields a future plugin version may have recorded
+/// (`last_hash`, `last_response_etag`, …). Closes
+/// RT-123: wholesale reconstruction dropped those
+/// fields on every successful update.
+///
+/// Returns `None` if the stored state is missing the
+/// minimum expected `key`/`self` string fields — in
+/// that case the caller leaves `plugin_state_update`
+/// at `None` rather than writing a broken blob.
+fn build_refreshed_state(
+    existing: Option<&serde_json::Value>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<serde_json::Value> {
+    let existing_obj = existing?.as_object()?;
+    // Integrity check: the idempotency-anchor fields
+    // must be present and string-typed. A malformed
+    // stored blob is not refreshed; the host keeps
+    // the prior state intact.
+    existing_obj.get("key")?.as_str()?;
+    existing_obj.get("self")?.as_str()?;
+    let mut refreshed = existing_obj.clone();
+    refreshed.insert(
+        "last_pushed_at".into(),
+        serde_json::Value::String(format_last_pushed_at(now)),
+    );
+    Some(serde_json::Value::Object(refreshed))
+}
+
+/// Single format authority for the `last_pushed_at`
+/// wire value so create and refresh paths stay
+/// byte-identical.
+fn format_last_pushed_at(now: chrono::DateTime<chrono::Utc>) -> String {
+    now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 #[cfg(test)]
@@ -377,6 +602,19 @@ mod tests {
             tags: vec![],
             plugin_state: None,
         }
+    }
+
+    /// Task that already carries a `plugin_state.jira`
+    /// blob from a previous push — the dispatch path
+    /// should update, not create.
+    fn task_with_state(id: &str, key: &str) -> TaskDto {
+        let mut t = task(id);
+        t.plugin_state = Some(json!({
+            "key": key,
+            "self": format!("https://x.atlassian.net/rest/api/3/issue/{key}"),
+            "last_pushed_at": "2026-04-21T10:00:00Z",
+        }));
+        t
     }
 
     #[test]
@@ -547,7 +785,7 @@ mod tests {
 
     #[test]
     fn system_clock_returns_utc_instant() {
-        // Formatting is the concern of build_jira_state;
+        // Formatting is the concern of build_created_state;
         // SystemClock.now() just returns a DateTime<Utc>.
         // Sanity-check it's plausibly "now" (within the
         // last minute) and in UTC.
@@ -558,12 +796,12 @@ mod tests {
     }
 
     #[test]
-    fn build_jira_state_formats_timestamp_as_utc_iso8601_seconds() {
+    fn build_created_state_formats_timestamp_as_utc_iso8601_seconds() {
         let created = CreatedIssue {
-            key: "PROJ-1".into(),
+            key: IssueKey::parse("PROJ-1").unwrap(),
             self_url: "https://x.atlassian.net/rest/api/3/issue/1".into(),
         };
-        let state = build_jira_state(&created, clock().now());
+        let state = build_created_state(&created, clock().now());
         let stamp = state["last_pushed_at"].as_str().unwrap();
         assert_eq!(stamp, FIXED_NOW_STR);
         assert_eq!(stamp.len(), 20);
@@ -573,12 +811,12 @@ mod tests {
 
     #[test]
     fn task_result_from_non_2xx_is_failure() {
-        let outcome = CreateIssueOutcome {
+        let outcome = JiraOpOutcome {
             status: 400,
             body: r#"{"errorMessages":["nope"]}"#.into(),
             used_gateway: false,
         };
-        let r = task_result_from_outcome(&task("A"), &clock(), &outcome);
+        let r = task_result_from_create_outcome(&task("A"), &clock(), &outcome);
         assert!(!r.success);
         assert!(r.message.contains("400"));
         assert!(r.plugin_state_update.is_none());
@@ -705,5 +943,338 @@ mod tests {
         };
         assert_eq!(code, ERR_INVALID_INPUT);
         unsafe { rustwerk_plugin_free_string(out) };
+    }
+
+    // ------------------------------------------------
+    // PLG-JIRA-UPDATE: dispatch + state-update semantics
+    // ------------------------------------------------
+
+    use crate::test_support::Call;
+
+    #[test]
+    fn existing_issue_key_reads_and_validates_jira_key_from_plugin_state() {
+        let t = task_with_state("A", "PROJ-7");
+        match existing_issue_key_validated(&t) {
+            ExistingKey::Valid(k) => assert_eq!(k.as_str(), "PROJ-7"),
+            other => panic!("expected Valid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn existing_issue_key_missing_state_returns_none_variant() {
+        assert!(matches!(
+            existing_issue_key_validated(&task("A")),
+            ExistingKey::None
+        ));
+    }
+
+    #[test]
+    fn existing_issue_key_wrong_shape_returns_none_variant() {
+        let mut t = task("A");
+        t.plugin_state = Some(json!({ "key": 42 })); // not a string
+        assert!(matches!(
+            existing_issue_key_validated(&t),
+            ExistingKey::None
+        ));
+    }
+
+    #[test]
+    fn existing_issue_key_malformed_value_returns_invalid_variant() {
+        // Path-traversal attempt in stored state —
+        // must NOT be accepted (RT-121).
+        let mut t = task("A");
+        t.plugin_state = Some(json!({ "key": "../../admin" }));
+        assert!(matches!(
+            existing_issue_key_validated(&t),
+            ExistingKey::Invalid(k) if k == "../../admin"
+        ));
+    }
+
+    #[test]
+    fn push_fails_loudly_when_stored_key_is_invalid() {
+        // Poisoned project.json → the whole task must
+        // fail, not silently recreate (RT-121).
+        let mut t = task("A");
+        t.plugin_state = Some(json!({ "key": "../../admin" }));
+        // No HTTP calls should be made at all.
+        let http = MockHttp::new(vec![]);
+        let result = push_all(&http, &clock(), &cfg(), &[t]);
+        assert!(!result.success);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].message.contains("not a valid issue key"));
+        assert!(http.calls().is_empty());
+    }
+
+    #[test]
+    fn issue_key_parse_accepts_valid_keys() {
+        assert!(IssueKey::parse("PROJ-1").is_some());
+        assert!(IssueKey::parse("PROJ-142").is_some());
+        assert!(IssueKey::parse("A-1").is_some());
+        assert!(IssueKey::parse("MY_PROJECT-123").is_some());
+        assert!(IssueKey::parse("ABC2-9").is_some());
+    }
+
+    #[test]
+    fn issue_key_parse_rejects_path_traversal_and_other_garbage() {
+        assert!(IssueKey::parse("").is_none());
+        assert!(IssueKey::parse("../../admin").is_none());
+        assert!(IssueKey::parse("PROJ").is_none());
+        assert!(IssueKey::parse("-1").is_none());
+        assert!(IssueKey::parse("PROJ-").is_none());
+        assert!(IssueKey::parse("proj-1").is_none()); // lowercase
+        assert!(IssueKey::parse("PROJ-1a").is_none()); // non-digit suffix
+        assert!(IssueKey::parse("PROJ/1").is_none());
+        assert!(IssueKey::parse("PROJ-1?expand=X").is_none());
+        assert!(IssueKey::parse("PROJ-1#frag").is_none());
+        assert!(IssueKey::parse("PROJ-1 ").is_none());
+        assert!(IssueKey::parse("PROJ-1\n").is_none());
+        assert!(IssueKey::parse(&"A".repeat(65)).is_none()); // length cap
+    }
+
+    #[test]
+    fn second_push_of_pushed_task_sends_put_not_post() {
+        // Probe GET /issue/PROJ-7 → 200, then PUT → 204.
+        let http = MockHttp::new(vec![
+            ok(200, r#"{"key":"PROJ-7"}"#), // probe
+            ok(204, ""),                    // PUT success
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        assert!(result.success);
+        let calls = http.calls();
+        assert_eq!(calls.len(), 2, "calls: {calls:?}");
+        assert!(matches!(&calls[0], Call::Get { url, .. }
+            if url == "https://x.atlassian.net/rest/api/3/issue/PROJ-7"));
+        assert!(matches!(&calls[1], Call::Put { url, .. }
+            if url == "https://x.atlassian.net/rest/api/3/issue/PROJ-7"));
+        // No POST — the create verb must not be used.
+        assert!(calls.iter().all(|c| !matches!(c, Call::Post { .. })));
+        let rs = result.task_results.unwrap();
+        assert_eq!(rs[0].message, "updated (HTTP 204)");
+        assert_eq!(rs[0].external_key.as_deref(), Some("PROJ-7"));
+    }
+
+    #[test]
+    fn successful_put_refreshes_last_pushed_at_and_preserves_key_self() {
+        let http = MockHttp::new(vec![ok(200, r#"{"key":"PROJ-7"}"#), ok(204, "")]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        let rs = result.task_results.unwrap();
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["key"], "PROJ-7");
+        assert_eq!(
+            state["self"],
+            "https://x.atlassian.net/rest/api/3/issue/PROJ-7"
+        );
+        // Refreshed to the fixed-clock value, not the
+        // stale 2026-04-21 value baked into
+        // task_with_state.
+        assert_eq!(state["last_pushed_at"], FIXED_NOW_STR);
+    }
+
+    #[test]
+    fn second_push_after_deletion_recreates_and_overwrites_state() {
+        // Direct GET → 404, tenant_info 200, gateway GET
+        // also 404 → caller treats as deleted, recreates
+        // via POST. The new create returns PROJ-99 which
+        // must overwrite the stored PROJ-7.
+        let http = MockHttp::new(vec![
+            ok(404, "gone"),                 // direct GET
+            ok(200, r#"{"cloudId":"cid"}"#), // tenant_info
+            ok(404, "still gone"),           // gateway GET
+            ok(
+                201,
+                r#"{"id":"99","key":"PROJ-99","self":"https://x.atlassian.net/rest/api/3/issue/99"}"#,
+            ), // recreate POST
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        assert!(result.success);
+        let rs = result.task_results.unwrap();
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["key"], "PROJ-99");
+        assert_eq!(
+            state["self"],
+            "https://x.atlassian.net/rest/api/3/issue/99"
+        );
+        assert_eq!(rs[0].external_key.as_deref(), Some("PROJ-99"));
+        assert!(rs[0].message.contains("created"));
+    }
+
+    #[test]
+    fn failed_put_leaves_stored_key_and_self_unchanged() {
+        // Probe 200, PUT 500 → fail with message; state
+        // update stays None so host keeps the prior
+        // key/self.
+        let http = MockHttp::new(vec![
+            ok(200, r#"{"key":"PROJ-7"}"#),
+            ok(500, "broken"),
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        assert!(!result.success);
+        let rs = result.task_results.unwrap();
+        assert!(!rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+        assert!(rs[0].message.contains("500"));
+        assert!(rs[0].message.contains("PROJ-7"));
+    }
+
+    #[test]
+    fn put_transport_error_leaves_state_untouched() {
+        let http = MockHttp::new(vec![
+            ok(200, r#"{"key":"PROJ-7"}"#),
+            transport_err("connection reset"),
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        let rs = result.task_results.unwrap();
+        assert!(!rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+        assert!(rs[0].message.contains("connection reset"));
+    }
+
+    #[test]
+    fn probe_non_2xx_non_404_fails_without_touching_state() {
+        // 500 on probe → fail immediately, never PUT.
+        let http = MockHttp::new(vec![ok(500, "oops")]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        let rs = result.task_results.unwrap();
+        assert!(!rs[0].success);
+        assert!(rs[0].plugin_state_update.is_none());
+        assert!(rs[0].message.contains("probe"));
+        let calls = http.calls();
+        assert!(calls.iter().all(|c| !matches!(c, Call::Put { .. })));
+    }
+
+    #[test]
+    fn ambiguous_probe_404_fails_without_recreating_duplicate() {
+        // RT-122: direct GET 401 + gateway GET 404 is
+        // NOT proof the issue is deleted — the direct
+        // read was blocked, so the gateway's "missing"
+        // answer could just mean scoped-token
+        // restriction. Must fail, not recreate.
+        let http = MockHttp::new(vec![
+            ok(401, ""),                     // direct GET
+            ok(200, r#"{"cloudId":"cid"}"#), // tenant_info
+            ok(404, ""),                     // gateway GET → AMBIGUOUS
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        assert!(!result.success);
+        let rs = result.task_results.unwrap();
+        assert!(!rs[0].success);
+        assert!(rs[0].message.contains("ambiguous"));
+        assert!(rs[0].plugin_state_update.is_none());
+        // No POST — we must NOT have created a duplicate.
+        assert!(http
+            .calls()
+            .iter()
+            .all(|c| !matches!(c, Call::Post { .. })));
+    }
+
+    #[test]
+    fn refresh_preserves_additive_state_fields() {
+        // RT-123: future plugin versions may write
+        // additional fields (last_hash,
+        // last_response_etag, …) into created state.
+        // The update path must carry them verbatim —
+        // wholesale reconstruction silently dropped
+        // them before this fix.
+        let mut t = task("A");
+        t.plugin_state = Some(json!({
+            "key": "PROJ-7",
+            "self": "https://x.atlassian.net/rest/api/3/issue/7",
+            "last_pushed_at": "2026-04-21T10:00:00Z",
+            "last_hash": "deadbeef",
+            "custom_field": { "nested": true },
+        }));
+        let http = MockHttp::new(vec![ok(200, r#"{"key":"PROJ-7"}"#), ok(204, "")]);
+        let result = push_all(&http, &clock(), &cfg(), &[t]);
+        let rs = result.task_results.unwrap();
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["last_pushed_at"], FIXED_NOW_STR);
+        assert_eq!(state["last_hash"], "deadbeef");
+        assert_eq!(state["custom_field"]["nested"], true);
+        assert_eq!(state["key"], "PROJ-7");
+    }
+
+    #[test]
+    fn update_message_reports_gateway_when_probe_alone_used_it() {
+        // RT-125 (fold-in): if only the probe went
+        // through the gateway, the task message must
+        // still say "via gateway" — previously it
+        // silently reported direct-only.
+        let http = MockHttp::new(vec![
+            ok(401, ""),                     // direct GET
+            ok(200, r#"{"cloudId":"cid"}"#), // tenant_info
+            ok(200, r#"{"key":"PROJ-7"}"#), // gateway GET → exists
+            ok(204, ""),                   // direct PUT → no fallback
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(
+            rs[0].message.contains("via gateway"),
+            "message should note gateway, got: {}",
+            rs[0].message
+        );
+    }
+
+    #[test]
+    fn gateway_fallback_applies_to_probe_and_update() {
+        // Direct GET 401 → tenant_info 200 → gateway GET
+        // 200 (exists) → direct PUT 401 → tenant_info
+        // 200 (reused — but here we model a second
+        // lookup for simplicity since update_issue does
+        // its own fallback) → gateway PUT 204.
+        let http = MockHttp::new(vec![
+            ok(401, ""),
+            ok(200, r#"{"cloudId":"cid"}"#),
+            ok(200, r#"{"key":"PROJ-7"}"#),
+            ok(401, ""),
+            ok(200, r#"{"cloudId":"cid"}"#),
+            ok(204, ""),
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        assert!(result.success);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].message.contains("via gateway"));
+        let calls = http.calls();
+        // Verify both probe retry and update retry went
+        // through the gateway URL.
+        let gateway_hits = calls
+            .iter()
+            .filter(|c| match c {
+                Call::Get { url, .. } | Call::Put { url, .. } => {
+                    url.starts_with("https://api.atlassian.com/ex/jira/cid/")
+                }
+                Call::Post { .. } => false,
+            })
+            .count();
+        assert_eq!(gateway_hits, 2);
+    }
+
+    #[test]
+    fn recreate_message_does_not_claim_update() {
+        // After 404/404 recreate, the operator-facing
+        // message should say "created", not "updated".
+        let http = MockHttp::new(vec![
+            ok(404, ""),
+            ok(200, r#"{"cloudId":"cid"}"#),
+            ok(404, ""),
+            ok(
+                201,
+                r#"{"id":"99","key":"PROJ-99","self":"https://x.atlassian.net/rest/api/3/issue/99"}"#,
+            ),
+        ]);
+        let result =
+            push_all(&http, &clock(), &cfg(), &[task_with_state("A", "PROJ-7")]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].message.starts_with("created"));
+        assert!(!rs[0].message.contains("updated"));
     }
 }
