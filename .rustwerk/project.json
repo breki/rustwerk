@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T05:18:50.294078500Z"
+    "modified_at": "2026-04-20T05:39:53.813220900Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -490,6 +490,19 @@
       "description": "rustwerk plugin install <source> [--scope project|user] [--force].",
       "status": "done",
       "complexity": 2,
+      "tags": [
+        "cli",
+        "plugin"
+      ]
+    },
+    "PLG-INSTALL-BUILD": {
+      "title": "Build-from-source variants of rustwerk plugin install",
+      "description": "Build-from-source variants for rustwerk plugin install: accept a Cargo project dir or --from <package-name>, plus --release. Reuse the existing copy/verify/rollback pipeline after cargo build.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-INSTALL"
+      ],
+      "complexity": 3,
       "tags": [
         "cli",
         "plugin"
