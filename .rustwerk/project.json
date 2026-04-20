@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T11:35:24.224987Z"
+    "modified_at": "2026-04-20T17:51:06.190861800Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -537,7 +537,7 @@
     "PLG-JIRA-FIELDS": {
       "title": "Richer Jira field mapping",
       "description": "Map rustwerk status, assignee, complexity, and tags onto Jira fields via config maps.",
-      "status": "todo",
+      "status": "done",
       "complexity": 5,
       "tags": [
         "jira",

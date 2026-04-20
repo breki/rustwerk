@@ -201,13 +201,21 @@ Absent values are omitted. `--dry-run` prints the task
 list and resolved config **key names** (never the
 token value) without invoking the plugin.
 
-The jira plugin also accepts optional
+The jira plugin also accepts optional config keys:
 `default_issue_type` (Jira-side name used when a task
-has no `--type`; defaults to `"Task"`) and
+has no `--type`; defaults to `"Task"`),
 `issue_type_map` (overrides for rustwerk's wire names
 → the exact Jira strings, e.g.
 `{"sub-task": "Subtask"}` for sites that dropped the
-hyphen).
+hyphen), `status_map` (mapping rustwerk status wire
+names → Jira workflow **transition IDs** discovered
+via `GET /issue/{key}/transitions`), `assignee_map`
+(email → `accountId`; keys validated to contain `@`),
+`priority_map` (stringified complexity → Jira priority
+name), and `labels_from_tags` (boolean, default
+`false`; when `true`, task tags become `fields.labels`).
+Unmapped assignees/priorities emit a non-fatal
+`WARNING: …` in the per-task message.
 
 The binary exits non-zero when the plugin reports an
 aggregate failure, so CI can gate on the push result.
@@ -220,7 +228,12 @@ pushes `PUT` the existing issue (refreshing
 to recreate if Jira returns 404 for the stored key
 (with the new key overwriting the stored state). A
 failed `PUT` never discards the stored idempotency
-anchor.
+anchor. When `status_map` is configured, a
+`POST /issue/{key}/transitions` fires after a
+successful create/update and the resulting status is
+recorded as `plugin_state.jira.last_status`; repeated
+pushes skip the transition when the task's status is
+unchanged since `last_status`.
 
 ## Batch Commands (Atomic JSON)
 

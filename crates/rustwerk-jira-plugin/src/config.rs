@@ -51,6 +51,39 @@ pub(crate) struct JiraConfig {
     /// defaults in [`BUILT_IN_ISSUE_TYPE_NAMES`].
     #[serde(default)]
     pub issue_type_map: HashMap<String, String>,
+    /// Maps rustwerk [`TaskStatusDto`] wire names
+    /// (`"todo"`, `"in_progress"`, `"blocked"`, `"done"`,
+    /// `"on_hold"`) to Jira workflow **transition IDs**,
+    /// not status names. Transition IDs are discovered
+    /// once per Jira project via
+    /// `GET /rest/api/3/issue/{key}/transitions`. Statuses
+    /// absent from the map fire no transition — there is
+    /// no separate "null means disabled" representation;
+    /// omit the key instead.
+    ///
+    /// [`TaskStatusDto`]: rustwerk_plugin_api::TaskStatusDto
+    #[serde(default)]
+    pub status_map: HashMap<String, String>,
+    /// Maps rustwerk assignee identifiers (typically
+    /// emails, e.g. `"alice@example.com"`) to Jira
+    /// `accountId` strings. Keys are validated at load
+    /// time to contain `@`. Unmapped task assignees are
+    /// skipped with a warning in the per-task message.
+    #[serde(default)]
+    pub assignee_map: HashMap<String, String>,
+    /// Maps rustwerk complexity scores (as stringified
+    /// integers, e.g. `"1"`) to Jira priority **names**
+    /// (e.g. `"Highest"`). Unmapped scores are skipped
+    /// with a warning.
+    #[serde(default)]
+    pub priority_map: HashMap<String, String>,
+    /// When `true`, rustwerk task tags are forwarded to
+    /// Jira as `fields.labels`. Default `false` — tag
+    /// semantics differ enough (rustwerk allows spaces;
+    /// Jira labels do not) that opt-in is safer than a
+    /// silent translation.
+    #[serde(default)]
+    pub labels_from_tags: bool,
 }
 
 /// Built-in mapping from rustwerk's kebab-case wire name
@@ -164,6 +197,12 @@ pub(crate) enum ConfigError {
     /// being sent to an attacker-controlled origin.
     #[error("plugin config field 'jira_url' must be a *.atlassian.net host, got '{0}'")]
     DisallowedHost(String),
+    /// An entry in `assignee_map` has a key that does not
+    /// look like an email. Enforced at load time so a
+    /// typo becomes visible immediately instead of
+    /// manifesting as "no assignee" on every push.
+    #[error("plugin config field 'assignee_map' key '{0}' does not look like an email (must contain '@')")]
+    InvalidAssigneeEmail(String),
 }
 
 // thiserror doesn't know serde_json's type here — we
@@ -190,6 +229,15 @@ impl JiraConfig {
             .into_iter()
             .map(|(k, v)| (canonicalize_issue_type_kebab(&k), v))
             .collect();
+        // status_map keys are rustwerk TaskStatusDto wire
+        // names; snake_case and lowercase. Canonicalize so
+        // a config written as `"In_Progress"` or `"TODO"`
+        // still resolves.
+        cfg.status_map = cfg
+            .status_map
+            .into_iter()
+            .map(|(k, v)| (k.trim().to_ascii_lowercase(), v))
+            .collect();
         Ok(cfg)
     }
 
@@ -209,7 +257,37 @@ impl JiraConfig {
             });
         }
         validate_jira_url(&self.jira_url)?;
+        for email in self.assignee_map.keys() {
+            if !email.contains('@') {
+                return Err(ConfigError::InvalidAssigneeEmail(email.clone()));
+            }
+        }
         Ok(())
+    }
+
+    /// Return the Jira transition ID mapped for the given
+    /// rustwerk status wire name (`"todo"`, `"in_progress"`,
+    /// etc.), if any. `None` means "no transition
+    /// configured for this status". The caller is expected
+    /// to treat a missing mapping as a no-op, not an error.
+    pub(crate) fn transition_id_for_status(&self, wire: &str) -> Option<&str> {
+        self.status_map.get(wire).map(String::as_str)
+    }
+
+    /// Lookup the Jira `accountId` for a rustwerk
+    /// assignee email. Returns `None` when no entry
+    /// exists — the caller surfaces a warning.
+    pub(crate) fn account_id_for_assignee(&self, email: &str) -> Option<&str> {
+        self.assignee_map.get(email).map(String::as_str)
+    }
+
+    /// Lookup the Jira priority name for a rustwerk
+    /// complexity score. `None` means no entry; the caller
+    /// surfaces a warning.
+    pub(crate) fn priority_name_for_complexity(&self, complexity: u32) -> Option<&str> {
+        self.priority_map
+            .get(&complexity.to_string())
+            .map(String::as_str)
     }
 }
 
@@ -424,6 +502,10 @@ mod tests {
             project_key: "P".into(),
             default_issue_type: None,
             issue_type_map: HashMap::new(),
+            status_map: HashMap::new(),
+            assignee_map: HashMap::new(),
+            priority_map: HashMap::new(),
+            labels_from_tags: false,
         }
     }
 
@@ -538,5 +620,79 @@ mod tests {
         let cfg = JiraConfig::from_json(&full_json()).unwrap();
         assert!(cfg.default_issue_type.is_none());
         assert!(cfg.issue_type_map.is_empty());
+    }
+
+    // --- PLG-JIRA-FIELDS: richer mapping config ---
+
+    #[test]
+    fn config_defaults_fields_mapping_when_absent() {
+        let cfg = JiraConfig::from_json(&full_json()).unwrap();
+        assert!(cfg.status_map.is_empty());
+        assert!(cfg.assignee_map.is_empty());
+        assert!(cfg.priority_map.is_empty());
+        assert!(!cfg.labels_from_tags);
+    }
+
+    #[test]
+    fn config_parses_all_mapping_fields() {
+        let json = serde_json::json!({
+            "jira_url": "https://x.atlassian.net",
+            "jira_token": "t",
+            "username": "u",
+            "project_key": "P",
+            "status_map": { "in_progress": "11", "done": "31" },
+            "assignee_map": { "alice@example.com": "acct-1" },
+            "priority_map": { "1": "Highest", "3": "Medium" },
+            "labels_from_tags": true,
+        })
+        .to_string();
+        let cfg = JiraConfig::from_json(&json).unwrap();
+        assert_eq!(cfg.transition_id_for_status("in_progress"), Some("11"));
+        assert_eq!(cfg.transition_id_for_status("done"), Some("31"));
+        assert_eq!(cfg.transition_id_for_status("todo"), None);
+        assert_eq!(
+            cfg.account_id_for_assignee("alice@example.com"),
+            Some("acct-1")
+        );
+        assert_eq!(cfg.priority_name_for_complexity(1), Some("Highest"));
+        assert_eq!(cfg.priority_name_for_complexity(3), Some("Medium"));
+        assert_eq!(cfg.priority_name_for_complexity(5), None);
+        assert!(cfg.labels_from_tags);
+    }
+
+    #[test]
+    fn config_canonicalizes_status_map_keys() {
+        // Casing / whitespace drift in hand-written config
+        // must not silently break the lookup.
+        let json = serde_json::json!({
+            "jira_url": "https://x.atlassian.net",
+            "jira_token": "t",
+            "username": "u",
+            "project_key": "P",
+            "status_map": { " In_Progress ": "11" },
+        })
+        .to_string();
+        let cfg = JiraConfig::from_json(&json).unwrap();
+        assert_eq!(cfg.transition_id_for_status("in_progress"), Some("11"));
+    }
+
+    #[test]
+    fn config_rejects_assignee_map_key_without_at() {
+        let json = serde_json::json!({
+            "jira_url": "https://x.atlassian.net",
+            "jira_token": "t",
+            "username": "u",
+            "project_key": "P",
+            "assignee_map": { "not-an-email": "acct" },
+        })
+        .to_string();
+        let err = JiraConfig::from_json(&json).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidAssigneeEmail(k) if k == "not-an-email"));
+    }
+
+    #[test]
+    fn config_missing_status_map_entry_returns_none() {
+        let cfg = JiraConfig::from_json(&full_json()).unwrap();
+        assert_eq!(cfg.transition_id_for_status("in_progress"), None);
     }
 }

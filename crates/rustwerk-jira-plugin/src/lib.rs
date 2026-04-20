@@ -37,22 +37,22 @@ use std::os::raw::c_char;
 
 use rustwerk_plugin_api::{
     deserialize_from_cstr_bounded, serialize_to_cstring, PluginInfo,
-    PluginResult, TaskDto, TaskPushResult, API_VERSION, ERR_GENERIC,
+    PluginResult, TaskDto, API_VERSION, ERR_GENERIC,
     ERR_INVALID_INPUT, ERR_OK,
 };
-use serde_json::json;
 
 use crate::config::JiraConfig;
-use crate::jira_client::{
-    create_issue, get_issue, parse_created_issue, update_issue, CreatedIssue,
-    HttpClient, IssueKey, JiraOpOutcome, ParseIssueError, ProbeOutcome, UreqClient,
-};
+use crate::jira_client::UreqClient;
+use crate::push::{push_all, SystemClock};
 
 mod config;
 mod jira_client;
 mod mapping;
+mod push;
 #[cfg(test)]
 mod test_support;
+mod transition;
+mod warnings;
 
 /// Maximum accepted size, in bytes, of the plugin config
 /// and tasks payloads supplied by the host. Matches the
@@ -149,29 +149,6 @@ pub unsafe extern "C" fn rustwerk_plugin_push_tasks(
     write_json(out, &result)
 }
 
-/// Abstraction over "what is the current wall-clock
-/// UTC instant". The jira plugin needs to stamp
-/// `last_pushed_at` into per-task plugin state;
-/// returning a typed [`chrono::DateTime<chrono::Utc>`]
-/// rather than a preformatted `String` keeps the
-/// allocation / format choice in one place
-/// ([`build_created_state`]) and avoids forcing a fresh
-/// `String` allocation on every successful push.
-pub(crate) trait Clock {
-    /// Return the current UTC instant.
-    fn now(&self) -> chrono::DateTime<chrono::Utc>;
-}
-
-/// Production [`Clock`] backed by the OS wall clock
-/// via `chrono::Utc::now`.
-pub(crate) struct SystemClock;
-
-impl Clock for SystemClock {
-    fn now(&self) -> chrono::DateTime<chrono::Utc> {
-        chrono::Utc::now()
-    }
-}
-
 /// Release a C string previously returned by this plugin
 /// via an out-pointer. Null input is a no-op.
 ///
@@ -219,347 +196,19 @@ fn error_payload(out: *mut *mut c_char, code: i32, message: &str) -> i32 {
     code
 }
 
-/// Walk every task, attempt to create its Jira issue,
-/// collect per-task results, and aggregate into a
-/// [`PluginResult`].
-fn push_all<C: HttpClient, K: Clock>(
-    http: &C,
-    clock: &K,
-    cfg: &JiraConfig,
-    tasks: &[TaskDto],
-) -> PluginResult {
-    let results: Vec<TaskPushResult> =
-        tasks.iter().map(|t| push_one(http, clock, cfg, t)).collect();
-    let all_ok = results.iter().all(|r| r.success);
-    let message = if all_ok {
-        format!("{} task(s) pushed to Jira", results.len())
-    } else {
-        let failed = results.iter().filter(|r| !r.success).count();
-        format!("{failed} of {} task(s) failed", results.len())
-    };
-    PluginResult {
-        success: all_ok,
-        message,
-        task_results: Some(results),
-    }
-}
-
-/// Push a single task. Dispatches on whether the task
-/// already carries per-plugin state from a previous
-/// push:
-///
-/// | incoming `plugin_state.jira.key` | probe result     | action                                 |
-/// |----------------------------------|------------------|----------------------------------------|
-/// | `None`                           | —                | `POST /issue` (create)                 |
-/// | `Some(key)`                      | 2xx              | `PUT /issue/{key}` (update)            |
-/// | `Some(key)`                      | 404 after fallback | `POST /issue` (recreate + overwrite) |
-///
-/// HTTP-client errors and non-2xx Jira responses turn
-/// into a failed [`TaskPushResult`] rather than
-/// propagating, so one bad task does not abort the
-/// batch.
-fn push_one<C: HttpClient, K: Clock>(
-    http: &C,
-    clock: &K,
-    cfg: &JiraConfig,
-    task: &TaskDto,
-) -> TaskPushResult {
-    let payload = mapping::build_issue_payload(task, cfg);
-    let body = payload.to_string();
-    match existing_issue_key_validated(task) {
-        ExistingKey::None => push_one_create(http, clock, cfg, task, &body),
-        ExistingKey::Valid(key) => {
-            push_one_update(http, clock, cfg, task, &key, &body)
-        }
-        ExistingKey::Invalid(raw) => TaskPushResult::fail(
-            task.id.clone(),
-            format!(
-                "stored Jira key {raw:?} is not a valid issue key — refusing to \
-                 splice it into a URL; fix or clear plugin_state.jira.key and \
-                 re-push"
-            ),
-        ),
-    }
-}
-
-/// Outcome of reading `plugin_state.jira.key`.
-///
-/// - `None` → no prior push, go create.
-/// - `Valid(IssueKey)` → prior push, go probe+update.
-/// - `Invalid(raw)` → *something* was stored but it
-///   does not match Jira's issue-key grammar. Fail the
-///   task loudly rather than silently recreating: a
-///   poisoned `project.json` must not be able to
-///   coerce a duplicate issue by failing a
-///   validation check (RT-121).
-#[derive(Debug)]
-enum ExistingKey {
-    None,
-    Valid(IssueKey),
-    Invalid(String),
-}
-
-/// Extract and validate the Jira issue key stored
-/// under `plugin_state.jira.key` after a previous
-/// successful push. Empty state or a non-string `key`
-/// is treated as "never pushed" (create-path); a
-/// present-but-malformed string is treated as a
-/// poisoned / corrupted state entry and surfaced as
-/// `Invalid` so the caller can fail the task.
-fn existing_issue_key_validated(task: &TaskDto) -> ExistingKey {
-    let Some(state) = task.plugin_state.as_ref() else {
-        return ExistingKey::None;
-    };
-    let Some(key_value) = state.get("key") else {
-        return ExistingKey::None;
-    };
-    let Some(key_str) = key_value.as_str() else {
-        return ExistingKey::None;
-    };
-    match IssueKey::parse(key_str) {
-        Some(valid) => ExistingKey::Valid(valid),
-        None => ExistingKey::Invalid(key_str.to_string()),
-    }
-}
-
-/// Create path. Exists as a separate function so the
-/// recreate-on-404 branch inside `push_one_update` can
-/// reuse the exact same success / parse / warning
-/// semantics.
-fn push_one_create<C: HttpClient, K: Clock>(
-    http: &C,
-    clock: &K,
-    cfg: &JiraConfig,
-    task: &TaskDto,
-    body: &str,
-) -> TaskPushResult {
-    match create_issue(http, cfg, body) {
-        Ok(outcome) => task_result_from_create_outcome(task, clock, &outcome),
-        Err(e) => TaskPushResult::fail(task.id.clone(), e.to_string()),
-    }
-}
-
-/// Update path: probe via `GET /issue/{key}`, dispatch
-/// on the probe outcome.
-///
-/// - `Exists` → `PUT` to update.
-/// - `MissingConfirmed` → recreate (safe: direct URL
-///   authoritatively said the issue is gone).
-/// - `MissingAmbiguous` → fail the task. Direct-URL
-///   401 + gateway 404 is *not* proof of absence, and
-///   silently recreating would duplicate a live issue
-///   whose read scope the current token cannot see
-///   (RT-122).
-/// - `OtherStatus` → fail the task with the response
-///   body so the operator can diagnose.
-fn push_one_update<C: HttpClient, K: Clock>(
-    http: &C,
-    clock: &K,
-    cfg: &JiraConfig,
-    task: &TaskDto,
-    key: &IssueKey,
-    body: &str,
-) -> TaskPushResult {
-    let probe = match get_issue(http, cfg, key) {
-        Ok(o) => o,
-        Err(e) => return TaskPushResult::fail(task.id.clone(), e.to_string()),
-    };
-    match probe {
-        ProbeOutcome::Exists {
-            used_gateway: probe_used_gateway,
-            ..
-        } => match update_issue(http, cfg, key, body) {
-            Ok(outcome) => task_result_from_update_outcome(
-                task,
-                clock,
-                key,
-                &outcome,
-                probe_used_gateway,
-            ),
-            Err(e) => TaskPushResult::fail(task.id.clone(), e.to_string()),
-        },
-        ProbeOutcome::MissingConfirmed { .. } => {
-            // Direct + gateway both 404 → issue is
-            // truly gone. Recreate and overwrite state.
-            push_one_create(http, clock, cfg, task, body)
-        }
-        ProbeOutcome::MissingAmbiguous => TaskPushResult::fail(
-            task.id.clone(),
-            format!(
-                "Jira probe of issue {key} was ambiguous (direct HTTP 401, \
-                 gateway HTTP 404) — refusing to recreate: the issue may be \
-                 alive but unreadable with this token. Verify token scope, \
-                 then retry"
-            ),
-        ),
-        ProbeOutcome::OtherStatus { status, body, .. } => TaskPushResult::fail(
-            task.id.clone(),
-            format!("Jira probe of issue {key} returned HTTP {status}: {body}"),
-        ),
-    }
-}
-
-/// Translate a low-level [`JiraOpOutcome`] from a
-/// create call into the per-task public result DTO. On
-/// a 2xx whose body parses into a [`CreatedIssue`],
-/// attaches the external key and the
-/// `plugin_state_update` blob the host persists under
-/// `plugin_state.jira`. On a 2xx whose body fails to
-/// parse for any reason **other than** being empty,
-/// appends a visible warning to the message — a silent
-/// skip would let a malformed Jira response cause
-/// unbounded duplicate issues on repeat pushes.
-fn task_result_from_create_outcome<K: Clock>(
-    task: &TaskDto,
-    clock: &K,
-    outcome: &JiraOpOutcome,
-) -> TaskPushResult {
-    if (200..300).contains(&outcome.status) {
-        let mut message = if outcome.used_gateway {
-            format!("created (HTTP {}, via gateway)", outcome.status)
-        } else {
-            format!("created (HTTP {})", outcome.status)
-        };
-        match parse_created_issue(&outcome.body) {
-            Ok(created) => {
-                let state = build_created_state(&created, clock.now());
-                return TaskPushResult::ok(task.id.clone(), message)
-                    .with_external_key(created.key.as_str())
-                    .with_plugin_state_update(state);
-            }
-            Err(ParseIssueError::EmptyBody) => {
-                // 204 / no-body success — nothing to
-                // anchor state against, silent skip.
-            }
-            Err(e) => {
-                message = format!(
-                    "{message} (WARNING: {e}; plugin state not recorded — \
-                     next push may create a duplicate Jira issue)"
-                );
-            }
-        }
-        TaskPushResult::ok(task.id.clone(), message)
-    } else {
-        TaskPushResult::fail(
-            task.id.clone(),
-            format!("Jira returned HTTP {}: {}", outcome.status, outcome.body),
-        )
-    }
-}
-
-/// Translate a low-level [`JiraOpOutcome`] from an
-/// update call into the per-task public result DTO.
-/// Jira typically returns `204 No Content` for a
-/// successful `PUT`, so we cannot re-derive the state
-/// blob from the response body — instead we reuse the
-/// previously stored `key`/`self` and only refresh
-/// `last_pushed_at`. On a non-2xx response the stored
-/// state is left untouched (`plugin_state_update: None`)
-/// so a transient update failure does not discard the
-/// idempotency anchor.
-fn task_result_from_update_outcome<K: Clock>(
-    task: &TaskDto,
-    clock: &K,
-    key: &IssueKey,
-    outcome: &JiraOpOutcome,
-    probe_used_gateway: bool,
-) -> TaskPushResult {
-    if (200..300).contains(&outcome.status) {
-        // Gateway flag reflects the *whole* push, not
-        // just the PUT, so the operator-facing message
-        // stays honest when only the probe (or only
-        // the PUT) had to fall back (RT-125).
-        let via_gateway = outcome.used_gateway || probe_used_gateway;
-        let message = if via_gateway {
-            format!("updated (HTTP {}, via gateway)", outcome.status)
-        } else {
-            format!("updated (HTTP {})", outcome.status)
-        };
-        let mut result = TaskPushResult::ok(task.id.clone(), message)
-            .with_external_key(key.as_str());
-        if let Some(refreshed) =
-            build_refreshed_state(task.plugin_state.as_ref(), clock.now())
-        {
-            result = result.with_plugin_state_update(refreshed);
-        }
-        result
-    } else {
-        TaskPushResult::fail(
-            task.id.clone(),
-            format!(
-                "Jira update of issue {key} returned HTTP {}: {}",
-                outcome.status, outcome.body
-            ),
-        )
-    }
-}
-
-/// Build the `plugin_state.jira` blob persisted under
-/// the task after a successful **create**. Fields are
-/// additive — future iterations (`last_hash`,
-/// `last_response_etag`, …) can extend without breaking
-/// the host, which treats the value opaquely.
-/// `last_pushed_at` is formatted ISO-8601 UTC with
-/// seconds precision so the stored timestamp stays
-/// diff-stable across hosts with differing default
-/// serializers.
-fn build_created_state(
-    created: &CreatedIssue,
-    now: chrono::DateTime<chrono::Utc>,
-) -> serde_json::Value {
-    json!({
-        "key": created.key.as_str(),
-        "self": created.self_url,
-        "last_pushed_at": format_last_pushed_at(now),
-    })
-}
-
-/// Build the `plugin_state.jira` blob persisted under
-/// the task after a successful **update**. `PUT
-/// /issue/{key}` returns 204 so we carry over the
-/// previously stored blob verbatim — only mutating
-/// `last_pushed_at` — which preserves any additive
-/// fields a future plugin version may have recorded
-/// (`last_hash`, `last_response_etag`, …). Closes
-/// RT-123: wholesale reconstruction dropped those
-/// fields on every successful update.
-///
-/// Returns `None` if the stored state is missing the
-/// minimum expected `key`/`self` string fields — in
-/// that case the caller leaves `plugin_state_update`
-/// at `None` rather than writing a broken blob.
-fn build_refreshed_state(
-    existing: Option<&serde_json::Value>,
-    now: chrono::DateTime<chrono::Utc>,
-) -> Option<serde_json::Value> {
-    let existing_obj = existing?.as_object()?;
-    // Integrity check: the idempotency-anchor fields
-    // must be present and string-typed. A malformed
-    // stored blob is not refreshed; the host keeps
-    // the prior state intact.
-    existing_obj.get("key")?.as_str()?;
-    existing_obj.get("self")?.as_str()?;
-    let mut refreshed = existing_obj.clone();
-    refreshed.insert(
-        "last_pushed_at".into(),
-        serde_json::Value::String(format_last_pushed_at(now)),
-    );
-    Some(serde_json::Value::Object(refreshed))
-}
-
-/// Single format authority for the `last_pushed_at`
-/// wire value so create and refresh paths stay
-/// byte-identical.
-fn format_last_pushed_at(now: chrono::DateTime<chrono::Utc>) -> String {
-    now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jira_client::{CreatedIssue, IssueKey, JiraOpOutcome};
+    use crate::push::{
+        build_created_state, existing_issue_key_validated, push_all,
+        task_result_from_create_outcome, Clock, ExistingKey, SystemClock,
+    };
     use crate::test_support::{ok, transport_err, MockHttp};
     use chrono::TimeZone;
     use rustwerk_plugin_api::TaskStatusDto;
+    use serde_json::json;
     use std::ptr;
 
     struct FixedClock(chrono::DateTime<chrono::Utc>);
@@ -588,6 +237,10 @@ mod tests {
             project_key: "PROJ".into(),
             default_issue_type: None,
             issue_type_map: std::collections::HashMap::new(),
+            status_map: std::collections::HashMap::new(),
+            assignee_map: std::collections::HashMap::new(),
+            priority_map: std::collections::HashMap::new(),
+            labels_from_tags: false,
         }
     }
 
@@ -1279,5 +932,215 @@ mod tests {
         let rs = result.task_results.unwrap();
         assert!(rs[0].message.starts_with("created"));
         assert!(!rs[0].message.contains("updated"));
+    }
+
+    // ------------------------------------------------
+    // PLG-JIRA-FIELDS: transition + mapping integration
+    // ------------------------------------------------
+
+    fn cfg_with_in_progress_mapped() -> JiraConfig {
+        let mut c = cfg();
+        c.status_map.insert("in_progress".into(), "11".into());
+        c
+    }
+
+    #[test]
+    fn create_with_unmapped_status_records_last_status_and_fires_no_transition() {
+        let http = MockHttp::new(vec![ok(201, &created_body("1", "PROJ-1"))]);
+        let mut t = task("A");
+        t.status = TaskStatusDto::InProgress;
+        let result = push_all(&http, &clock(), &cfg(), &[t]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert_eq!(http.calls().len(), 1); // only the POST, no transition
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["last_status"], "in_progress");
+    }
+
+    #[test]
+    fn create_with_mapped_status_fires_transition_and_records_last_status() {
+        let http = MockHttp::new(vec![
+            ok(201, &created_body("1", "PROJ-1")),
+            ok(204, ""), // transition
+        ]);
+        let mut t = task("A");
+        t.status = TaskStatusDto::InProgress;
+        let result = push_all(&http, &clock(), &cfg_with_in_progress_mapped(), &[t]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].message.contains("transitioned to 11"));
+        assert!(rs[0].message.contains("HTTP 204"));
+        assert_eq!(http.calls().len(), 2);
+        match &http.calls()[1] {
+            Call::Post { url, body, .. } => {
+                assert!(url.ends_with("/issue/PROJ-1/transitions"));
+                assert!(body.contains(r#""id":"11""#));
+            }
+            other => panic!("expected POST transition, got {other:?}"),
+        }
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["last_status"], "in_progress");
+    }
+
+    #[test]
+    fn create_transition_failure_warns_without_failing_task_and_omits_last_status() {
+        let http = MockHttp::new(vec![
+            ok(201, &created_body("1", "PROJ-1")),
+            ok(400, r#"{"errorMessages":["bad transition"]}"#),
+        ]);
+        let mut t = task("A");
+        t.status = TaskStatusDto::InProgress;
+        let result = push_all(&http, &clock(), &cfg_with_in_progress_mapped(), &[t]);
+        let rs = result.task_results.unwrap();
+        // Task push still succeeds — the issue exists,
+        // only the workflow sync failed. Operator sees
+        // the warning and can retry.
+        assert!(rs[0].success);
+        assert!(rs[0].message.contains("WARNING"));
+        assert!(rs[0].message.contains("transition to 11"));
+        assert!(rs[0].message.contains("400"));
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert!(
+            state.get("last_status").is_none(),
+            "last_status must stay absent so next push retries the transition"
+        );
+    }
+
+    #[test]
+    fn update_with_status_unchanged_since_last_push_skips_transition() {
+        // plugin_state.last_status == current status →
+        // no transition call expected.
+        let mut t = task_with_state("A", "PROJ-7");
+        t.status = TaskStatusDto::InProgress;
+        if let Some(obj) = t.plugin_state.as_mut().and_then(|s| s.as_object_mut()) {
+            obj.insert("last_status".into(), json!("in_progress"));
+        }
+        let http = MockHttp::new(vec![
+            ok(200, r#"{"key":"PROJ-7"}"#), // probe
+            ok(204, ""),                    // PUT
+        ]);
+        let result = push_all(&http, &clock(), &cfg_with_in_progress_mapped(), &[t]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(!rs[0].message.contains("transitioned"));
+        let calls = http.calls();
+        assert_eq!(calls.len(), 2, "probe + PUT only, no transition");
+    }
+
+    #[test]
+    fn update_with_changed_status_fires_transition_and_updates_last_status() {
+        let mut t = task_with_state("A", "PROJ-7");
+        t.status = TaskStatusDto::InProgress;
+        if let Some(obj) = t.plugin_state.as_mut().and_then(|s| s.as_object_mut()) {
+            obj.insert("last_status".into(), json!("todo"));
+        }
+        let http = MockHttp::new(vec![
+            ok(200, r#"{"key":"PROJ-7"}"#), // probe
+            ok(204, ""),                    // PUT
+            ok(204, ""),                    // transition
+        ]);
+        let result = push_all(&http, &clock(), &cfg_with_in_progress_mapped(), &[t]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].message.contains("transitioned to 11"));
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["last_status"], "in_progress");
+        // Additive fields from the prior state are preserved.
+        assert_eq!(state["key"], "PROJ-7");
+    }
+
+    #[test]
+    fn mapping_warnings_surface_in_task_message_even_on_success() {
+        // Configured assignee_map but the task's assignee
+        // isn't in it → payload omits the field, message
+        // carries a WARNING.
+        let http = MockHttp::new(vec![ok(201, &created_body("1", "PROJ-1"))]);
+        let mut c = cfg();
+        c.assignee_map.insert("alice@example.com".into(), "A".into());
+        let mut t = task("A");
+        t.assignee = Some("bob@example.com".into());
+        let result = push_all(&http, &clock(), &c, &[t]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].message.contains("WARNING"));
+        assert!(rs[0].message.contains("bob@example.com"));
+    }
+
+    #[test]
+    fn payload_carries_mapped_fields_on_create() {
+        // Spot-check that assignee + priority + labels
+        // reach the outbound body when mapped.
+        let http = MockHttp::new(vec![ok(201, &created_body("1", "PROJ-1"))]);
+        let mut c = cfg();
+        c.assignee_map.insert("a@x.com".into(), "acct-1".into());
+        c.priority_map.insert("1".into(), "Highest".into());
+        c.labels_from_tags = true;
+        let mut t = task("A");
+        t.assignee = Some("a@x.com".into());
+        t.complexity = Some(1);
+        t.tags = vec!["alpha".into()];
+        let _ = push_all(&http, &clock(), &c, &[t]);
+        match &http.calls()[0] {
+            Call::Post { body, .. } => {
+                let v: serde_json::Value = serde_json::from_str(body).unwrap();
+                assert_eq!(v["fields"]["assignee"]["accountId"], "acct-1");
+                assert_eq!(v["fields"]["priority"]["name"], "Highest");
+                assert_eq!(v["fields"]["labels"][0], "alpha");
+            }
+            other => panic!("expected POST, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn update_still_fires_transition_when_stored_state_malformed() {
+        // RT-X1: a prior push wrote a state blob missing
+        // `self`; PUT still succeeds but
+        // build_refreshed_state returned None, so the
+        // earlier gating on `plugin_state_update.is_some()`
+        // silently skipped the transition. Now we gate on
+        // `external_key` — transition fires, state is
+        // synthesized to record `last_status`.
+        let mut t = task("A");
+        t.status = TaskStatusDto::InProgress;
+        t.plugin_state = Some(json!({ "key": "PROJ-7" })); // missing "self"
+        let http = MockHttp::new(vec![
+            ok(200, r#"{"key":"PROJ-7"}"#), // probe
+            ok(204, ""),                    // PUT
+            ok(204, ""),                    // transition
+        ]);
+        let result = push_all(&http, &clock(), &cfg_with_in_progress_mapped(), &[t]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(
+            rs[0].message.contains("transitioned to 11"),
+            "message should note transition, got {}",
+            rs[0].message
+        );
+        let state = rs[0].plugin_state_update.as_ref().unwrap();
+        assert_eq!(state["last_status"], "in_progress");
+    }
+
+    #[test]
+    fn dto_as_wire_is_reachable_from_plugin() {
+        // Smoke test: the plugin relies on the DTO-side
+        // `as_wire()` helper for status_map lookups. This
+        // test exists so a breaking change to the helper
+        // surfaces here rather than at runtime.
+        assert_eq!(TaskStatusDto::InProgress.as_wire(), "in_progress");
+    }
+
+    #[test]
+    fn transition_transport_error_does_not_fail_task() {
+        let http = MockHttp::new(vec![
+            ok(201, &created_body("1", "PROJ-1")),
+            transport_err("reset"),
+        ]);
+        let mut t = task("A");
+        t.status = TaskStatusDto::InProgress;
+        let result = push_all(&http, &clock(), &cfg_with_in_progress_mapped(), &[t]);
+        let rs = result.task_results.unwrap();
+        assert!(rs[0].success);
+        assert!(rs[0].message.contains("WARNING"));
+        assert!(rs[0].message.contains("reset"));
     }
 }

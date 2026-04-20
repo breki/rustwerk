@@ -7,6 +7,48 @@ reverse chronological order.
 
 ### 2026-04-20
 
+- Richer Jira field mapping — status transitions, assignee, priority, labels (v0.52.0)
+
+    PLG-JIRA-FIELDS. `JiraConfig` gains four optional
+    mapping fields: `status_map` (rustwerk status wire
+    name → Jira workflow **transition ID**, discovered
+    via `GET /issue/{key}/transitions`), `assignee_map`
+    (email → `accountId`; keys validated to contain
+    `@` at load time), `priority_map` (stringified
+    complexity score → Jira priority name), and
+    `labels_from_tags` (boolean, default `false`).
+
+    Status changes go through the separate Jira
+    transitions endpoint (`POST /issue/{key}/transitions`)
+    because Jira rejects `status` in the create/update
+    body. A new `jira_client::transition` verb carries
+    the same direct/gateway fallback as the other verbs.
+    The plugin records `plugin_state.jira.last_status`
+    after a successful transition so repeated pushes
+    with unchanged status skip the workflow-event
+    round-trip. A failed transition leaves `last_status`
+    absent so the next push retries automatically.
+
+    Labels reject whitespace/control chars — tags that
+    would otherwise 400 the whole push are dropped with
+    a typed `MappingWarning::RejectedLabel` rather than
+    aborting the task and losing the idempotency anchor.
+
+    Introduced a typed `MappingWarning` enum for
+    mapping and transition warnings, replacing
+    stringly-typed `Vec<String>`. `TaskStatusDto` gains
+    `as_wire()` on the DTO crate so the snake_case wire
+    names live alongside the serde attrs (single source
+    of truth). `TaskPushResult` gains a
+    `with_appended_message` builder to keep decoration
+    consistent with the existing builder style.
+
+    Plugin crate split into focused modules: `push`
+    (orchestration), `transition` (workflow + state),
+    `warnings` (typed `MappingWarning`), with
+    `mapping`/`config`/`jira_client` untouched in
+    scope. `lib.rs` is now FFI-only.
+
 - Per-task Jira issue type — `--type epic|story|task|sub-task` (v0.51.0)
 
     PLG-JIRA-ISSUETYPE. The jira plugin's hardcoded

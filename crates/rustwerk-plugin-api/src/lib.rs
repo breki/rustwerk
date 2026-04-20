@@ -229,6 +229,20 @@ impl TaskPushResult {
         self.plugin_state_update = Some(state);
         self
     }
+
+    /// Append `suffix` to the message with a single
+    /// leading space. Keeps post-build decoration in the
+    /// consuming-builder style used elsewhere in the
+    /// crate (AQ-X4 — the alternative was ad-hoc
+    /// `r.message.push_str(...)` at call sites).
+    #[must_use]
+    pub fn with_appended_message(mut self, suffix: &str) -> Self {
+        if !suffix.is_empty() {
+            self.message.push(' ');
+            self.message.push_str(suffix);
+        }
+        self
+    }
 }
 
 /// Aggregate result returned by a plugin operation.
@@ -263,6 +277,25 @@ pub enum TaskStatusDto {
     Done,
     /// Intentionally deferred.
     OnHold,
+}
+
+impl TaskStatusDto {
+    /// Snake-case wire name, matching the serde
+    /// `rename_all = "snake_case"` contract on this enum.
+    /// Colocated with the serde attrs so the wire strings
+    /// live in one place; plugins that need the wire name
+    /// for config lookup should use this rather than
+    /// reimplementing the match.
+    #[must_use]
+    pub const fn as_wire(self) -> &'static str {
+        match self {
+            Self::Todo => "todo",
+            Self::InProgress => "in_progress",
+            Self::Blocked => "blocked",
+            Self::Done => "done",
+            Self::OnHold => "on_hold",
+        }
+    }
 }
 
 /// Portable representation of a rustwerk task. Mirrors
@@ -642,6 +675,24 @@ mod tests {
             assert_eq!(json, expected);
             let back: TaskStatusDto = serde_json::from_str(&json).unwrap();
             assert_eq!(back, variant);
+        }
+    }
+
+    #[test]
+    fn task_status_dto_as_wire_matches_serde_wire_format() {
+        // Guards against a serde-attr drift (e.g. accidentally
+        // switching `rename_all = "snake_case"` to kebab-case)
+        // silently diverging from `as_wire`.
+        for variant in [
+            TaskStatusDto::Todo,
+            TaskStatusDto::InProgress,
+            TaskStatusDto::Blocked,
+            TaskStatusDto::Done,
+            TaskStatusDto::OnHold,
+        ] {
+            let serde_wire = serde_json::to_string(&variant).unwrap();
+            let unquoted = serde_wire.trim_matches('"');
+            assert_eq!(unquoted, variant.as_wire());
         }
     }
 

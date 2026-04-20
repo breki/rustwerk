@@ -6,6 +6,137 @@ findings.
 
 ---
 
+### PLG-JIRA-FIELDS review sweep (2026-04-20)
+
+Nine findings raised and fixed in the same commit
+(v0.52.0):
+
+#### AQ-113 — `lib.rs` exceeded 500 lines with mixed responsibilities
+
+- **Date:** 2026-04-20
+- **Category:** Module size
+- **Where:** `crates/rustwerk-jira-plugin/src/lib.rs`
+- **Description:** Post-PLG-JIRA-FIELDS, `lib.rs` held
+  FFI exports, push orchestration, transition logic,
+  and warnings in a single 1679-line file.
+- **Resolution:** Split into focused submodules —
+  `push` (orchestration), `transition` (workflow +
+  state splicing), `warnings` (typed `MappingWarning`).
+  Production code in `lib.rs` is now FFI-only
+  (~200 lines); end-to-end FFI tests stay colocated
+  with the exports they exercise.
+
+#### AQ-114 — `status_wire_name` duplicated the serde wire format
+
+- **Date:** 2026-04-20
+- **Category:** Type safety
+- **Where:** moved from `crates/rustwerk-jira-plugin/src/lib.rs`
+  to `crates/rustwerk-plugin-api/src/lib.rs::TaskStatusDto::as_wire`
+- **Description:** Hand-rolled `match` from
+  `TaskStatusDto` to `"snake_case"` strings duplicated
+  the `rename_all = "snake_case"` contract on the DTO.
+  A future variant rename would silently desynchronize
+  the two.
+- **Resolution:** Moved the wire-name helper to the
+  DTO itself as a `const fn`, colocated with the serde
+  attrs. New test
+  `task_status_dto_as_wire_matches_serde_wire_format`
+  guards the two against drifting.
+
+#### AQ-115 — `with_last_status` silently swallowed non-object input
+
+- **Date:** 2026-04-20
+- **Category:** Correctness / API clarity
+- **Where:** `crates/rustwerk-jira-plugin/src/transition.rs::with_last_status`
+- **Resolution:** Added `debug_assert!` on the invariant
+  and a release-mode fallback that wraps the value in a
+  fresh object. (Same fix as RT-135.)
+
+#### AQ-116 — In-place `TaskPushResult` mutation broke builder consistency
+
+- **Date:** 2026-04-20
+- **Category:** API design
+- **Where:** `crates/rustwerk-plugin-api/src/lib.rs::TaskPushResult`
+- **Description:** The crate otherwise used
+  `TaskPushResult::ok(...).with_external_key(...)` chained
+  builders, but `append_warnings` and
+  `maybe_transition_after_write` mutated
+  `r.message` / `r.plugin_state_update` directly.
+- **Resolution:** Added `with_appended_message(&str)` on
+  `TaskPushResult`. Transition / warnings paths now
+  decorate via the builder style exclusively; state
+  updates flow through the existing
+  `with_plugin_state_update`.
+
+#### AQ-117 — Warnings were stringly-typed `Vec<String>`
+
+- **Date:** 2026-04-20
+- **Category:** Type safety / API design
+- **Where:** `crates/rustwerk-jira-plugin/src/warnings.rs` (new)
+- **Description:** Mapping and transition warnings
+  were built with `format!` at each site and joined
+  with `"; "`. Tests asserted on substrings; warning
+  content could contain the separator, corrupting
+  structure; no machine-readable surface for future
+  TUI consumption.
+- **Resolution:** Introduced
+  `enum MappingWarning { UnmappedAssignee, UnmappedPriority, RejectedLabel, TransitionHttp, TransitionTransport }`
+  with a `Display` impl that owns the wire format.
+  Call sites push typed variants; the render step
+  happens once in
+  `transition::append_warnings`. Tests now match on
+  enum variants.
+
+#### AQ-118 — `; ` separator collided with warning content
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (minor)
+- **Where:** `crates/rustwerk-jira-plugin/src/transition.rs::append_warnings`
+- **Description:** Joined warnings with `"; "`, but
+  warning bodies embed Jira HTTP responses that contain
+  `;` and `)`.
+- **Resolution:** Switched separator to `" | "` (not
+  produced by any `MappingWarning::Display` impl) so a
+  downstream parser can reliably re-split.
+
+#### AQ-119 — `status_map: HashMap<String, Option<String>>` was ambiguous
+
+- **Date:** 2026-04-20
+- **Category:** Type safety
+- **Where:** `crates/rustwerk-jira-plugin/src/config.rs::JiraConfig::status_map`
+- **Description:** Both `{"done": null}` and `{}`
+  produced identical observable behavior — two
+  representations collapsing to one semantic.
+- **Resolution:** Collapsed to
+  `HashMap<String, String>`. Statuses absent from the
+  map fire no transition; explicit `null` is no longer
+  accepted. Manual + llms.txt updated to match.
+
+#### AQ-120 — `InvalidAssigneeEmail` error used `Debug` formatting
+
+- **Date:** 2026-04-20
+- **Category:** Error messages
+- **Where:** `crates/rustwerk-jira-plugin/src/config.rs::ConfigError`
+- **Description:** `#[error("... key {0:?} ...")]`
+  rendered with `Debug` (surrounding `"`, escape
+  sequences), inconsistent with sibling variants that
+  used `{0}`.
+- **Resolution:** Changed to `'{0}'` with explicit
+  single-quote delimiters and `Display` formatting.
+
+#### AQ-121 — `BuiltPayload` named after construction verb, not identity
+
+- **Date:** 2026-04-20
+- **Category:** API design (minor)
+- **Where:** `crates/rustwerk-jira-plugin/src/mapping.rs`
+- **Description:** "Built" described how the struct
+  was made, not what it is.
+- **Resolution:** Renamed to `IssuePayload` (the
+  outbound Jira issue payload). `body` + `warnings`
+  fields unchanged.
+
+---
+
 ### PLG-JIRA-ISSUETYPE review sweep (2026-04-20)
 
 Five findings raised and fixed in the same commit

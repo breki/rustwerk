@@ -5,6 +5,80 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-JIRA-FIELDS review sweep (2026-04-20)
+
+Three findings raised and fixed in the same commit
+(v0.52.0):
+
+#### RT-133 — Update path silently skips transition when stored state is malformed
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `crates/rustwerk-jira-plugin/src/transition.rs::maybe_transition_after_write`
+- **Description:** The transition helper early-returned
+  on `result.plugin_state_update.is_none()`, but the
+  update path leaves that field `None` whenever
+  `build_refreshed_state` rejects a malformed stored
+  blob (missing `self`). The PUT still succeeded and
+  the issue key was known good, yet the transition
+  silently never fired.
+- **Impact:** A user whose `plugin_state.jira` lost its
+  `self` field via a manual edit would silently drift
+  out of workflow sync — no warning, no retry, Jira
+  status never updates.
+- **Resolution:** Gate on `external_key.is_some()`
+  instead. When the state is absent, `record_last_status`
+  synthesizes a minimal `{ "last_status": … }` blob so
+  the idempotency anchor still lands. New regression
+  test `update_still_fires_transition_when_stored_state_malformed`.
+
+#### RT-134 — `apply_labels` converted a single bad tag into a duplicate-issue factory
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `crates/rustwerk-jira-plugin/src/mapping.rs::apply_labels`
+- **Description:** With `labels_from_tags: true`, tags
+  were forwarded verbatim. Jira labels reject
+  whitespace / control chars, so a tag like
+  `"tech debt"` caused the create POST to return 400 —
+  the whole task failed, no state was recorded, and
+  the next push created a duplicate Jira issue.
+- **Impact:** One malformed tag per task turned the
+  feature into a duplicate-issue generator, inconsistent
+  with the "skip + warn" policy used for assignee /
+  priority mapping.
+- **Resolution:** Added `is_valid_jira_label` predicate
+  (rejects empty, whitespace, control chars). Invalid
+  tags are dropped with a typed
+  `MappingWarning::RejectedLabel`; valid tags still
+  flow through. When every tag is rejected, the field
+  is omitted entirely. Unit tests cover the predicate
+  and the field-omission case.
+
+#### RT-135 — `with_last_status` silently no-op on non-object state
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (low)
+- **Where:** `crates/rustwerk-jira-plugin/src/transition.rs::with_last_status`
+- **Description:** If the input `serde_json::Value`
+  wasn't an object, the function returned it
+  unchanged. The caller then persisted it, believing
+  `last_status` had been inserted. Future pushes would
+  keep re-firing transitions because the idempotency
+  field was never actually written.
+- **Impact:** Low today — all current state producers
+  emit objects. But a silent no-op on a future state
+  shape drift would cause chatty transitions forever.
+- **Resolution:** `debug_assert!(state.is_object(), …)`
+  catches the bug in dev; release-mode falls back to
+  wrapping the value in a fresh
+  `{ "last_status": … }` object so the anchor lands
+  either way. Test
+  `with_last_status_panics_on_non_object_in_debug`
+  guards the invariant.
+
+---
+
 ### PLG-JIRA-ISSUETYPE review sweep (2026-04-20)
 
 Four findings raised and fixed in the same commit

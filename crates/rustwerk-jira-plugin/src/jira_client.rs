@@ -227,6 +227,27 @@ pub(crate) fn gateway_issue_url(cloud_id: &str, key: &IssueKey) -> String {
     )
 }
 
+/// Direct transition URL for a given issue key.
+/// `POST /issue/{key}/transitions` is how Jira moves an
+/// issue between workflow states — the payload carries
+/// the transition ID (not a status name).
+pub(crate) fn direct_transition_url(jira_url: &str, key: &IssueKey) -> String {
+    format!(
+        "{}/rest/api/3/issue/{}/transitions",
+        jira_url.trim_end_matches('/'),
+        key.as_str()
+    )
+}
+
+/// Gateway transition URL. Mirrors
+/// [`gateway_issue_url`] with the `/transitions` suffix.
+pub(crate) fn gateway_transition_url(cloud_id: &str, key: &IssueKey) -> String {
+    format!(
+        "{GATEWAY_BASE}/ex/jira/{cloud_id}/rest/api/3/issue/{}/transitions",
+        key.as_str()
+    )
+}
+
 #[derive(Debug, Deserialize)]
 struct TenantInfo {
     #[serde(rename = "cloudId")]
@@ -457,6 +478,51 @@ pub(crate) fn get_issue<C: HttpClient>(
     })
 }
 
+/// Apply a Jira workflow transition by ID.
+///
+/// Jira does not accept `status` in the create / update
+/// payload body — moving an issue between workflow
+/// states requires a separate `POST
+/// /rest/api/3/issue/{key}/transitions` with body
+/// `{"transition":{"id":"<transition_id>"}}`. Success is
+/// `204 No Content`.
+///
+/// Gateway-fallback mirrors the other verbs: 401 or 404
+/// on the direct URL triggers a `cloudId` lookup and a
+/// retry via the Platform API Gateway.
+pub(crate) fn transition<C: HttpClient>(
+    http: &C,
+    config: &JiraConfig,
+    key: &IssueKey,
+    transition_id: &str,
+) -> Result<JiraOpOutcome, HttpError> {
+    let auth = basic_auth_header(&config.username, &config.jira_token);
+    let body = serde_json::json!({ "transition": { "id": transition_id } }).to_string();
+    let direct = http.post_json(
+        &direct_transition_url(&config.jira_url, key),
+        &auth,
+        &body,
+    )?;
+    if direct.status != 401 && direct.status != 404 {
+        return Ok(JiraOpOutcome {
+            status: direct.status,
+            body: direct.body,
+            used_gateway: false,
+        });
+    }
+    let cloud_id = resolve_cloud_id(http, config, &auth)?;
+    let retried = http.post_json(
+        &gateway_transition_url(&cloud_id, key),
+        &auth,
+        &body,
+    )?;
+    Ok(JiraOpOutcome {
+        status: retried.status,
+        body: retried.body,
+        used_gateway: true,
+    })
+}
+
 /// Update an existing Jira issue with `PUT /issue/{key}`.
 /// Gateway-fallback mirrors [`create_issue`] and
 /// [`get_issue`]. Jira returns `204 No Content` on
@@ -624,6 +690,10 @@ mod tests {
             project_key: "PROJ".into(),
             default_issue_type: None,
             issue_type_map: std::collections::HashMap::new(),
+            status_map: std::collections::HashMap::new(),
+            assignee_map: std::collections::HashMap::new(),
+            priority_map: std::collections::HashMap::new(),
+            labels_from_tags: false,
         }
     }
 
@@ -999,6 +1069,75 @@ mod tests {
             parse_created_issue(body),
             Err(ParseIssueError::InvalidIssueKey(_))
         ));
+    }
+
+    // --- PLG-JIRA-FIELDS: transition verb ---
+
+    #[test]
+    fn transition_direct_success_skips_fallback() {
+        let http = MockHttp::new(vec![ok(204, "")]);
+        let out = transition(&http, &cfg(), &key("PROJ-1"), "11").unwrap();
+        assert_eq!(out.status, 204);
+        assert!(!out.used_gateway);
+        let calls = http.calls();
+        assert_eq!(calls.len(), 1);
+        match &calls[0] {
+            Call::Post { url, body, .. } => {
+                assert_eq!(
+                    url,
+                    "https://example.atlassian.net/rest/api/3/issue/PROJ-1/transitions"
+                );
+                assert!(body.contains(r#""transition""#));
+                assert!(body.contains(r#""id":"11""#));
+            }
+            other => panic!("expected POST, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn transition_falls_back_on_401() {
+        let http = MockHttp::new(vec![
+            ok(401, "nope"),
+            ok(200, r#"{"cloudId":"cid"}"#),
+            ok(204, ""),
+        ]);
+        let out = transition(&http, &cfg(), &key("PROJ-1"), "11").unwrap();
+        assert_eq!(out.status, 204);
+        assert!(out.used_gateway);
+        let calls = http.calls();
+        assert!(matches!(&calls[2], Call::Post { url, .. }
+            if url == "https://api.atlassian.com/ex/jira/cid/rest/api/3/issue/PROJ-1/transitions"));
+    }
+
+    #[test]
+    fn transition_no_fallback_on_500() {
+        let http = MockHttp::new(vec![ok(500, "broken")]);
+        let out = transition(&http, &cfg(), &key("PROJ-1"), "11").unwrap();
+        assert_eq!(out.status, 500);
+        assert!(!out.used_gateway);
+    }
+
+    #[test]
+    fn transition_propagates_transport_error() {
+        let http = MockHttp::new(vec![transport_err("dns")]);
+        let err = transition(&http, &cfg(), &key("PROJ-1"), "11").unwrap_err();
+        assert!(matches!(err, HttpError::Transport(m) if m.contains("dns")));
+    }
+
+    #[test]
+    fn direct_transition_url_strips_trailing_slash() {
+        assert_eq!(
+            direct_transition_url("https://x.atlassian.net/", &key("P-1")),
+            "https://x.atlassian.net/rest/api/3/issue/P-1/transitions"
+        );
+    }
+
+    #[test]
+    fn gateway_transition_url_embeds_cloud_id() {
+        assert_eq!(
+            gateway_transition_url("cid", &key("P-1")),
+            "https://api.atlassian.com/ex/jira/cid/rest/api/3/issue/P-1/transitions"
+        );
     }
 
     #[test]

@@ -872,8 +872,8 @@ needs:
 - `username` from `git config user.email`
 - `project_key` from `--project-key`
 
-The jira plugin also accepts two optional config keys
-for per-task issue-type selection:
+The jira plugin also accepts optional config keys for
+per-task issue-type selection and field mapping:
 
 - `default_issue_type` — Jira-side name to use when a
   task has no `--type` set (e.g. `"Story"`). Defaults
@@ -884,6 +884,31 @@ for per-task issue-type selection:
   that localize or rename (e.g. `{ "sub-task":
   "Subtask" }`). Omitted keys fall through to Jira's
   standard names.
+- `status_map` — object mapping rustwerk task-status
+  wire names (`todo` / `in_progress` / `blocked` /
+  `done` / `on_hold`) to Jira workflow **transition
+  IDs** (strings, not status names). Transition IDs
+  are discovered once per project via
+  `GET /rest/api/3/issue/{key}/transitions`. A mapped
+  status fires a `POST /issue/{key}/transitions` after
+  the create/update succeeds. Statuses absent from the
+  map fire no transition — omit the key rather than
+  mapping to `null`. Example:
+  `{ "in_progress": "11", "done": "31" }`.
+- `assignee_map` — object mapping rustwerk assignee
+  emails to Jira `accountId` strings. Keys must
+  contain `@`; the plugin rejects the config at load
+  time otherwise. A task whose assignee is not in the
+  map emits a `WARNING: …` in the per-task message
+  and the `assignee` field is omitted from the
+  payload.
+- `priority_map` — object mapping rustwerk complexity
+  scores (as stringified integers, e.g. `"1"`) to
+  Jira priority names (e.g. `"Highest"`).
+- `labels_from_tags` — boolean; when `true`, rustwerk
+  task tags are forwarded as `fields.labels`. Defaults
+  to `false` because rustwerk allows tag characters
+  that Jira labels reject (e.g. spaces).
 
 Absent keys are omitted entirely. `--dry-run` prints
 only the **key names** present — never the token
@@ -916,6 +941,15 @@ response whose body cannot be parsed appends a
 visible `WARNING: …` to the task message so
 schema-drift regressions surface before duplicates
 accumulate.
+
+When `status_map` is configured, the plugin also
+records `last_status` in `plugin_state.jira` after a
+successful transition. On the next push, the
+transition call is skipped when the current task
+status equals the stored `last_status` — this keeps
+repeated pushes quiet and avoids spurious workflow
+events. A failed transition leaves `last_status`
+absent so the next push retries.
 
 ### Feature Flag
 

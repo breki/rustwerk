@@ -4,6 +4,10 @@
   something like Superfile or lazygit?
 - Investigate whether JSON is really the best format for the project file - 
   where and how to store a more complex task descriptions?
+- Fix env-var race in `plugin_host::tests::discovery_dirs_*` pair
+  (`DEV_DIRS_ENV` leaks across parallel tests; blocks `cargo xtask
+  validate` intermittently). Serialize the env-touching tests via a
+  mutex or mark them `#[serial]`.
 
 ## Done
 
