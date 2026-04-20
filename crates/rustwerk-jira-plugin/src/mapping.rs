@@ -109,6 +109,7 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            plugin_state: None,
         }
     }
 

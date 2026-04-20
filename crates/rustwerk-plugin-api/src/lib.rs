@@ -100,12 +100,21 @@ use std::ffi::{CStr, CString, NulError};
 use std::os::raw::c_char;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// Current plugin API version. Plugins must export
 /// `rustwerk_plugin_api_version()` returning this
 /// value. The host refuses to load plugins whose API
 /// version does not match.
-pub const API_VERSION: u32 = 1;
+///
+/// ## Version history
+///
+/// - **v1**: initial wire contract.
+/// - **v2**: `TaskDto.plugin_state` and
+///   `TaskPushResult.plugin_state_update` added to
+///   let plugins persist opaque per-task state
+///   (e.g. a Jira issue key) across pushes.
+pub const API_VERSION: u32 = 2;
 
 /// Return code: success.
 pub const ERR_OK: i32 = 0;
@@ -139,6 +148,11 @@ pub struct PluginInfo {
 
 /// Result of pushing a single task to an external
 /// system.
+///
+/// Prefer [`TaskPushResult::ok`] and
+/// [`TaskPushResult::fail`] over struct-literal
+/// construction so future optional fields land
+/// without mass-editing every call site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskPushResult {
     /// Rustwerk task ID (e.g. `"PLG-API"`).
@@ -150,6 +164,66 @@ pub struct TaskPushResult {
     /// External-system identifier assigned to the
     /// task, if any (e.g. `"PROJ-123"`).
     pub external_key: Option<String>,
+    /// Opaque plugin-specific state the host should
+    /// persist under `plugin_state.<plugin-name>` for
+    /// this task. `None` (or field absent on the wire)
+    /// means "leave the stored state unchanged";
+    /// `Some(v)` replaces it with `v`. There is no
+    /// "clear the entry" variant in API v2 — if a
+    /// future plugin needs one, the contract extends
+    /// in v3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_state_update: Option<Value>,
+}
+
+impl TaskPushResult {
+    /// Build a successful per-task result. Defaults
+    /// `external_key` and `plugin_state_update` to
+    /// `None`; use the fluent setters below to attach
+    /// them.
+    pub fn ok(task_id: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            task_id: task_id.into(),
+            success: true,
+            message: message.into(),
+            external_key: None,
+            plugin_state_update: None,
+        }
+    }
+
+    /// Build a failed per-task result. `external_key`
+    /// and `plugin_state_update` default to `None` —
+    /// a failure by definition has no external
+    /// identifier and should not overwrite stored
+    /// state.
+    pub fn fail(task_id: impl Into<String>, error: impl Into<String>) -> Self {
+        Self {
+            task_id: task_id.into(),
+            success: false,
+            message: error.into(),
+            external_key: None,
+            plugin_state_update: None,
+        }
+    }
+
+    /// Attach an external-system identifier (e.g. a
+    /// Jira issue key). Consumes and returns `self`
+    /// so setters chain fluently.
+    #[must_use]
+    pub fn with_external_key(mut self, key: impl Into<String>) -> Self {
+        self.external_key = Some(key.into());
+        self
+    }
+
+    /// Attach a plugin-state update blob. The host
+    /// persists this under `plugin_state.<plugin-name>`
+    /// for this task; see [`TaskPushResult::plugin_state_update`]
+    /// for the semantics.
+    #[must_use]
+    pub fn with_plugin_state_update(mut self, state: Value) -> Self {
+        self.plugin_state_update = Some(state);
+        self
+    }
 }
 
 /// Aggregate result returned by a plugin operation.
@@ -211,6 +285,15 @@ pub struct TaskDto {
     pub assignee: Option<String>,
     /// Free-form tags.
     pub tags: Vec<String>,
+    /// Opaque state previously returned by THIS plugin
+    /// for THIS task via `plugin_state_update`. `None`
+    /// on first push or when no prior state was
+    /// recorded. The host slices this in from
+    /// `project.json` per-plugin-name namespace before
+    /// the call, so a plugin only ever sees its own
+    /// entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_state: Option<Value>,
 }
 
 // ---------------------------------------------------------------
@@ -332,8 +415,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn api_version_is_one() {
-        assert_eq!(API_VERSION, 1);
+    fn api_version_is_two() {
+        assert_eq!(API_VERSION, 2);
     }
 
     #[test]
@@ -364,6 +447,7 @@ mod tests {
             success: true,
             message: "created".into(),
             external_key: Some("PROJ-123".into()),
+            plugin_state_update: None,
         };
         let json = serde_json::to_string(&r).unwrap();
         let back: TaskPushResult = serde_json::from_str(&json).unwrap();
@@ -377,10 +461,85 @@ mod tests {
             success: false,
             message: "denied".into(),
             external_key: None,
+            plugin_state_update: None,
         };
         let json = serde_json::to_string(&r).unwrap();
         let back: TaskPushResult = serde_json::from_str(&json).unwrap();
         assert_eq!(r, back);
+    }
+
+    #[test]
+    fn task_push_result_ok_defaults_optional_fields_to_none() {
+        let r = TaskPushResult::ok("T-1", "created");
+        assert_eq!(r.task_id, "T-1");
+        assert!(r.success);
+        assert_eq!(r.message, "created");
+        assert!(r.external_key.is_none());
+        assert!(r.plugin_state_update.is_none());
+    }
+
+    #[test]
+    fn task_push_result_fail_defaults_optional_fields_to_none() {
+        let r = TaskPushResult::fail("T-1", "HTTP 500");
+        assert_eq!(r.task_id, "T-1");
+        assert!(!r.success);
+        assert_eq!(r.message, "HTTP 500");
+        assert!(r.external_key.is_none());
+        assert!(r.plugin_state_update.is_none());
+    }
+
+    #[test]
+    fn task_push_result_with_external_key_chains() {
+        let r = TaskPushResult::ok("T-1", "created").with_external_key("PROJ-1");
+        assert_eq!(r.external_key.as_deref(), Some("PROJ-1"));
+    }
+
+    #[test]
+    fn task_push_result_with_plugin_state_update_chains() {
+        let r = TaskPushResult::ok("T-1", "created")
+            .with_plugin_state_update(serde_json::json!({ "key": "PROJ-1" }));
+        assert_eq!(
+            r.plugin_state_update,
+            Some(serde_json::json!({ "key": "PROJ-1" }))
+        );
+    }
+
+    #[test]
+    fn task_push_result_carries_plugin_state_update() {
+        let r = TaskPushResult {
+            task_id: "PLG-API".into(),
+            success: true,
+            message: "created".into(),
+            external_key: Some("PROJ-1".into()),
+            plugin_state_update: Some(serde_json::json!({
+                "key": "PROJ-1",
+                "last_pushed_at": "2026-04-20T12:00:00Z"
+            })),
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        let back: TaskPushResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(r, back);
+        assert!(json.contains("plugin_state_update"));
+    }
+
+    #[test]
+    fn task_push_result_omits_plugin_state_update_when_none() {
+        let r = TaskPushResult {
+            task_id: "X".into(),
+            success: true,
+            message: "m".into(),
+            external_key: None,
+            plugin_state_update: None,
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(!json.contains("plugin_state_update"), "got: {json}");
+    }
+
+    #[test]
+    fn task_push_result_accepts_missing_plugin_state_update() {
+        let json = r#"{"task_id":"X","success":true,"message":"m","external_key":null}"#;
+        let r: TaskPushResult = serde_json::from_str(json).unwrap();
+        assert!(r.plugin_state_update.is_none());
     }
 
     #[test]
@@ -393,6 +552,7 @@ mod tests {
                 success: true,
                 message: "m".into(),
                 external_key: None,
+                plugin_state_update: None,
             }]),
         };
         let json = serde_json::to_string(&r).unwrap();
@@ -459,6 +619,7 @@ mod tests {
             complexity: Some(5),
             assignee: Some("igor".into()),
             tags: vec!["plugin".into(), "api".into()],
+            plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         let back: TaskDto = serde_json::from_str(&json).unwrap();
@@ -477,10 +638,61 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            plugin_state: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         let back: TaskDto = serde_json::from_str(&json).unwrap();
         assert_eq!(t, back);
+    }
+
+    #[test]
+    fn task_dto_carries_plugin_state() {
+        let t = TaskDto {
+            id: "PLG-JIRA".into(),
+            title: "t".into(),
+            description: String::new(),
+            status: TaskStatusDto::Done,
+            dependencies: vec![],
+            effort_estimate: None,
+            complexity: None,
+            assignee: None,
+            tags: vec![],
+            plugin_state: Some(serde_json::json!({ "key": "PROJ-7" })),
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        let back: TaskDto = serde_json::from_str(&json).unwrap();
+        assert_eq!(t, back);
+        assert!(json.contains("plugin_state"));
+    }
+
+    #[test]
+    fn task_dto_omits_plugin_state_when_none() {
+        let t = TaskDto {
+            id: "T".into(),
+            title: "t".into(),
+            description: String::new(),
+            status: TaskStatusDto::Todo,
+            dependencies: vec![],
+            effort_estimate: None,
+            complexity: None,
+            assignee: None,
+            tags: vec![],
+            plugin_state: None,
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("plugin_state"), "got: {json}");
+    }
+
+    #[test]
+    fn task_dto_accepts_missing_plugin_state() {
+        let json = r#"{
+            "id":"T","title":"t","description":"",
+            "status":"todo","dependencies":[],
+            "effort_estimate":null,"complexity":null,
+            "assignee":null,"tags":[]
+        }"#;
+        let t: TaskDto = serde_json::from_str(json).unwrap();
+        assert!(t.plugin_state.is_none());
     }
 
     #[test]

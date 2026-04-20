@@ -35,19 +35,30 @@ The host reads `task.plugin_state[<plugin-name>]` from
 
 ### Push response output
 
-Each `PushResultEntry` grows an optional updated state
+Each `TaskPushResult` grows an optional updated state
 blob the host writes back:
 
 ```rust
-pub struct PushResultEntry {
+pub struct TaskPushResult {
     pub task_id: String,
-    pub outcome: PushOutcome,
-    /// Updated opaque state. `None` means "leave the
-    /// stored state unchanged". Explicit `Null` clears
-    /// the entry.
+    pub success: bool,
+    pub message: String,
+    pub external_key: Option<String>,
+    /// Updated opaque state for THIS plugin for THIS
+    /// task. `None` (or absent) means "leave the stored
+    /// state unchanged"; `Some(v)` replaces the stored
+    /// state with `v`.
     pub plugin_state_update: Option<serde_json::Value>,
 }
 ```
+
+Deliberately two-state, not three-state: there is no
+"clear the entry" operation. JSON `Option<Value>`
+coalesces absent-field and literal-`null` into `None`
+on deserialize, so a three-state "unchanged / clear /
+set" API would need a double-`Option` + custom serde
+that no current client needs. If a future plugin
+needs "clear", the contract extends in API v3.
 
 ### Host wiring
 
@@ -79,16 +90,24 @@ pub struct PushResultEntry {
 ## Acceptance criteria
 
 - [ ] `API_VERSION` bumped to 2; host rejects v1
-      plugins with actionable error
+      plugins with an actionable rebuild-against-v2
+      message
 - [ ] `TaskDto.plugin_state` round-trips through
       project.json
-- [ ] Per-plugin namespacing: plugin "jira" cannot
-      read or clobber plugin "github"'s state
-- [ ] Atomic write preserved (no partial
-      `plugin_state` on crash)
-- [ ] Task rename / delete correctly moves / drops
-      associated `plugin_state` entries
-- [ ] Unit tests for serialization round-trip,
-      namespacing isolation, and the merge semantics
-      of `None` vs explicit `Null`
+- [ ] Per-plugin namespacing: plugin "jira" only
+      sees state written under `plugin_state.jira`;
+      cannot read or clobber plugin "github"'s entry
+- [ ] Task rename preserves `plugin_state`; task
+      delete drops it (both inherited from the
+      existing `Task` move/consume semantics)
+- [ ] Unit tests for: serde round-trip on both DTOs,
+      host-side namespace slicing (`task_to_dto` with
+      a plugin name), host-side merge
+      (`apply_state_updates` with `None` / `Some`
+      mix), namespace isolation (update under plugin
+      "jira" does not touch entries under plugin
+      "github")
+- [ ] Existing file-save path (`file_store::save`
+      via `fs::write`) is unchanged — atomic-write
+      hardening is a separate future concern
 - [ ] `cargo xtask validate` passes

@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
 use std::fmt;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::error::DomainError;
 
@@ -353,6 +355,14 @@ pub struct Task {
     /// Optional tags for categorization and filtering.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<Tag>,
+    /// Opaque per-plugin state, keyed by plugin name
+    /// (e.g. `"jira"`). The domain layer never
+    /// interprets the inner `Value`s — plugins own
+    /// their own schemas. Stored here (rather than in
+    /// a sidecar file) so task rename / delete carry
+    /// the state along for free.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub plugin_state: BTreeMap<String, Value>,
 }
 
 impl Task {
@@ -460,6 +470,7 @@ impl Task {
             assignee: None,
             effort_entries: Vec::new(),
             tags: Vec::new(),
+            plugin_state: BTreeMap::new(),
         })
     }
 }
@@ -845,5 +856,63 @@ mod tests {
     fn task_new_empty_rejected() {
         assert!(Task::new("").is_err());
         assert!(Task::new("   ").is_err());
+    }
+
+    // --- plugin_state tests ---
+
+    #[test]
+    fn task_new_has_empty_plugin_state() {
+        let t = Task::new("Test").unwrap();
+        assert!(t.plugin_state.is_empty());
+    }
+
+    #[test]
+    fn task_plugin_state_omitted_when_empty() {
+        let t = Task::new("Test").unwrap();
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("plugin_state"));
+    }
+
+    #[test]
+    fn task_plugin_state_round_trips() {
+        let mut t = Task::new("Test").unwrap();
+        t.plugin_state.insert(
+            "jira".into(),
+            serde_json::json!({ "key": "PROJ-1" }),
+        );
+        t.plugin_state.insert(
+            "github".into(),
+            serde_json::json!({ "issue": 42 }),
+        );
+
+        let json = serde_json::to_string(&t).unwrap();
+        let back: Task = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.plugin_state, t.plugin_state);
+    }
+
+    #[test]
+    fn task_plugin_state_deserializes_from_missing_field() {
+        let json = r#"{"title": "Test"}"#;
+        let t: Task = serde_json::from_str(json).unwrap();
+        assert!(t.plugin_state.is_empty());
+    }
+
+    #[test]
+    fn task_plugin_state_preserves_unknown_plugin_namespaces() {
+        // The domain layer must NOT filter or validate
+        // plugin namespaces — it just round-trips
+        // whatever was stored. This guards against a
+        // future refactor that tries to be clever.
+        let json = r#"{
+            "title": "T",
+            "plugin_state": {
+                "jira": { "key": "PROJ-1" },
+                "github": { "issue": 42 },
+                "some-future-plugin": { "foo": "bar" }
+            }
+        }"#;
+        let t: Task = serde_json::from_str(json).unwrap();
+        assert_eq!(t.plugin_state.len(), 3);
+        assert!(t.plugin_state.contains_key("some-future-plugin"));
     }
 }

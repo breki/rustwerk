@@ -4,9 +4,77 @@ Open findings from red team reviews, newest first.
 Fixed findings are moved to
 [redteam-resolved.md](redteam-resolved.md).
 
-**Next ID:** RT-110
+**Next ID:** RT-118
 
 ---
+
+### RT-117 — API-version bump strands out-of-tree v1 plugin binaries with no compat shim
+
+- **Date:** 2026-04-20
+- **Category:** API-version policy
+- **Commit context:** feat: per-task plugin-state
+  round-trip in the plugin API (v0.48.0)
+- **Description:** `load_plugin`'s version check
+  rejects v1 plugins outright; the new message tells
+  authors to rebuild. The v1 wire format is a proper
+  subset of v2 thanks to `#[serde(default)]` on the
+  new fields, so a compat shim is cheap: treat v1 as
+  "no plugin_state support" and still load.
+- **Why not fixed in-commit:** No out-of-tree v1
+  plugin exists today. Closing this before the first
+  external plugin ships is sufficient; doing it
+  speculatively adds branching the in-tree jira
+  plugin doesn't exercise.
+- **Suggested fix:** In `load_plugin`, branch on
+  `version == 1 || version == 2`; when v1, log a
+  deprecation warning and still construct a
+  `LoadedPlugin` that passes `plugin_state: None` in
+  and ignores any `plugin_state_update` in responses.
+  Revisit when API v3 lands.
+
+### RT-116 — Concurrent `plugin push` invocations race on project.json
+
+- **Date:** 2026-04-20
+- **Category:** Concurrency
+- **Commit context:** feat: per-task plugin-state
+  round-trip in the plugin API (v0.48.0)
+- **Description:** `file_store::save` is called with
+  no file lock. Two concurrent `rustwerk plugin push`
+  processes can both load project.json, both push to
+  external systems, then the later save silently
+  overwrites the earlier one's state updates.
+- **Why not fixed in-commit:** General rustwerk
+  concurrency concern; fixing just the plugin-push
+  path is a partial fix. A crate-wide advisory file
+  lock on project.json is the right scope.
+- **Suggested fix:** `fs2::FileExt::try_lock_exclusive`
+  on project.json at load time (or in `file_store`),
+  with a clear error when another process holds the
+  lock. Alternatively document concurrent rustwerk
+  invocations as unsupported.
+
+### RT-115 — Plugin names are case-sensitive; `jira` and `Jira` create parallel state namespaces
+
+- **Date:** 2026-04-20
+- **Category:** Edge case
+- **Commit context:** feat: per-task plugin-state
+  round-trip in the plugin API (v0.48.0)
+- **Description:** `validate_plugin_name` allows up
+  to 64 chars of `[A-Za-z0-9_-]` case-sensitively.
+  `discover_plugins` shadowing check uses `==`. Two
+  plugins self-identifying as `jira` and `Jira` can
+  both load without shadowing detection, producing
+  separate `plugin_state[jira]` and
+  `plugin_state[Jira]` namespaces in project.json
+  that look like one plugin to the user.
+- **Why not fixed in-commit:** Pre-existing issue of
+  the plugin-host layer; PLG-API-STATE makes it more
+  visible via BTreeMap keys in project.json but is
+  not the root cause. Fix belongs in `plugin_host`.
+- **Suggested fix:** Lowercase-normalize in
+  `validate_plugin_name` (`plugin_host.rs:365-381`),
+  and use `eq_ignore_ascii_case` in the shadowing
+  check at `plugin_host.rs:273-281`.
 
 ### RT-109 — TOCTOU between `dest.exists()` and `fs::copy`
 

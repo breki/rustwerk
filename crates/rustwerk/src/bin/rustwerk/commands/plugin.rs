@@ -8,6 +8,7 @@
 //! parent `commands` module so a `--no-default-features`
 //! build stays dynamic-loader-free.
 
+use std::collections::HashSet;
 use std::env;
 use std::fmt;
 use std::fs;
@@ -101,6 +102,15 @@ pub(crate) enum PluginPushOutput {
     Executed {
         plugin: String,
         result: PluginResult,
+        /// Non-`None` when the plugin succeeded but
+        /// persisting the resulting `plugin_state` back
+        /// to `project.json` failed. Forces the process
+        /// exit code non-zero so the drift is visible,
+        /// but only after the successful result is
+        /// rendered so the user sees the external keys
+        /// that now need manual recovery.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        save_warning: Option<String>,
     },
     /// `--dry-run`: no plugin call was made; the payload
     /// summary is echoed back.
@@ -115,11 +125,17 @@ impl PluginPushOutput {
     /// `true` when the output represents a successful
     /// run. Dry runs are always treated as successful;
     /// executed runs inherit the plugin's aggregate
-    /// `success` flag. Used by the caller to decide the
-    /// process exit code.
+    /// `success` flag AND require state persistence to
+    /// have landed — a save-warning flips the process
+    /// exit code non-zero even when the plugin itself
+    /// reported success.
     pub(crate) fn is_success(&self) -> bool {
         match self {
-            Self::Executed { result, .. } => result.success,
+            Self::Executed {
+                result,
+                save_warning,
+                ..
+            } => result.success && save_warning.is_none(),
             Self::DryRun { .. } => true,
         }
     }
@@ -128,8 +144,16 @@ impl PluginPushOutput {
 impl RenderText for PluginPushOutput {
     fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
         match self {
-            Self::Executed { plugin, result } => {
-                render_push_text(plugin, result, w)
+            Self::Executed {
+                plugin,
+                result,
+                save_warning,
+            } => {
+                render_push_text(plugin, result, w)?;
+                if let Some(msg) = save_warning {
+                    writeln!(w, "WARNING: {msg}")?;
+                }
+                Ok(())
             }
             Self::DryRun {
                 plugin,
@@ -150,10 +174,16 @@ pub(crate) fn cmd_plugin_push(
     tasks_filter: Option<&str>,
     dry_run: bool,
 ) -> Result<PluginPushOutput> {
-    let (root, project) = load_project()?;
-    let selected = filter_tasks(&project, tasks_filter)?;
-    let dtos: Vec<TaskDto> =
-        selected.iter().map(|(id, t)| task_to_dto(id, t)).collect();
+    let (root, mut project) = load_project()?;
+    let selected_ids: Vec<TaskId> = filter_tasks(&project, tasks_filter)?
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    let pushed_ids: HashSet<TaskId> = selected_ids.iter().cloned().collect();
+    let dtos: Vec<TaskDto> = selected_ids
+        .iter()
+        .map(|id| task_to_dto_for_plugin(id, &project.tasks[id], name))
+        .collect();
 
     let config = assemble_config(
         env::var("JIRA_URL").ok().as_deref(),
@@ -191,10 +221,142 @@ pub(crate) fn cmd_plugin_push(
         .push_tasks(&config_json, &tasks_json)
         .with_context(|| format!("plugin '{name}' push failed"))?;
 
+    // Persist any plugin_state_update the plugin
+    // returned. We save even on aggregate failure
+    // because individual successful tasks inside a
+    // partial-failure batch still have legitimate
+    // state to record (e.g. a new Jira issue key).
+    //
+    // A save failure is non-fatal to the render path:
+    // the plugin has already produced external side
+    // effects, so the user needs to see the result
+    // (including any `external_key`s) before we can
+    // report the save problem.
+    let save_warning =
+        persist_plugin_state(&root, &mut project, name, &pushed_ids, &result);
+
     Ok(PluginPushOutput::Executed {
         plugin: name.to_string(),
         result,
+        save_warning,
     })
+}
+
+/// Per-task `plugin_state_update` byte cap. State is
+/// opaque to the host but is meant to hold external
+/// identifiers (Jira issue keys, GitHub issue IDs) —
+/// kilobytes, not megabytes. Reject larger blobs to
+/// keep a buggy or hostile plugin from bloating the
+/// user's committed `project.json` unboundedly.
+const MAX_PLUGIN_STATE_UPDATE_BYTES: usize = 64 * 1024;
+
+/// Write every `plugin_state_update: Some(v)` from a
+/// plugin's response back into the project's per-task
+/// `plugin_state[<plugin_name>]` entry. Returns `true`
+/// if any entry was modified (so the caller knows
+/// whether a save is needed).
+///
+/// Namespacing is enforced here: the host only ever
+/// touches `plugin_state[<plugin_name>]` — a plugin
+/// cannot return state that clobbers a different
+/// plugin's entry no matter what it writes into the
+/// update blob.
+///
+/// `pushed_ids` is the set of task IDs the host
+/// actually sent to the plugin. Entries for any other
+/// task in the response are rejected — a plugin must
+/// not stamp state onto tasks the user excluded.
+///
+/// Skipped updates (unknown task, malformed ID, over
+/// the size cap, or `Value::Null`) are logged to
+/// stderr so the drop is diagnosable rather than
+/// silent.
+fn apply_state_updates(
+    project: &mut Project,
+    plugin_name: &str,
+    pushed_ids: &HashSet<TaskId>,
+    result: &PluginResult,
+) -> bool {
+    let Some(task_results) = result.task_results.as_ref() else {
+        return false;
+    };
+    let mut dirty = false;
+    for entry in task_results {
+        let Some(update) = entry.plugin_state_update.as_ref() else {
+            continue;
+        };
+        // RT-114: honour the docstring's "no clear
+        // variant" — `Some(Null)` is treated as a
+        // no-op rather than silently storing a null.
+        if update.is_null() {
+            continue;
+        }
+        let Ok(task_id) = TaskId::new(&entry.task_id) else {
+            eprintln!(
+                "rustwerk: plugin '{plugin_name}' returned update for invalid task ID '{}'; skipping",
+                entry.task_id
+            );
+            continue;
+        };
+        if !pushed_ids.contains(&task_id) {
+            eprintln!(
+                "rustwerk: plugin '{plugin_name}' returned update for task '{task_id}' which was not in the push selection; skipping"
+            );
+            continue;
+        }
+        let Some(task) = project.tasks.get_mut(&task_id) else {
+            eprintln!(
+                "rustwerk: plugin '{plugin_name}' returned update for unknown task '{task_id}'; skipping"
+            );
+            continue;
+        };
+        // Defensive: serialize to check size. Cheap
+        // because the Value is already in memory.
+        let size = serde_json::to_string(update).map(|s| s.len()).unwrap_or(0);
+        if size > MAX_PLUGIN_STATE_UPDATE_BYTES {
+            eprintln!(
+                "rustwerk: plugin '{plugin_name}' returned a {size}-byte state update for task '{task_id}' (cap: {MAX_PLUGIN_STATE_UPDATE_BYTES}); skipping"
+            );
+            continue;
+        }
+        task.plugin_state
+            .insert(plugin_name.to_string(), update.clone());
+        dirty = true;
+    }
+    dirty
+}
+
+/// Apply state updates from a plugin's response and
+/// persist `project.json` if anything changed.
+///
+/// Save failure is deliberately non-fatal: the plugin
+/// has already produced external side effects (e.g.
+/// created a Jira issue), so losing the save would
+/// mean duplicating those effects on the next push.
+/// This helper returns `Ok(save_warning)` where
+/// `save_warning` is `Some(message)` when the save
+/// failed — the caller emits the successful plugin
+/// result first so the user sees the external keys,
+/// then surfaces the warning (and flips the exit
+/// code) as a recovery hint.
+fn persist_plugin_state(
+    root: &Path,
+    project: &mut Project,
+    plugin_name: &str,
+    pushed_ids: &HashSet<TaskId>,
+    result: &PluginResult,
+) -> Option<String> {
+    if !apply_state_updates(project, plugin_name, pushed_ids, result) {
+        return None;
+    }
+    match rustwerk::persistence::file_store::save(root, project) {
+        Ok(()) => None,
+        Err(e) => Some(format!(
+            "failed to persist plugin state updates: {e}. \
+             The plugin's external side effects succeeded but rustwerk could not save \
+             the corresponding state — re-running `rustwerk plugin push` may create duplicates."
+        )),
+    }
 }
 
 // ---------------------------------------------------------------
@@ -202,7 +364,10 @@ pub(crate) fn cmd_plugin_push(
 // ---------------------------------------------------------------
 
 /// Convert a domain `Task` to the FFI-portable
-/// [`TaskDto`].
+/// [`TaskDto`]. Pure field-by-field mapping; leaves
+/// `plugin_state` as `None` — use
+/// [`task_to_dto_for_plugin`] when sending to a
+/// plugin that should receive its per-task state.
 fn task_to_dto(id: &TaskId, task: &Task) -> TaskDto {
     TaskDto {
         id: id.as_str().to_string(),
@@ -221,6 +386,23 @@ fn task_to_dto(id: &TaskId, task: &Task) -> TaskDto {
         complexity: task.complexity,
         assignee: task.assignee.clone(),
         tags: task.tags.iter().map(|t| t.as_str().to_string()).collect(),
+        plugin_state: None,
+    }
+}
+
+/// Like [`task_to_dto`] but also slices the
+/// per-plugin-namespace blob out of
+/// `task.plugin_state` so the receiving plugin sees
+/// its own entry (or `None` when nothing has been
+/// recorded yet).
+fn task_to_dto_for_plugin(
+    id: &TaskId,
+    task: &Task,
+    plugin_name: &str,
+) -> TaskDto {
+    TaskDto {
+        plugin_state: task.plugin_state.get(plugin_name).cloned(),
+        ..task_to_dto(id, task)
     }
 }
 
@@ -666,6 +848,7 @@ mod tests {
             assignee: Some("igor".into()),
             effort_entries: vec![],
             tags: vec![Tag::new("plugin").unwrap(), Tag::new("api").unwrap()],
+            plugin_state: std::collections::BTreeMap::new(),
         }
     }
 
@@ -682,6 +865,7 @@ mod tests {
         assert_eq!(dto.complexity, Some(5));
         assert_eq!(dto.assignee.as_deref(), Some("igor"));
         assert_eq!(dto.tags, vec!["plugin".to_string(), "api".to_string()]);
+        assert!(dto.plugin_state.is_none());
     }
 
     #[test]
@@ -701,6 +885,57 @@ mod tests {
         assert_eq!(dto.effort_estimate, None);
         assert_eq!(dto.complexity, None);
         assert_eq!(dto.assignee, None);
+    }
+
+    #[test]
+    fn task_to_dto_ignores_plugin_state_on_the_base_mapping() {
+        // Base mapping MUST return None regardless of
+        // what's in the domain's per-plugin namespace.
+        let id = TaskId::new("T1").unwrap();
+        let mut t = task_fixture();
+        t.plugin_state.insert(
+            "jira".into(),
+            serde_json::json!({ "key": "PROJ-7" }),
+        );
+        let dto = task_to_dto(&id, &t);
+        assert!(dto.plugin_state.is_none());
+    }
+
+    #[test]
+    fn task_to_dto_for_plugin_slices_by_name() {
+        let id = TaskId::new("T1").unwrap();
+        let mut t = task_fixture();
+        t.plugin_state.insert(
+            "jira".into(),
+            serde_json::json!({ "key": "PROJ-7" }),
+        );
+        t.plugin_state.insert(
+            "github".into(),
+            serde_json::json!({ "issue": 42 }),
+        );
+
+        let dto = task_to_dto_for_plugin(&id, &t, "jira");
+        assert_eq!(dto.plugin_state, Some(serde_json::json!({ "key": "PROJ-7" })));
+    }
+
+    #[test]
+    fn task_to_dto_for_plugin_absent_when_namespace_missing() {
+        let id = TaskId::new("T1").unwrap();
+        let mut t = task_fixture();
+        t.plugin_state.insert(
+            "github".into(),
+            serde_json::json!({ "issue": 42 }),
+        );
+
+        let dto = task_to_dto_for_plugin(&id, &t, "jira");
+        assert!(dto.plugin_state.is_none());
+    }
+
+    #[test]
+    fn task_to_dto_for_plugin_absent_when_map_empty() {
+        let id = TaskId::new("T1").unwrap();
+        let dto = task_to_dto_for_plugin(&id, &task_fixture(), "jira");
+        assert!(dto.plugin_state.is_none());
     }
 
     #[test]
@@ -791,6 +1026,334 @@ mod tests {
         p
     }
 
+    // -----------------------------------------
+    // apply_state_updates
+    // -----------------------------------------
+
+    fn result_with_task_updates(
+        updates: Vec<(&str, Option<serde_json::Value>)>,
+    ) -> PluginResult {
+        PluginResult {
+            success: true,
+            message: "ok".into(),
+            task_results: Some(
+                updates
+                    .into_iter()
+                    .map(|(id, upd)| {
+                        let mut r = TaskPushResult::ok(id, "m");
+                        if let Some(v) = upd {
+                            r = r.with_plugin_state_update(v);
+                        }
+                        r
+                    })
+                    .collect(),
+            ),
+        }
+    }
+
+    fn pushed_set(ids: &[&str]) -> HashSet<TaskId> {
+        ids.iter().map(|i| TaskId::new(i).unwrap()).collect()
+    }
+
+    #[test]
+    fn apply_state_updates_writes_back_some_entries() {
+        let mut p = build_project_with(&["T-1", "T-2"]);
+        let pushed = pushed_set(&["T-1", "T-2"]);
+        let result = result_with_task_updates(vec![
+            ("T-1", Some(serde_json::json!({ "key": "PROJ-1" }))),
+            ("T-2", Some(serde_json::json!({ "key": "PROJ-2" }))),
+        ]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(dirty);
+
+        let t1 = p.tasks.get(&TaskId::new("T-1").unwrap()).unwrap();
+        assert_eq!(
+            t1.plugin_state.get("jira"),
+            Some(&serde_json::json!({ "key": "PROJ-1" }))
+        );
+        let t2 = p.tasks.get(&TaskId::new("T-2").unwrap()).unwrap();
+        assert_eq!(
+            t2.plugin_state.get("jira"),
+            Some(&serde_json::json!({ "key": "PROJ-2" }))
+        );
+    }
+
+    #[test]
+    fn apply_state_updates_skips_none_entries() {
+        let mut p = build_project_with(&["T-1"]);
+        let pushed = pushed_set(&["T-1"]);
+        let result = result_with_task_updates(vec![("T-1", None)]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(!dirty);
+
+        let t1 = p.tasks.get(&TaskId::new("T-1").unwrap()).unwrap();
+        assert!(t1.plugin_state.is_empty());
+    }
+
+    #[test]
+    fn apply_state_updates_partial_some_returns_dirty() {
+        let mut p = build_project_with(&["T-1", "T-2"]);
+        let pushed = pushed_set(&["T-1", "T-2"]);
+        let result = result_with_task_updates(vec![
+            ("T-1", None),
+            ("T-2", Some(serde_json::json!({ "key": "K" }))),
+        ]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(dirty);
+
+        assert!(p
+            .tasks
+            .get(&TaskId::new("T-1").unwrap())
+            .unwrap()
+            .plugin_state
+            .is_empty());
+        assert_eq!(
+            p.tasks
+                .get(&TaskId::new("T-2").unwrap())
+                .unwrap()
+                .plugin_state
+                .get("jira"),
+            Some(&serde_json::json!({ "key": "K" }))
+        );
+    }
+
+    #[test]
+    fn apply_state_updates_preserves_other_plugin_namespaces() {
+        // Pre-seed state under "github"; an update
+        // under "jira" must not touch it.
+        let mut p = build_project_with(&["T-1"]);
+        p.tasks
+            .get_mut(&TaskId::new("T-1").unwrap())
+            .unwrap()
+            .plugin_state
+            .insert("github".into(), serde_json::json!({ "issue": 42 }));
+        let pushed = pushed_set(&["T-1"]);
+
+        let result = result_with_task_updates(vec![(
+            "T-1",
+            Some(serde_json::json!({ "key": "PROJ-1" })),
+        )]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(dirty);
+
+        let t1 = p.tasks.get(&TaskId::new("T-1").unwrap()).unwrap();
+        assert_eq!(
+            t1.plugin_state.get("github"),
+            Some(&serde_json::json!({ "issue": 42 }))
+        );
+        assert_eq!(
+            t1.plugin_state.get("jira"),
+            Some(&serde_json::json!({ "key": "PROJ-1" }))
+        );
+    }
+
+    #[test]
+    fn apply_state_updates_skips_unknown_task_ids() {
+        // Task was deleted between selection and the
+        // plugin call — the update must be dropped,
+        // not error out.
+        let mut p = build_project_with(&["T-1"]);
+        let pushed = pushed_set(&["T-1"]);
+        let result = result_with_task_updates(vec![(
+            "T-GONE",
+            Some(serde_json::json!({ "key": "X" })),
+        )]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(!dirty);
+    }
+
+    #[test]
+    fn apply_state_updates_skips_invalid_task_ids() {
+        // Defensive: a plugin returning a malformed
+        // task ID shouldn't crash or corrupt state.
+        let mut p = build_project_with(&["T-1"]);
+        let pushed = pushed_set(&["T-1"]);
+        let result = result_with_task_updates(vec![(
+            "invalid task id!",
+            Some(serde_json::json!({ "key": "X" })),
+        )]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(!dirty);
+    }
+
+    #[test]
+    fn apply_state_updates_returns_false_when_no_task_results() {
+        let mut p = build_project_with(&["T-1"]);
+        let pushed = pushed_set(&["T-1"]);
+        let result = PluginResult {
+            success: true,
+            message: "no-op".into(),
+            task_results: None,
+        };
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(!dirty);
+    }
+
+    #[test]
+    fn apply_state_updates_rejects_entries_for_tasks_not_pushed() {
+        // RT-111: plugin returns results for tasks the
+        // host did not select. Those updates must be
+        // dropped — a plugin cannot stamp state onto
+        // tasks the user excluded.
+        let mut p = build_project_with(&["T-1", "T-2"]);
+        let pushed = pushed_set(&["T-1"]); // only T-1
+        let result = result_with_task_updates(vec![
+            ("T-1", Some(serde_json::json!({ "key": "PROJ-1" }))),
+            ("T-2", Some(serde_json::json!({ "key": "FAKE-2" }))),
+        ]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(dirty); // T-1 landed
+        assert!(p
+            .tasks
+            .get(&TaskId::new("T-2").unwrap())
+            .unwrap()
+            .plugin_state
+            .is_empty());
+    }
+
+    #[test]
+    fn apply_state_updates_rejects_null_updates() {
+        // RT-114: the API contract says "no clear
+        // variant". Some(Null) is treated as a no-op,
+        // not silently stored.
+        let mut p = build_project_with(&["T-1"]);
+        let pushed = pushed_set(&["T-1"]);
+        let result = result_with_task_updates(vec![(
+            "T-1",
+            Some(serde_json::Value::Null),
+        )]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(!dirty);
+        assert!(p
+            .tasks
+            .get(&TaskId::new("T-1").unwrap())
+            .unwrap()
+            .plugin_state
+            .is_empty());
+    }
+
+    #[test]
+    fn apply_state_updates_rejects_oversized_blobs() {
+        // RT-110: a single state update larger than
+        // the cap is dropped rather than bloating
+        // project.json.
+        let mut p = build_project_with(&["T-1"]);
+        let pushed = pushed_set(&["T-1"]);
+        let giant = serde_json::Value::String(
+            "A".repeat(MAX_PLUGIN_STATE_UPDATE_BYTES + 1),
+        );
+        let result =
+            result_with_task_updates(vec![("T-1", Some(giant))]);
+
+        let dirty = apply_state_updates(&mut p, "jira", &pushed, &result);
+        assert!(!dirty);
+        assert!(p
+            .tasks
+            .get(&TaskId::new("T-1").unwrap())
+            .unwrap()
+            .plugin_state
+            .is_empty());
+    }
+
+    // -----------------------------------------
+    // persist_plugin_state
+    // -----------------------------------------
+
+    fn init_project_on_disk(label: &str) -> (PathBuf, Project) {
+        let dir = std::env::temp_dir().join(format!(
+            "rustwerk-persist-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0),
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut p = Project::new("test").unwrap();
+        p.add_task(TaskId::new("T-1").unwrap(), Task::new("t").unwrap())
+            .unwrap();
+        rustwerk::persistence::file_store::save(&dir, &p).unwrap();
+        (dir, p)
+    }
+
+    #[test]
+    fn persist_plugin_state_writes_on_dirty_and_reloads() {
+        let (dir, mut p) = init_project_on_disk("write");
+        let pushed = pushed_set(&["T-1"]);
+        let result = result_with_task_updates(vec![(
+            "T-1",
+            Some(serde_json::json!({ "key": "PROJ-1" })),
+        )]);
+
+        let warning = persist_plugin_state(&dir, &mut p, "jira", &pushed, &result);
+        assert!(warning.is_none());
+
+        // Reload fresh from disk to confirm the save
+        // actually happened.
+        let reloaded = rustwerk::persistence::file_store::load(&dir).unwrap();
+        let t = reloaded.tasks.get(&TaskId::new("T-1").unwrap()).unwrap();
+        assert_eq!(
+            t.plugin_state.get("jira"),
+            Some(&serde_json::json!({ "key": "PROJ-1" }))
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_plugin_state_no_op_when_nothing_to_save() {
+        let (dir, mut p) = init_project_on_disk("noop");
+        let pushed = pushed_set(&["T-1"]);
+        let result = result_with_task_updates(vec![("T-1", None)]);
+
+        let warning = persist_plugin_state(&dir, &mut p, "jira", &pushed, &result);
+        assert!(warning.is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_plugin_state_saves_on_aggregate_failure_when_any_task_succeeded() {
+        // AQ-092: even when the plugin reports aggregate
+        // failure, per-task state from any successful
+        // tasks must still land on disk.
+        let (dir, mut p) = init_project_on_disk("partial");
+        let pushed = pushed_set(&["T-1"]);
+        let result = PluginResult {
+            success: false,
+            message: "1 of 1 failed".into(),
+            task_results: Some(vec![TaskPushResult::ok("T-1", "created")
+                .with_plugin_state_update(
+                    serde_json::json!({ "key": "PROJ-1" }),
+                )]),
+        };
+
+        let warning = persist_plugin_state(&dir, &mut p, "jira", &pushed, &result);
+        assert!(warning.is_none());
+
+        let reloaded = rustwerk::persistence::file_store::load(&dir).unwrap();
+        assert_eq!(
+            reloaded
+                .tasks
+                .get(&TaskId::new("T-1").unwrap())
+                .unwrap()
+                .plugin_state
+                .get("jira"),
+            Some(&serde_json::json!({ "key": "PROJ-1" }))
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn filter_tasks_returns_all_when_filter_absent() {
         let p = build_project_with(&["T-1", "T-2"]);
@@ -825,12 +1388,14 @@ mod tests {
                     success: true,
                     message: "ok".into(),
                     external_key: Some("PROJ-1".into()),
+                    plugin_state_update: None,
                 },
                 TaskPushResult {
                     task_id: "PLG-HOST".into(),
                     success: true,
                     message: "created".into(),
                     external_key: Some("PROJ-2".into()),
+                    plugin_state_update: None,
                 },
             ]),
         };
@@ -853,12 +1418,14 @@ mod tests {
                     success: true,
                     message: "".into(),
                     external_key: Some("PROJ-1".into()),
+                    plugin_state_update: None,
                 },
                 TaskPushResult {
                     task_id: "B".into(),
                     success: false,
                     message: "HTTP 500".into(),
                     external_key: None,
+                    plugin_state_update: None,
                 },
             ]),
         };
@@ -915,6 +1482,7 @@ mod tests {
                 message: "m".into(),
                 task_results: None,
             },
+            save_warning: None,
         };
         assert!(ok.is_success());
 
@@ -925,8 +1493,26 @@ mod tests {
                 message: "m".into(),
                 task_results: None,
             },
+            save_warning: None,
         };
         assert!(!bad.is_success());
+    }
+
+    #[test]
+    fn is_success_false_when_save_warning_set_even_if_plugin_succeeded() {
+        // RT-113 contract: the plugin succeeded but
+        // rustwerk couldn't persist the resulting
+        // state — exit non-zero so the drift is visible.
+        let out = PluginPushOutput::Executed {
+            plugin: "x".into(),
+            result: PluginResult {
+                success: true,
+                message: "1 task(s) pushed".into(),
+                task_results: None,
+            },
+            save_warning: Some("disk full".into()),
+        };
+        assert!(!out.is_success());
     }
 
     #[test]
@@ -957,13 +1543,11 @@ mod tests {
             result: PluginResult {
                 success: true,
                 message: "1 task(s) pushed to Jira".into(),
-                task_results: Some(vec![TaskPushResult {
-                    task_id: "A".into(),
-                    success: true,
-                    message: "ok".into(),
-                    external_key: Some("PROJ-9".into()),
-                }]),
+                task_results: Some(vec![
+                    TaskPushResult::ok("A", "ok").with_external_key("PROJ-9")
+                ]),
             },
+            save_warning: None,
         };
         let mut buf = Vec::new();
         out.render_text(&mut buf).unwrap();
@@ -979,6 +1563,7 @@ mod tests {
             success: true,
             message: "created (HTTP 201)".into(),
             external_key: None,
+            plugin_state_update: None,
         };
         let mut buf = Vec::new();
         render_task_result(&r, &mut buf).unwrap();

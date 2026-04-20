@@ -6,6 +6,71 @@ findings.
 
 ---
 
+### PLG-API-STATE review sweep (2026-04-20)
+
+Four findings raised and fixed in the same commit
+(`feat: per-task plugin-state round-trip in the
+plugin API`, v0.48.0). Two more (AQ-093 Value
+newtype, AQ-094 version-history doc placement)
+were logged open as deferred polish.
+
+- **AQ-089 — `TaskPushResult` struct-literal
+  boilerplate at every construction site.** Adding
+  `plugin_state_update` required touching every
+  literal — a pattern that would repeat at every
+  future v3+ field. **Fix:** added
+  `TaskPushResult::ok(task_id, message)` and
+  `::fail(task_id, error)` constructors defaulting
+  the two optional fields to `None`, plus fluent
+  `.with_external_key(k)` and
+  `.with_plugin_state_update(v)` setters. Migrated
+  all three production sites in the jira plugin
+  and the `result_with_task_updates` test helper.
+  The pre-existing explicit-field literals in the
+  plugin-api tests remain (they deliberately test
+  field shapes). New ID fields land going forward
+  without mass-editing callers.
+
+- **AQ-090 — `task_to_dto` conflated pure mapping
+  with plugin-namespace slicing.** The added
+  `plugin_name` parameter forced every test that
+  cared only about field mapping to supply a
+  spurious `"jira"`. **Fix:** split into two
+  functions — `task_to_dto(id, task)` for pure
+  domain→DTO mapping (returns `plugin_state: None`)
+  and `task_to_dto_for_plugin(id, task, plugin_name)`
+  which calls the pure version and slices the
+  per-plugin namespace via struct-update syntax.
+  Existing tests for base mapping lost their
+  spurious plugin name; slicing behavior has its
+  own tight tests.
+
+- **AQ-091 — `cmd_plugin_push` save block inlined
+  multiple responsibilities.** The apply-state +
+  persist + error-handling logic sat inside the
+  main dispatch function. **Fix:** extracted
+  `persist_plugin_state(root, project, plugin_name,
+  pushed_ids, result) -> Option<String>` which
+  owns the dirty check, the save call, and the
+  save-failure-message formatting (RT-113).
+  `cmd_plugin_push` now reads linearly: invoke
+  plugin → persist state → emit output.
+
+- **AQ-092 — No integration test for
+  save-on-partial-failure.** Unit tests proved the
+  dirty flag fires but nothing proved
+  `file_store::save` actually ran on an aggregate
+  failure. **Fix:** added
+  `persist_plugin_state_saves_on_aggregate_failure_when_any_task_succeeded`,
+  which drives `persist_plugin_state` with a
+  tempdir-backed project, a `PluginResult
+  { success: false, ... }`, and a single
+  `Some(update)` entry, then reloads from disk to
+  confirm the write landed. Two companion tests
+  (`persist_plugin_state_writes_on_dirty_and_reloads`,
+  `persist_plugin_state_no_op_when_nothing_to_save`)
+  cover the happy paths.
+
 ### PLG-INSTALL review sweep (2026-04-20)
 
 Five findings raised and fixed in the same commit

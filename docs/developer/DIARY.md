@@ -7,6 +7,74 @@ reverse chronological order.
 
 ### 2026-04-20
 
+- Per-task plugin-state round-trip in the plugin API (v0.48.0)
+
+    PLG-API-STATE. Bumps `rustwerk_plugin_api`'s
+    `API_VERSION` from 1 to 2 and introduces an
+    opaque, plugin-namespaced per-task state bag that
+    plugins can read and write across pushes — the
+    foundation for PLG-JIRA-STATE and PLG-JIRA-UPDATE
+    to make `rustwerk plugin push` idempotent.
+
+    On the API side: `TaskDto.plugin_state: Option<Value>`
+    carries the prior state the plugin recorded for
+    this task, and `TaskPushResult.plugin_state_update:
+    Option<Value>` carries the state the plugin wants
+    persisted back. Added
+    `TaskPushResult::ok(id, msg)` / `::fail(id, err)`
+    constructors plus `with_external_key` /
+    `with_plugin_state_update` setters so future
+    optional fields don't force mass edits at every
+    call site. The "no clear-variant" contract is
+    deliberate — `None` = unchanged, `Some(v)` =
+    replace; `Some(Null)` is treated as a no-op by
+    the host so the docstring matches behavior.
+
+    On the domain side: `Task` gains
+    `plugin_state: BTreeMap<String, Value>` keyed by
+    plugin name. Rename / delete carry the state
+    along automatically via the existing struct
+    move/consume semantics. The field is omitted
+    from `project.json` when empty.
+
+    On the host side: `task_to_dto` is now pure
+    mapping (returns `plugin_state: None`); a new
+    `task_to_dto_for_plugin` slices the per-plugin
+    namespace out of `task.plugin_state` so a plugin
+    only sees its own entry. New helpers
+    `apply_state_updates` (merge) and
+    `persist_plugin_state` (merge + atomic save)
+    enforce namespacing on the write side. The
+    plugin-host version-mismatch error now tells
+    authors to rebuild against the current
+    `rustwerk-plugin-api` crate.
+
+    Red team / Artisan sweep (RT-110..RT-114 +
+    AQ-089..AQ-092, all fixed in-commit): cap
+    `plugin_state_update` at 64 KiB per task to
+    prevent project.json bloat; filter plugin
+    responses by the set of task IDs actually pushed
+    so a plugin can't stamp state onto excluded
+    tasks; log every skipped update to stderr so
+    drops are diagnosable instead of silent; treat
+    `Some(Value::Null)` as a no-op per the "no
+    clear-variant" contract; surface save failures
+    as a `save_warning` on `PluginPushOutput` that
+    prints after the successful plugin result (so
+    the user sees any external keys) and flips the
+    process exit non-zero; add builder methods for
+    `TaskPushResult`; split `task_to_dto` into a
+    base function and a per-plugin slicing variant;
+    extract `persist_plugin_state` with a
+    tempdir-backed integration test for
+    save-on-partial-failure.
+
+    Five findings from the sweep logged open
+    (RT-115 plugin-name case sensitivity, RT-116
+    concurrent push races, RT-117 v1-plugin compat
+    shim, AQ-093 `Value` newtype, AQ-094
+    CHANGELOG.md migration).
+
 - Add `rustwerk plugin install` subcommand (v0.47.0)
 
     PLG-INSTALL. The new command

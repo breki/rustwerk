@@ -4,9 +4,58 @@ Code quality findings from the Artisan reviewer, newest
 first. Fixed findings are moved to
 [artisan-resolved.md](artisan-resolved.md).
 
-**Next ID:** AQ-089
+**Next ID:** AQ-095
 
 ---
+
+### AQ-094 — `API_VERSION` version-history doc block will age poorly
+
+- **Date:** 2026-04-20
+- **Category:** Doc placement
+- **Commit context:** feat: per-task plugin-state
+  round-trip in the plugin API (v0.48.0)
+- **Description:** `rustwerk-plugin-api/src/lib.rs`
+  embeds a "Version history" block inside the doc
+  comment for `API_VERSION`. At v2 the block is
+  small and genuinely useful; by v5 it will be
+  stale or, worse, silently drifted from reality.
+  Rust API Guidelines (C-LINK / C-METADATA) point
+  toward release notes or a module-level
+  "Version history" section for historical context.
+- **Why not fixed in-commit:** No CHANGELOG.md
+  exists yet; the v2 note is load-bearing right
+  now. Migrate when a CHANGELOG lands.
+- **Suggested fix:** Add a `CHANGELOG.md` to the
+  `rustwerk-plugin-api` crate (or at workspace
+  root with sections per crate); migrate the
+  version history there; keep the `API_VERSION`
+  doc to one sentence + link.
+
+### AQ-093 — `serde_json::Value` leaked directly on the plugin-API public surface
+
+- **Date:** 2026-04-20
+- **Category:** API hygiene
+- **Commit context:** feat: per-task plugin-state
+  round-trip in the plugin API (v0.48.0)
+- **Description:** `TaskDto.plugin_state` and
+  `TaskPushResult.plugin_state_update` expose
+  `serde_json::Value` directly on a stable wire
+  contract. Compile cost is zero (serde_json is
+  already a dep), but it advertises "any JSON goes"
+  without a schema hook and bakes the JSON-shaped
+  type into the contract. A `#[serde(transparent)]
+  struct PluginState(Value)` newtype would give a
+  doc anchor for the opaque-blob semantics and
+  leave room to swap representation
+  (e.g. `Box<RawValue>`) without a v3 bump.
+- **Why not fixed in-commit:** Optional polish per
+  the reviewer's own framing. The current shape is
+  defensible while the API surface stays small.
+- **Suggested fix:** Introduce
+  `pub struct PluginState(pub serde_json::Value);`
+  with `#[serde(transparent)]` and migrate both
+  fields. Bundle with any future type-level API
+  refinement.
 
 ### AQ-088 — Visibility bumps on `plugin_host` widen the crate-internal surface
 

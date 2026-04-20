@@ -5,6 +5,75 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-API-STATE review sweep (2026-04-20)
+
+Five findings raised and fixed in the same commit
+(`feat: per-task plugin-state round-trip in the
+plugin API`, v0.48.0). Three more from the same
+sweep (RT-115 plugin-name case sensitivity, RT-116
+project.json write race, RT-117 v1-plugin compat
+shim) were logged open as deferred hardening.
+
+- **RT-110 — No size cap on `plugin_state_update`.**
+  `apply_state_updates` was storing plugin-returned
+  blobs verbatim with no bound. A buggy or hostile
+  plugin could grow project.json unboundedly across
+  pushes, each under the per-call 10 MiB cap.
+  **Fix:** per-entry 64 KiB cap (constant
+  `MAX_PLUGIN_STATE_UPDATE_BYTES`); oversized
+  updates are logged to stderr and skipped.
+  Regression test
+  `apply_state_updates_rejects_oversized_blobs`.
+
+- **RT-111 — Cross-task state injection.** Plugin
+  response could include `plugin_state_update`
+  entries for tasks the host didn't select; the
+  previous `apply_state_updates` wrote them anyway,
+  stamping state onto excluded tasks. **Fix:**
+  `cmd_plugin_push` now collects a
+  `HashSet<TaskId>` of pushed IDs and passes it to
+  `apply_state_updates`, which rejects any entry
+  not in the set. Regression test
+  `apply_state_updates_rejects_entries_for_tasks_not_pushed`.
+
+- **RT-112 — Silent drop when `TaskId::new` fails or
+  the task is missing/excluded.** The
+  `let ... else { continue }` arms were silently
+  discarding updates with no user-visible signal.
+  Next push would create a duplicate external
+  resource. **Fix:** each skip path now emits a
+  diagnostic `eprintln!("rustwerk: plugin '…' …")`
+  matching the existing `discover_plugins` pattern.
+  The four skip reasons (invalid ID, not in pushed
+  set, unknown task, oversized blob) each have a
+  distinct message.
+
+- **RT-113 — Save failure after successful push
+  silently orphaned external side effects.**
+  `cmd_plugin_push` used `?` on `file_store::save`,
+  so a save failure hid the successful `PluginResult`
+  from the user — losing the external keys they
+  would need to recover manually, and guaranteeing
+  the next push creates duplicates. **Fix:**
+  extracted `persist_plugin_state` which returns
+  `Option<String>` (a human-readable save warning);
+  `PluginPushOutput::Executed` grew a
+  `save_warning: Option<String>` field; `is_success`
+  returns false when a warning is present so the
+  process exits non-zero; the renderer prints the
+  plugin result first, then the `WARNING: …` line.
+  Regression test
+  `is_success_false_when_save_warning_set_even_if_plugin_succeeded`.
+
+- **RT-114 — `Value::Null` stored verbatim,
+  contradicting the "no clear variant" docstring.**
+  `Some(Null)` was silently persisted as a stored
+  null entry, breaking the next push's distinction
+  between absent and null. **Fix:**
+  `apply_state_updates` now treats
+  `update.is_null()` as a no-op. Regression test
+  `apply_state_updates_rejects_null_updates`.
+
 ### PLG-INSTALL review sweep (2026-04-20)
 
 Two findings raised and fixed in the same commit

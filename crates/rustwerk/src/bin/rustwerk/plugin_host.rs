@@ -319,7 +319,8 @@ pub(crate) fn load_plugin(path: &Path) -> Result<LoadedPlugin> {
     let version = version_fn();
     if version != API_VERSION {
         bail!(
-            "API version mismatch: plugin reports {version}, host expects {API_VERSION}"
+            "API version mismatch: plugin reports {version}, host expects {API_VERSION}; \
+             rebuild the plugin against the current rustwerk-plugin-api crate"
         );
     }
 

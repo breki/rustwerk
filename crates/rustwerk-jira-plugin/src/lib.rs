@@ -223,12 +223,7 @@ fn push_one<C: HttpClient>(
     let body = payload.to_string();
     match create_issue(http, cfg, &body) {
         Ok(outcome) => task_result_from_outcome(task, &outcome),
-        Err(e) => TaskPushResult {
-            task_id: task.id.clone(),
-            success: false,
-            message: format!("HTTP error: {e}"),
-            external_key: None,
-        },
+        Err(e) => TaskPushResult::fail(task.id.clone(), format!("HTTP error: {e}")),
     }
 }
 
@@ -248,19 +243,16 @@ fn task_result_from_outcome(
         } else {
             format!("created (HTTP {})", outcome.status)
         };
-        TaskPushResult {
-            task_id: task.id.clone(),
-            success: true,
-            message,
-            external_key: key,
+        let mut result = TaskPushResult::ok(task.id.clone(), message);
+        if let Some(k) = key {
+            result = result.with_external_key(k);
         }
+        result
     } else {
-        TaskPushResult {
-            task_id: task.id.clone(),
-            success: false,
-            message: format!("Jira returned HTTP {}: {}", outcome.status, outcome.body),
-            external_key: None,
-        }
+        TaskPushResult::fail(
+            task.id.clone(),
+            format!("Jira returned HTTP {}: {}", outcome.status, outcome.body),
+        )
     }
 }
 
@@ -343,6 +335,7 @@ mod tests {
             complexity: None,
             assignee: None,
             tags: vec![],
+            plugin_state: None,
         }
     }
 
