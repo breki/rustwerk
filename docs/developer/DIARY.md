@@ -7,6 +7,44 @@ reverse chronological order.
 
 ### 2026-04-19
 
+- Add plugin CLI subcommands (v0.45.0)
+
+    PLG-CLI. `rustwerk plugin list` and
+    `rustwerk plugin push <NAME>
+    [--project-key --tasks --dry-run]` wire the
+    PLG-HOST loader into the user-facing CLI. The
+    plugin architecture shipped three commits ago is
+    now actually reachable from the command line —
+    drop a cdylib into `.rustwerk/plugins/` and the
+    two commands discover, introspect, and invoke it.
+
+    Config assembly is host-generic: `JIRA_URL` /
+    `JIRA_TOKEN` env, `git config user.email` (via a
+    new tiny `git.rs` module), and `--project-key`
+    get rolled into a JSON object. Absent keys are
+    omitted entirely so plugins can distinguish
+    "not configured" from empty. `--dry-run` prints
+    *only* resolved key names — never values — so
+    piping into logs is safe.
+
+    `plugin_host.rs` dropped its
+    `#![allow(dead_code)]` guard and gained
+    `validate_plugin_name`: plugin-reported names are
+    now confined to `[A-Za-z0-9_-]+` and 64 chars,
+    preventing a hostile cdylib from smuggling ANSI
+    escapes or newlines into host output.
+
+    Four red-team findings (RT-100..RT-103) and four
+    Artisan findings (AQ-075..AQ-078) all fixed
+    in-commit — see the respective resolved logs.
+    Notable: `filter_tasks` was quadratic (walked
+    every project key via `.keys().find` after a
+    successful lookup); swapped to
+    `HashMap::get_key_value`. Exit-code handling
+    moved out of the command module so per-task
+    failure detail now renders even when the plugin
+    reports an aggregate failure.
+
 - Add Jira plugin (v0.44.0)
 
     PLG-JIRA. The `rustwerk-jira-plugin` cdylib now

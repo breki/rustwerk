@@ -6,6 +6,39 @@ findings.
 
 ---
 
+### PLG-CLI review sweep (2026-04-19)
+
+Four findings raised and fixed in the same commit
+(`feat: add plugin CLI subcommands`, v0.45.0).
+
+- **AQ-075 — `filter_tasks` re-borrow scan.** Same
+  codepath as RT-100. Resolution shared: return
+  `Vec<(TaskId, &'a Task)>` via
+  `HashMap::get_key_value`.
+
+- **AQ-076 — Error-message style diverged from
+  neighbouring commands.** `"plugin 'X' not found
+  (available: [a, b])"` used a shape not found
+  elsewhere.
+  **Fix:** rephrased to `"unknown plugin: X (available:
+  a, b)"` to mirror the existing
+  `"unknown status: X (expected: ...)"` form used by
+  `parse_status`.
+
+- **AQ-077 — Unicode `✓`/`✗` glyphs in rendering.** No
+  other `RenderText` impl uses these; Windows consoles
+  without UTF-8 mojibake them.
+  **Fix:** swapped to `[ok]` / `[fail]` text prefixes
+  in `render_push_text` and `render_task_result`. All
+  tests updated.
+
+- **AQ-078 — `git` shell-out ad-hoc.** `git_user_email`
+  was inline in `commands/plugin.rs` with no shared
+  home for future `git` callers.
+  **Fix:** moved to a new `bin/rustwerk/git.rs` module
+  (`git::user_email`) so the next caller has a
+  discoverable home.
+
 ### PLG-HOST craftsmanship bundle
 
 - **Date:** 2026-04-19

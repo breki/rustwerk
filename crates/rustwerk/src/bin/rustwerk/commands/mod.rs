@@ -1,11 +1,15 @@
 pub(crate) mod dev;
 pub(crate) mod effort;
+#[cfg(feature = "plugins")]
+pub(crate) mod plugin;
 pub(crate) mod project;
 pub(crate) mod report;
 pub(crate) mod task;
 
 pub(crate) use dev::{cmd_dev_add, cmd_dev_list, cmd_dev_remove};
 pub(crate) use effort::{cmd_effort_estimate, cmd_effort_log};
+#[cfg(feature = "plugins")]
+pub(crate) use plugin::{cmd_plugin_list, cmd_plugin_push};
 pub(crate) use project::{cmd_init, cmd_show, cmd_status};
 pub(crate) use report::{
     cmd_report_bottlenecks, cmd_report_complete, cmd_report_effort,

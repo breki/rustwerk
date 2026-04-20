@@ -157,6 +157,39 @@ rustwerk report effort         # effort by developer
 rustwerk report bottlenecks    # blocking tasks
 ```
 
+### Plugins
+
+Dynamic library plugins integrate rustwerk with
+external systems (Jira today; more in the future).
+Feature-gated on the `plugins` feature (default on).
+
+```
+rustwerk plugin list
+rustwerk plugin push <NAME> \
+    [--project-key <KEY>] \
+    [--tasks <ID,ID,...>] \
+    [--dry-run]
+```
+
+Discovery scans `.rustwerk/plugins/` (project-scoped,
+highest precedence) and `~/.rustwerk/plugins/`
+(user-scoped). Extension filter: `.dll` / `.so` /
+`.dylib` by platform. Same-named plugins are shadowed
+by the higher-precedence directory.
+
+`plugin push` assembles a config JSON from:
+- `JIRA_URL` env → `jira_url`
+- `JIRA_TOKEN` env → `jira_token`
+- `git config user.email` → `username`
+- `--project-key` arg → `project_key`
+
+Absent values are omitted. `--dry-run` prints the task
+list and resolved config **key names** (never the
+token value) without invoking the plugin.
+
+The binary exits non-zero when the plugin reports an
+aggregate failure, so CI can gate on the push result.
+
 ## Batch Commands (Atomic JSON)
 
 Pipe a JSON array to `rustwerk batch`. All commands

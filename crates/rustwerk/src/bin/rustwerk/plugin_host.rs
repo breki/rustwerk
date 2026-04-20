@@ -44,9 +44,6 @@
 //! contract regardless of the cap.
 
 #![allow(unsafe_code)]
-// Wired up by PLG-CLI; until then nothing in the
-// binary calls these entry points.
-#![allow(dead_code)]
 
 use std::env;
 use std::ffi::{CStr, CString};
@@ -346,6 +343,7 @@ fn load_plugin(path: &Path) -> Result<LoadedPlugin> {
     // from the library we just loaded and loaded
     // successfully; they implement the API contract.
     let info = unsafe { call_info(info_fn, free_string) }?;
+    validate_plugin_name(&info.name)?;
 
     Ok(LoadedPlugin {
         info,
@@ -354,6 +352,32 @@ fn load_plugin(path: &Path) -> Result<LoadedPlugin> {
         free_string,
         _library: library,
     })
+}
+
+/// Enforce a narrow character set on plugin-reported
+/// names so they can never smuggle ANSI escapes,
+/// newlines, or shell-confusing whitespace into host
+/// output. Matches the well-known identifier shape used
+/// by the built-in jira plugin (`[a-z0-9_-]+`, case-
+/// insensitive). Keeps trust-boundary rendering
+/// one-line-per-plugin even if a discovery directory
+/// ever gains a hostile entry.
+fn validate_plugin_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        bail!("plugin reported an empty name");
+    }
+    if name.len() > 64 {
+        bail!("plugin name exceeds 64 characters: {} chars", name.len());
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        bail!(
+            "plugin name contains characters outside [A-Za-z0-9_-]: {name:?}"
+        );
+    }
+    Ok(())
 }
 
 /// Invoke the plugin's info function, parse the
@@ -468,6 +492,37 @@ mod tests {
         let plugins = discover_plugins(&dir);
         assert!(plugins.is_empty(), "expected none, got {}", plugins.len());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_plugin_name_accepts_simple_id() {
+        assert!(validate_plugin_name("jira").is_ok());
+        assert!(validate_plugin_name("my_plugin").is_ok());
+        assert!(validate_plugin_name("Plugin-42").is_ok());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_empty() {
+        assert!(validate_plugin_name("").is_err());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_control_chars() {
+        assert!(validate_plugin_name("jira\x1b[2J").is_err());
+        assert!(validate_plugin_name("line\nbreak").is_err());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_spaces_and_punctuation() {
+        assert!(validate_plugin_name("my plugin").is_err());
+        assert!(validate_plugin_name("plugin.name").is_err());
+        assert!(validate_plugin_name("../evil").is_err());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_overly_long() {
+        let long = "a".repeat(65);
+        assert!(validate_plugin_name(&long).is_err());
     }
 
     #[test]

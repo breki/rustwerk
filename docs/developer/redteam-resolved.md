@@ -5,6 +5,53 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-CLI review sweep (2026-04-19)
+
+Four findings raised and fixed in the same commit
+(`feat: add plugin CLI subcommands`, v0.45.0).
+
+- **RT-100 — `filter_tasks` quadratic scan.** After a
+  successful `HashMap::get`, the code walked every key
+  in `project.tasks` via `.keys().find(...)` just to
+  satisfy the borrow checker — O(N·M) for N requested
+  IDs over M project tasks.
+  **Fix:** replaced with
+  `project.tasks.get_key_value(&task_id)` (single
+  lookup); `filter_tasks` now returns
+  `Vec<(TaskId, &'a Task)>` with the cheap `TaskId`
+  cloned.
+
+- **RT-101 — Per-task failure detail dropped on plugin
+  failure.** `cmd_plugin_push` returned `Err(anyhow!)`
+  on `result.success == false`, which short-circuited
+  `render::emit`; users saw only the top-level message
+  with no indication of which task failed.
+  **Fix:** `cmd_plugin_push` always returns
+  `Ok(Executed{..})`; new `PluginPushOutput::is_success`
+  drives the exit code from `dispatch_plugin` in
+  `main.rs` after the output is rendered.
+
+- **RT-102 — `plugin list` required a rustwerk
+  project.** `cmd_plugin_list` called `load_project()`,
+  so running the diagnostic command outside a project
+  failed with "not a rustwerk project".
+  **Fix:** falls back to `env::current_dir()` when no
+  project is found — user-scoped
+  `~/.rustwerk/plugins/` discovery still works.
+
+- **RT-103 — Plugin-reported names rendered verbatim
+  into host output.** A malicious plugin could embed
+  ANSI escapes or newlines in `PluginInfo.name` and
+  see them reflected into `plugin list` and error
+  messages.
+  **Fix:** new `validate_plugin_name` in
+  `plugin_host.rs` runs immediately after `call_info`
+  and rejects anything outside `[A-Za-z0-9_-]+` or
+  longer than 64 chars; five tests cover the allowed
+  shapes and rejection paths.
+
+---
+
 ### PLG-JIRA hardening sweep (2026-04-19)
 
 Seven findings raised and fixed in the same commit

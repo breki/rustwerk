@@ -1,6 +1,7 @@
 mod batch;
 mod commands;
 mod gantt;
+mod git;
 #[cfg(feature = "plugins")]
 mod plugin_host;
 mod render;
@@ -31,6 +32,8 @@ fn resolve_developer(explicit: Option<String>) -> Result<String> {
         })
 }
 
+#[cfg(feature = "plugins")]
+use commands::{cmd_plugin_list, cmd_plugin_push};
 use commands::{
     cmd_depend, cmd_dev_add, cmd_dev_list, cmd_dev_remove, cmd_effort_estimate,
     cmd_effort_log, cmd_init, cmd_report_bottlenecks, cmd_report_complete,
@@ -106,6 +109,39 @@ enum Commands {
         /// Show only remaining (not done/on-hold) tasks.
         #[arg(long)]
         remaining: bool,
+    },
+    /// Plugin discovery and invocation.
+    #[cfg(feature = "plugins")]
+    Plugin {
+        #[command(subcommand)]
+        action: PluginAction,
+    },
+}
+
+/// Actions available under `rustwerk plugin`.
+#[cfg(feature = "plugins")]
+#[derive(Subcommand)]
+enum PluginAction {
+    /// Enumerate installed plugins.
+    List,
+    /// Push rustwerk tasks to a plugin's external
+    /// backing system (e.g. Jira).
+    Push {
+        /// Plugin name, as reported by `plugin list`.
+        name: String,
+        /// External project key (e.g. a Jira project
+        /// key). Passed through to the plugin as
+        /// `project_key`.
+        #[arg(long)]
+        project_key: Option<String>,
+        /// Comma-separated task IDs to push. If omitted,
+        /// every task in the project is pushed.
+        #[arg(long)]
+        tasks: Option<String>,
+        /// Report what would be sent without invoking
+        /// the plugin.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -497,5 +533,36 @@ fn main() -> Result<()> {
             render::emit(&tree::cmd_tree(remaining)?, fmt)
         }
         Commands::Effort { action } => dispatch_effort(action, fmt),
+        #[cfg(feature = "plugins")]
+        Commands::Plugin { action } => dispatch_plugin(action, fmt),
+    }
+}
+
+#[cfg(feature = "plugins")]
+fn dispatch_plugin(
+    action: PluginAction,
+    fmt: render::OutputFormat,
+) -> Result<()> {
+    match action {
+        PluginAction::List => render::emit(&cmd_plugin_list()?, fmt),
+        PluginAction::Push {
+            name,
+            project_key,
+            tasks,
+            dry_run,
+        } => {
+            let output = cmd_plugin_push(
+                &name,
+                project_key.as_deref(),
+                tasks.as_deref(),
+                dry_run,
+            )?;
+            let succeeded = output.is_success();
+            render::emit(&output, fmt)?;
+            if !succeeded {
+                bail!("plugin '{name}' reported an aggregate failure");
+            }
+            Ok(())
+        }
     }
 }

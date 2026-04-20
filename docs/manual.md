@@ -29,6 +29,7 @@ command line.
   - [Color Behavior](#color-behavior)
 - [Reports](#reports)
 - [Batch Commands](#batch-commands)
+- [Plugins](#plugins)
 - [Project File](#project-file)
 - [Project File Specification](project-file-spec.md)
 
@@ -773,6 +774,71 @@ A JSON error object is printed to stderr:
 
 - Maximum input size: 10 MB
 - Maximum commands per batch: 1,000
+
+## Plugins
+
+RustWerk supports optional plugins (dynamic libraries)
+for integrating with external systems like Jira.
+Plugins are discovered from
+`.rustwerk/plugins/` (project-scoped) and
+`~/.rustwerk/plugins/` (user-scoped).
+
+### List Installed Plugins
+
+```bash
+rustwerk plugin list
+```
+
+Shows each plugin's name, version, description,
+capabilities, and path on disk. Reports
+"No plugins installed." when no plugins are found (not
+an error).
+
+### Push Tasks to a Plugin Backend
+
+```bash
+rustwerk plugin push <NAME> \
+    [--project-key <KEY>] \
+    [--tasks <ID,ID,...>] \
+    [--dry-run]
+```
+
+- `<NAME>`: plugin name as shown by `plugin list`
+  (e.g. `jira`).
+- `--project-key`: external project key; passed
+  through to the plugin (e.g. the Jira project key).
+- `--tasks`: comma-separated task IDs. If omitted,
+  every task in the project is sent.
+- `--dry-run`: print the task list and which config
+  keys resolved without actually invoking the plugin.
+  Useful for confirming your environment before a
+  real push.
+
+The host assembles a JSON config from three sources
+and hands it to the plugin — the plugin picks what it
+needs:
+
+- `jira_url` from the `JIRA_URL` environment variable
+- `jira_token` from the `JIRA_TOKEN` environment
+  variable
+- `username` from `git config user.email`
+- `project_key` from `--project-key`
+
+Absent keys are omitted entirely. `--dry-run` prints
+only the **key names** present — never the token
+value.
+
+On failure (`result.success == false`) the process
+exits non-zero so the command composes with CI.
+
+### Feature Flag
+
+The `plugins` feature is enabled by default. To build
+a plugin-free binary:
+
+```bash
+cargo build --no-default-features
+```
 
 ## Project File
 
