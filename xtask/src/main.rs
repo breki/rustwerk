@@ -47,17 +47,21 @@ const MODULE_COVERAGE_THRESHOLD: f64 = 85.0;
 /// Unix.
 const MODULE_COVERAGE_EXEMPT: &[&str] = &[
     // Plugin host: most unsafe FFI paths need a real
-    // cdylib to exercise. Covered by integration tests
-    // once PLG-JIRA lands.
+    // cdylib to exercise.
     "bin/rustwerk/plugin_host.rs",
-    // Jira plugin: empty stub until PLG-JIRA.
-    "rustwerk-jira-plugin/src/lib.rs",
     // Main rustwerk lib.rs is module re-exports only.
     "rustwerk/src/lib.rs",
     // Plugin API is covered by its own package's unit
     // tests; the `rustwerk` binary only uses a handful
     // of constants from it.
     "rustwerk-plugin-api/src/lib.rs",
+    // Jira plugin HTTP client: the ureq-backed
+    // transport paths (timeouts, TLS failures, network
+    // errors) are hard to drive from unit tests. The
+    // gateway-fallback logic is covered via the
+    // HttpClient fake; the leftover uncovered lines
+    // are the ureq-wiring layer.
+    "rustwerk-jira-plugin/src/jira_client.rs",
 ];
 
 /// Maximum allowed exact duplication percentage
@@ -178,8 +182,9 @@ fn run_coverage() -> Result<(), String> {
     let output = Command::new(cargo_bin())
         .args([
             "llvm-cov",
-            "--package",
-            "rustwerk",
+            "--workspace",
+            "--ignore-filename-regex",
+            "xtask",
             "--json",
             "--summary-only",
         ])
@@ -274,7 +279,7 @@ fn run_dupes() -> Result<(), String> {
         "code-dupes",
         &[
             "-p",
-            "crates/rustwerk/src",
+            "crates",
             "--exclude-tests",
             "check",
             "--max-exact-percent",
