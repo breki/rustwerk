@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} — {{ config.title }}{% endblock %}
+{% block content %}
+<article class="note">
+  <header class="page-head">
+    <p class="crumbs">
+      <a href="{{ get_url(path='/') }}">Home</a>
+      {% if page.ancestors %}
+        {% for anc in page.ancestors %}
+          {% set sec = get_section(path=anc) %}
+          {% if sec.path != '/' %} · <a href="{{ sec.permalink }}">{{ sec.title }}</a>{% endif %}
+        {% endfor %}
+      {% endif %}
+    </p>
+    <h1>{{ page.title }}</h1>
+    <div class="note-meta">
+      {% if page.extra.note_type %}<span class="badge badge--{{ page.extra.note_type }}">{{ page.extra.note_type }}</span>{% endif %}
+      {% if page.date %}<span class="muted">{{ page.date | date(format="%Y-%m-%d") }}</span>{% endif %}
+      {% if page.extra.source and (page.extra.source is starting_with("http://") or page.extra.source is starting_with("https://") or page.extra.source is starting_with("mailto:")) %}<a class="src" href="{{ page.extra.source }}" target="_blank" rel="noopener">source ↗</a>{% endif %}
+    </div>
+    {% if page.taxonomies.tags %}
+      <div class="tags">
+        {% for t in page.taxonomies.tags %}<a class="tag" href="{{ get_taxonomy_url(kind='tags', name=t) }}">{{ t }}</a>{% endfor %}
+      </div>
+    {% endif %}
+  </header>
+
+  <div class="prose">{{ page.content | safe }}</div>
+
+  {% if page.extra.links %}
+  <footer class="related">
+    <h2>Related</h2>
+    {% set_global relations = [] %}
+    {% for l in page.extra.links %}
+      {% if l.relation not in relations %}{% set_global relations = relations | concat(with=l.relation) %}{% endif %}
+    {% endfor %}
+    {% for rel in relations %}
+      <div class="relgroup">
+        <span class="reltag">{{ rel | replace(from="-", to=" ") }}</span>
+        <ul>
+          {% for l in page.extra.links %}{% if l.relation == rel %}
+            {% set target = get_page(path=l.target ~ ".md") %}
+            <li><a href="{{ target.permalink }}">{{ target.title }}</a></li>
+          {% endif %}{% endfor %}
+        </ul>
+      </div>
+    {% endfor %}
+  </footer>
+  {% endif %}
+
+  {# Backlinks — pages whose extra.links point to this one #}
+  {% set_global backlinks = [] %}
+  {% for sec_path in ["architecture/_index.md", "concepts/_index.md", "decisions/_index.md", "integrations/_index.md"] %}
+    {% set sec = get_section(path=sec_path) %}
+    {% for p in sec.pages %}
+      {% if p.extra.links %}
+        {% for l in p.extra.links %}
+          {% set full = l.target ~ ".md" %}
+          {% if full == page.relative_path or l.target == page.path | trim_end_matches(pat="/") %}
+            {% set_global backlinks = backlinks | concat(with=p) %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+  {% if backlinks %}
+  <footer class="backlinks">
+    <h2>Referenced by</h2>
+    <ul>
+      {% for b in backlinks %}<li><a href="{{ b.permalink }}">{{ b.title }}</a></li>{% endfor %}
+    </ul>
+  </footer>
+  {% endif %}
+</article>
+{% endblock %}

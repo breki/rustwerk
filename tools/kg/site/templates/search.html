@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Search — {{ config.title }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1>Search</h1>
+</header>
+<input id="q" type="search" placeholder="Type to search..." autofocus>
+<div id="results" class="results"></div>
+
+<script src="{{ get_url(path='elasticlunr.min.js') }}"></script>
+<script src="{{ get_url(path='search_index.en.js') }}"></script>
+<script>
+(() => {
+  const idx = elasticlunr.Index.load(window.searchIndex);
+  const q = document.getElementById('q');
+  const out = document.getElementById('results');
+  const run = () => {
+    const s = q.value.trim();
+    if (!s) { out.innerHTML = ''; return; }
+    const hits = idx.search(s, { fields: { title: {boost: 2}, body: {boost: 1} }, bool: 'OR', expand: true });
+    out.innerHTML = hits.slice(0, 30).map(h => {
+      const d = idx.documentStore.getDoc(h.ref);
+      return `<div class="hit"><a href="${h.ref}">${d.title || h.ref}</a></div>`;
+    }).join('') || '<p>No results.</p>';
+  };
+  let t; q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(run, 120); });
+})();
+</script>
+{% endblock %}

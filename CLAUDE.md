@@ -14,6 +14,28 @@ Git-native, AI-agent-friendly project orchestration CLI.
 - **Design**: procedural logic first, AI only for
   reasoning tasks
 
+## Working Style
+
+Before each step of execution, print a short one-line
+description of what you are about to do and why, so the
+human developer can follow along. "Step" here means a
+distinct action — running a command, editing a file,
+searching the codebase, calling a subagent — not every
+individual tool call inside a single logical operation.
+
+- State the intent *before* the action, not after.
+- One sentence is almost always enough; avoid paragraphs.
+- Skip the narration for trivial lookups (a single
+  `Read`, a single `Grep`) where the tool call itself
+  is self-explanatory.
+- If you change direction mid-task, say so explicitly
+  ("That did not work — trying X instead because …")
+  rather than silently pivoting.
+
+The goal is that a human skimming the transcript can
+always answer "what is Claude doing right now and why?"
+without reading tool output.
+
 ## Build Commands
 
 ```bash
@@ -87,6 +109,36 @@ you selectively apply relevant updates while preserving
 rustwerk's customizations (notably: rustwerk is CLI-only
 and has no frontend, so web/e2e template changes are
 skipped by default).
+
+## Knowledge Graph
+
+The project has a browsable knowledge graph under
+`knowledge/` (markdown notes with TOML frontmatter),
+rendered to a static site by Zola. Use it to get
+oriented and to record non-obvious architecture and
+design information.
+
+```bash
+cargo xtask kg build                 # render site to tools/kg/site/public/
+cargo xtask kg serve                 # live-reload dev server
+tools/kg/scripts/kg-new.sh <section> "<Title>" [type] [tags]
+tools/kg/scripts/kg-validate.sh      # check outgoing link targets
+tools/kg/scripts/kg-stats.sh         # note + link counts
+```
+
+Xtask auto-downloads zola into `tools/kg/bin/` on
+first run — no manual install needed.
+
+Sections: `architecture/`, `concepts/`, `decisions/`,
+`integrations/`. Schema and conventions are documented
+in [tools/kg/README.md](tools/kg/README.md).
+
+When a commit changes rustwerk architecture or makes a
+non-obvious design decision, add or update the relevant
+KG note alongside the code change. Do not document
+code-derivable facts (file paths, obvious conventions)
+— only the *why*, the cross-cutting maps, and the
+integration contracts.
 
 ## Template Feedback
 

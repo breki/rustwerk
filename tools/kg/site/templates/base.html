@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}{{ config.title }}{% endblock %}</title>
+<link rel="stylesheet" href="{{ get_url(path='main.css') }}">
+{% if config.build_search_index %}
+<link rel="preload" href="{{ get_url(path='search_index.en.json') }}" as="fetch" crossorigin>
+{% endif %}
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="{{ get_url(path='/') }}">{{ config.title }}</a>
+    <nav>
+      <a href="{{ get_url(path='/architecture/') }}">Architecture</a>
+      <a href="{{ get_url(path='/concepts/') }}">Concepts</a>
+      <a href="{{ get_url(path='/decisions/') }}">Decisions</a>
+      <a href="{{ get_url(path='/integrations/') }}">Integrations</a>
+      <a href="{{ get_url(path='/tags/') }}">Tags</a>
+      <a href="{{ get_url(path='/search/') }}">Search</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  {% block content %}{% endblock %}
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <span>RustWerk KG · generated with Zola</span>
+  </div>
+</footer>
+</body>
+</html>

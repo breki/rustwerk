@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ section.title }} — {{ config.title }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <p class="crumbs"><a href="{{ get_url(path='/') }}">Home</a></p>
+  <h1>{{ section.title }}</h1>
+  {% if section.description %}<p class="lede">{{ section.description }}</p>{% endif %}
+</header>
+
+{% if section.content %}
+<article class="prose">{{ section.content | safe }}</article>
+{% endif %}
+
+{% if section.subsections %}
+<div class="section-grid">
+  {% for sub in section.subsections %}
+    {% set sec = get_section(path=sub) %}
+    <a class="section-card" href="{{ sec.permalink }}">
+      <h2>{{ sec.title }}</h2>
+      <p>{{ sec.pages | length }} note{% if sec.pages | length != 1 %}s{% endif %}</p>
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if section.pages %}
+<ul class="note-list">
+  {% for page in section.pages %}
+  <li>
+    <a href="{{ page.permalink }}">{{ page.title }}</a>
+    {% if page.extra.note_type %}<span class="badge badge--{{ page.extra.note_type }}">{{ page.extra.note_type }}</span>{% endif %}
+    {% if page.description %}<span class="muted"> — {{ page.description }}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

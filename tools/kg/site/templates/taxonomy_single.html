@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ term.name }} — {{ config.title }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <p class="crumbs"><a href="{{ get_url(path='/tags/') }}">All tags</a></p>
+  <h1>{{ term.name }}</h1>
+</header>
+<ul class="note-list">
+  {% for page in term.pages %}
+  <li><a href="{{ page.permalink }}">{{ page.title }}</a>
+    {% if page.extra.note_type %}<span class="badge badge--{{ page.extra.note_type }}">{{ page.extra.note_type }}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

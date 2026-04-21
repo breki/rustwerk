@@ -1,7 +1,10 @@
+use std::ffi::OsStr;
 use std::fmt::Write as _;
 use std::process::Command;
 
 use clap::{Parser, Subcommand};
+
+mod kg;
 
 #[derive(Parser)]
 #[command(name = "xtask")]
@@ -27,6 +30,22 @@ enum XCommand {
     Fmt,
     /// Run coverage check (requires cargo-llvm-cov)
     Coverage,
+    /// Knowledge graph site — build or serve with live reload.
+    #[command(subcommand)]
+    Kg(KgCommand),
+}
+
+#[derive(Subcommand)]
+enum KgCommand {
+    /// One-shot build into tools/kg/site/public/.
+    Build,
+    /// Live-reload dev server. Extra args (after `--`) pass through
+    /// to `zola serve`, e.g. `--port 8080 --open`.
+    Serve {
+        /// Arguments forwarded verbatim to `zola serve`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        zola_args: Vec<String>,
+    },
 }
 
 /// Minimum line coverage percentage (overall and per-module).
@@ -86,6 +105,8 @@ fn main() {
             .and_then(|()| run_dupes()),
         XCommand::Fmt => run_fmt(),
         XCommand::Coverage => run_coverage(),
+        XCommand::Kg(KgCommand::Build) => kg::run_build(),
+        XCommand::Kg(KgCommand::Serve { zola_args }) => kg::run_serve(&zola_args),
     };
 
     if let Err(e) = result {
@@ -161,7 +182,7 @@ fn extract_check_errors(stderr: &str) -> Vec<&str> {
 
 fn run_clippy() -> Result<(), String> {
     run_cmd(
-        &cargo_bin(),
+        cargo_bin(),
         &["clippy", "--workspace", "--", "-D", "warnings"],
     )
 }
@@ -175,11 +196,11 @@ fn run_test(filter: Option<&str>) -> Result<(), String> {
         args.push("--");
         args.push(f);
     }
-    run_cmd(&cargo_bin(), &args)
+    run_cmd(cargo_bin(), &args)
 }
 
 fn run_fmt() -> Result<(), String> {
-    run_cmd(&cargo_bin(), &["fmt", "--all"])
+    run_cmd(cargo_bin(), &["fmt", "--all"])
 }
 
 fn run_coverage() -> Result<(), String> {
@@ -301,19 +322,40 @@ fn cargo_bin() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".into())
 }
 
-fn run_cmd(cmd: &str, args: &[&str]) -> Result<(), String> {
-    println!("→ {cmd} {}", args.join(" "));
-    let status = Command::new(cmd)
+/// Launch a subprocess, echoing an unambiguous banner before the call
+/// and converting non-zero exits into a `String` error. Accepts anything
+/// that coerces to `&OsStr` so callers do not have to pre-convert
+/// `PathBuf` / `String` arguments.
+//
+// `clippy::unnecessary_debug_formatting` is allowed deliberately:
+// `{:?}` on `OsStr` quotes each arg, which keeps the echo
+// copy-pasteable as a real command line when args contain spaces.
+// `Display` would drop the quoting and make spaces ambiguous.
+#[allow(clippy::unnecessary_debug_formatting)]
+pub(crate) fn run_cmd<C, S>(cmd: C, args: &[S]) -> Result<(), String>
+where
+    C: AsRef<OsStr>,
+    S: AsRef<OsStr>,
+{
+    let cmd_ref = cmd.as_ref();
+    print!("→ {cmd_ref:?}");
+    for arg in args {
+        print!(" {:?}", arg.as_ref());
+    }
+    println!();
+
+    let status = Command::new(cmd_ref)
         .args(args)
         .status()
-        .map_err(|e| format!("failed to run {cmd}: {e}"))?;
+        .map_err(|e| format!("failed to run {}: {e}", cmd_ref.to_string_lossy()))?;
 
     if status.success() {
         Ok(())
     } else {
+        let name = cmd_ref.to_string_lossy();
         match status.code() {
-            Some(code) => Err(format!("{cmd} exited with {code}")),
-            None => Err(format!("{cmd} terminated by signal")),
+            Some(code) => Err(format!("{name} exited with {code}")),
+            None => Err(format!("{name} terminated by signal")),
         }
     }
 }

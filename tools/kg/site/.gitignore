@@ -1,0 +1,4 @@
+# Content is staged from ../../knowledge/ by kg-build.sh
+content/
+# Zola build output
+public/

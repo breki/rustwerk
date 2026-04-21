@@ -5,6 +5,72 @@ reverse chronological order.
 
 ---
 
+### 2026-04-21
+
+- Browsable knowledge graph + Jira workflow guide (v0.53.0)
+
+    New `knowledge/` tree with 28 Zola-rendered pages
+    across four sections (architecture, concepts,
+    decisions, integrations) plus a search stub.
+    Typed-edge frontmatter
+    (`extra.links = [{ relation, target }]`) drives
+    per-note "Related" footers and backlinks in
+    `tools/kg/site/templates/page.html`.
+
+    New xtask subcommand: `cargo xtask kg {build,serve}`
+    in `xtask/src/kg.rs`. Auto-downloads `zola` 0.20.0
+    into `tools/kg/bin/` on first run via PowerShell
+    (Windows) or `curl` + `tar` (Unix), stages
+    `knowledge/` → `tools/kg/site/content/`, runs Zola.
+    `run_cmd` in `xtask/src/main.rs` generalised to
+    `<C: AsRef<OsStr>, S: AsRef<OsStr>>` so the KG code
+    reuses it instead of reinventing a local helper.
+
+    Security posture of the auto-download path:
+    `find_on_path` walks `PATH` explicitly (no
+    `Command::new("zola")` — Windows would search CWD
+    first and execute a repo-local `zola.exe` if
+    present); `verify_binary` enforces a pinned
+    SHA-256 against the extracted binary on every
+    invocation, both cache hit and fresh download;
+    archives extract into a sibling scratch directory
+    and only the expected `zola[.exe]` is moved into
+    place, neutering zip-slip / tar-slip; `stage_content`
+    refuses to wipe the staging directory unless it
+    carries a tool-written `.kg-staged` marker, so
+    user-placed files are preserved.
+
+    Shell entry points (`tools/kg/scripts/kg-{build,
+    serve}.{sh,ps1}`) are thin 2-line wrappers around
+    the xtask subcommand — one source of truth for the
+    pipeline, no duplicated bash/pwsh logic.
+    `tools/kg/scripts/kg-new.sh` hardened: section
+    argument whitelisted against the four known
+    sections; `note_type` and tags rejected if they
+    contain `"`, `\`, newline, or CR (TOML injection
+    guard). `page.html` filters `extra.source` URLs to
+    `http:`/`https:`/`mailto:` only (XSS defence for
+    future-published instances).
+
+    Docs: new workflow guide
+    `docs/guides/jira-workflow.md` — rustwerk-first
+    orchestration with Jira-edit escape hatches,
+    linked from `docs/manual.md#plugins`. CLAUDE.md
+    gains a "Working Style" section (narrate intent
+    before action) and a "Knowledge Graph" section
+    pointing at the tooling. Three `template-feedback`
+    entries capture rustbase-generalisable learnings
+    (KG scaffolding, pwsh-twin convention,
+    `clippy::doc_markdown` allowlist).
+
+    Reviewed: 9 red-team + 5 artisan findings raised
+    and all fixed in the same commit — see
+    `redteam-resolved.md#kg-scaffolding-review-sweep-2026-04-21`
+    and
+    `artisan-resolved.md#kg-scaffolding-review-sweep-2026-04-21`.
+
+---
+
 ### 2026-04-20
 
 - Parent/epic linking for Jira push (v0.53.0)

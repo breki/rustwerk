@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ taxonomy.name | title }} — {{ config.title }}{% endblock %}
+{% block content %}
+<header class="page-head"><h1>{{ taxonomy.name | title }}</h1></header>
+<ul class="tag-cloud">
+  {% for term in terms %}
+    <li><a href="{{ term.permalink }}">{{ term.name }}</a> <span class="muted">({{ term.pages | length }})</span></li>
+  {% endfor %}
+</ul>
+{% endblock %}

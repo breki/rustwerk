@@ -5,6 +5,181 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### KG scaffolding review sweep (2026-04-21)
+
+Nine findings raised and fixed in the same commit
+(docs-weighted; no version bump):
+
+#### RT-147 — `stage_content()` silently wiped `tools/kg/site/content/`
+
+- **Date:** 2026-04-21
+- **Category:** Destructive operation without warning
+- **Where:** `xtask/src/kg.rs::stage_content`
+- **Description:** Every `kg build` / `kg serve`
+  unconditionally ran `fs::remove_dir_all` on the
+  staging directory. Gitignored, but a contributor
+  dropping notes in progress, scratch files, or a
+  symlink there would lose them silently.
+- **Resolution:** Added an `.kg-staged` marker file
+  with magic content (`rustwerk-kg-staging-dir\n`)
+  that the tool writes immediately after creating
+  the directory. `stage_content` refuses to wipe any
+  pre-existing directory that does not carry a
+  matching marker; the user must move contents
+  aside or delete the directory manually to proceed.
+
+#### RT-148 — `ensure_zola` returned any pre-existing vendored binary without verification
+
+- **Date:** 2026-04-21
+- **Category:** Supply chain — insufficient integrity check
+- **Where:** `xtask/src/kg.rs::ensure_zola`
+- **Description:** If `tools/kg/bin/zola[.exe]`
+  existed, it was executed with no origin or
+  integrity check. An adversary with write access
+  to the repo (via an innocuous-looking PR script,
+  a compromised dev machine, a rogue install) could
+  plant a binary that would then run with developer
+  privileges on the next `xtask kg build`.
+- **Resolution:** Added `verify_binary()` that
+  computes SHA-256 of the resolved zola (both cached
+  and freshly-downloaded) and compares against a
+  compile-time pin. Mismatches abort with a loud,
+  actionable error. Pin exists today for Windows
+  x86_64; other platforms warn once and skip
+  verification (strictly better than no pin
+  anywhere, tightenable per-platform as pins are
+  computed).
+
+#### RT-149 — `which_on_path("zola")` could execute a CWD-local `zola.exe` on Windows
+
+- **Date:** 2026-04-21
+- **Category:** Security — CreateProcess search order
+- **Where:** `xtask/src/kg.rs` (removed `which_on_path`)
+- **Description:** `Command::new("zola")` on Windows
+  uses `CreateProcess`, which searches the
+  application's current directory before PATH for
+  bare executable names. A malicious `zola.exe` at
+  the repo root would be preferred over any real
+  installation; `git clone` of a repo shipping a
+  hostile `zola.exe` was a clean code-execution
+  vector.
+- **Resolution:** Replaced with `find_on_path` that
+  walks `std::env::var_os("PATH")` via
+  `std::env::split_paths`, rejects empty / `.`
+  entries explicitly, and on Windows iterates
+  `PATHEXT` to build candidate filenames. Returns
+  an absolute `PathBuf`; all subsequent `Command::new`
+  calls use that absolute path, closing the attack.
+
+#### RT-150 — Downloaded zola archive was not checksum-verified
+
+- **Date:** 2026-04-21
+- **Category:** Security — missing download integrity check
+- **Where:** `xtask/src/kg.rs::download_zola`
+- **Description:** No SHA-256 verification between
+  download and use. Future GitHub release-artifact
+  compromise, caching-proxy substitution, or a
+  maintainer bumping `ZOLA_VERSION` to a
+  yanked/malicious release would ship the bad binary
+  to every developer.
+- **Resolution:** Covered by the same `verify_binary()`
+  call added for RT-148 — the extracted binary is
+  hashed against the pinned SHA-256 on every
+  `ensure_zola`, regardless of whether it came from
+  the cache or a fresh download.
+
+#### RT-151 — No archive-traversal protection on extraction
+
+- **Date:** 2026-04-21
+- **Category:** Security — zip-slip / tar-slip
+- **Where:** `xtask/src/kg.rs::download_zola`
+- **Description:** `Expand-Archive -Force` and
+  `tar xzf -C bin_dir` extracted whatever paths the
+  archive contained. Combined with RT-150, a
+  compromised archive could drop files anywhere via
+  `..` or absolute-path entries. Zero mitigation
+  existed.
+- **Resolution:** Extraction now targets a sibling
+  scratch directory (`tools/kg/bin/.download/`).
+  `locate_extracted_binary` walks the scratch tree
+  and moves *only* the expected `zola[.exe]` file
+  into the final location; `remove_dir_all` then
+  discards the scratch directory and any traversal
+  debris with it. Symlinks are skipped during the
+  walk so a hostile archive cannot redirect us out
+  of the scratch area.
+
+#### RT-152 — `kg-new.sh` did not sanitize the `$section` argument
+
+- **Date:** 2026-04-21
+- **Category:** Path traversal via user input
+- **Where:** `tools/kg/scripts/kg-new.sh`
+- **Description:** `section` (arg 1) was taken
+  verbatim and used as a path segment in `mkdir -p`
+  and the target file. `kg-new.sh ../docs "T"` would
+  write outside `knowledge/`. Lower severity (user is
+  the caller) but inconsistent with the title's
+  slugification.
+- **Resolution:** Added a
+  `case "${section}" in architecture|concepts|decisions|integrations) ;;`
+  whitelist that rejects anything else before
+  touching the filesystem.
+
+#### RT-153 — `kg-new.sh` TOML injection via `note_type` and individual tags
+
+- **Date:** 2026-04-21
+- **Category:** Unescaped interpolation into generated TOML
+- **Where:** `tools/kg/scripts/kg-new.sh`
+- **Description:** `note_type` (arg 3) and each tag
+  flowed into the generated frontmatter unescaped.
+  A tag containing `"`, `\`, or newline corrupted the
+  TOML; a programmatic caller supplying a `note_type`
+  like `foo"\n[malicious]\nx = "y` could add
+  arbitrary frontmatter keys.
+- **Resolution:** Added a `validate_toml_field`
+  helper that rejects any value containing `"`, `\`,
+  newline, or carriage return. Invoked on `note_type`
+  and on each individual (post-trim) tag before TOML
+  emission. Title also escapes embedded `"` in the
+  generated line.
+
+#### RT-154 — `run_cmd` printed a misleading command line for args with spaces
+
+- **Date:** 2026-04-21
+- **Category:** Debug-output fidelity
+- **Where:** `xtask/src/main.rs::run_cmd`
+- **Description:** `println!("→ {cmd} {}",
+  args.join(" "))` joined with single spaces and no
+  quoting, so a `zola_args` element containing a
+  space appeared as two separate args in the echo
+  even though it was correctly passed as one.
+- **Resolution:** The unified `run_cmd` now prints
+  `{:?}` on each `OsStr`, which quotes arg elements
+  so the banner is copy-pasteable as a real command
+  line. `#[allow(clippy::unnecessary_debug_formatting)]`
+  with a short comment documents why we want Debug
+  over Display here.
+
+#### RT-155 — `page.extra.source` rendered into `href` without scheme filtering
+
+- **Date:** 2026-04-21
+- **Category:** Security — unsafe URL context
+- **Where:** `tools/kg/site/templates/page.html`
+- **Description:** Tera HTML-escapes but does not
+  defang `javascript:` URLs; `rel="noopener"` has no
+  effect on them. Low likelihood given committer-
+  trust content and local-only `base_url`, but a
+  note with `[extra] source = "javascript:…"` would
+  become a clickable XSS vector if the site were
+  ever published.
+- **Resolution:** Added an inline Tera guard — the
+  `<a href>` only renders when `page.extra.source`
+  starts with `http://`, `https://`, or `mailto:`.
+  Any other scheme (including `javascript:`, `data:`,
+  `file:`) silently drops the link.
+
+---
+
 ### PLG-JIRA-E2E review sweep (2026-04-20)
 
 Six findings raised and fixed in the same commit

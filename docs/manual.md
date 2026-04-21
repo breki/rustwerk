@@ -32,6 +32,8 @@ command line.
 - [Plugins](#plugins)
 - [Project File](#project-file)
 - [Project File Specification](project-file-spec.md)
+- Workflow guides:
+  - [RustWerk + Jira workflow](guides/jira-workflow.md)
 
 ## Why RustWerk?
 
@@ -836,6 +838,14 @@ for integrating with external systems like Jira.
 Plugins are discovered from
 `.rustwerk/plugins/` (project-scoped) and
 `~/.rustwerk/plugins/` (user-scoped).
+
+> **Running alongside Jira?** This section is the
+> reference for the `plugin` subcommand. For an
+> opinionated, task-oriented walkthrough of how to
+> actually run a project that pushes to Jira — setup,
+> daily loop, concept mapping, and what to do when
+> someone edits Jira directly — see
+> [RustWerk + Jira workflow](guides/jira-workflow.md).
 
 ### List Installed Plugins
 

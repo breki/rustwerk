@@ -6,6 +6,107 @@ findings.
 
 ---
 
+### KG scaffolding review sweep (2026-04-21)
+
+Five findings raised and fixed in the same commit
+(docs-weighted; no version bump). The first three
+collapsed into one refactor: reusing the existing
+`run_cmd` helper from `main.rs` after generalising its
+signature.
+
+#### AQ-132 — `kg.rs` reimplemented the existing `run_cmd` helper
+
+- **Date:** 2026-04-21
+- **Category:** Style drift / DRY
+- **Where:** `xtask/src/kg.rs` (removed local `run`),
+  `xtask/src/main.rs::run_cmd`
+- **Description:** `kg.rs` defined a local
+  `run(program, args)` functionally identical to
+  `run_cmd` in `main.rs`, and reimplemented the
+  `→ cmd args` banner inline at two call sites.
+  `run_cmd` is the house pattern used by every other
+  xtask command.
+- **Resolution:** Made `run_cmd` `pub(crate)`,
+  generalised its signature to
+  `<C: AsRef<OsStr>, S: AsRef<OsStr>>` so callers can
+  pass `PathBuf` / `String` / `OsStr` interchangeably,
+  and routed all `kg::*` subprocess calls through it.
+  Local `run` helper deleted; inline banner
+  `println!`s removed.
+
+#### AQ-133 — `run_serve` did an argv-`String`-to-`&str` dance
+
+- **Date:** 2026-04-21
+- **Category:** API design — unnecessary allocation
+- **Where:** `xtask/src/kg.rs::run_serve`
+- **Description:** The serve command built a
+  `Vec<String>` for argv then allocated a second
+  `Vec<&str>` just to satisfy the `&[&str]` signature
+  of the local `run` helper.
+- **Resolution:** Subsumed by AQ-132. The generalised
+  `run_cmd<C, S>` with `S: AsRef<OsStr>` accepts
+  `Vec<&OsStr>` directly, so `run_serve` now builds
+  `Vec<&OsStr>` once and passes it straight in.
+
+#### AQ-134 — `zola.to_string_lossy()` on paths fed to `Command`
+
+- **Date:** 2026-04-21
+- **Category:** Type safety — lossy `OsStr` → `String`
+- **Where:** `xtask/src/kg.rs` — multiple sites
+- **Description:** Paths (`zola`, `archive`, `bin_dir`,
+  `site`) were run through `to_string_lossy()` before
+  being passed to `Command` / `curl` / `tar`. On Unix
+  paths are not guaranteed UTF-8; the lossy conversion
+  silently replaces non-UTF-8 bytes with `U+FFFD`,
+  producing a path that looks right but points
+  elsewhere. Pure loss, no gain.
+- **Resolution:** Subsumed by AQ-132. With `run_cmd`
+  taking `impl AsRef<OsStr>`, callers now pass
+  `&zola`, `&site`, `archive.as_os_str()`, and
+  `bin_dir.as_os_str()` directly. No `to_string_lossy`
+  remains on the subprocess-invocation path.
+  (It remains once in error-message rendering,
+  which is the correct use case.)
+
+#### AQ-135 — `which_on_path` had side effects disguised as a probe
+
+- **Date:** 2026-04-21
+- **Category:** Semantics / ergonomics
+- **Where:** `xtask/src/kg.rs` (removed `which_on_path`)
+- **Description:** Billed as a "cheap `command -v`
+  replacement" but actually launched the binary with
+  `--version` as a probe. A misbehaving `zola` on
+  `PATH` that hung on `--version` would hang the
+  whole xtask invocation with no timeout. On Windows
+  it could also briefly flash a console window.
+- **Resolution:** Subsumed by RT-149's fix. The new
+  `find_on_path` walks `PATH` entries and tests each
+  candidate with `Path::is_file` — std-only, no
+  subprocess, side-effect-free, and returns an
+  absolute `PathBuf` instead of a yes/no bool.
+  Together with the explicit CWD-rejection this
+  closes both RT-149 and AQ-135 in one function.
+
+#### AQ-136 — Redundant "zola ready" message in `ensure_zola`
+
+- **Date:** 2026-04-21
+- **Category:** Cosmetic — duplicate user output
+- **Where:** `xtask/src/kg.rs::ensure_zola`
+- **Description:** Printed
+  `"zola v{ver} ready at {path}"` only when a
+  download had just completed, duplicating the
+  download banner that `download_zola` already
+  emitted. Silent on every subsequent run and on
+  PATH-based resolution; the inconsistency was
+  confusing.
+- **Resolution:** The `println!` was deleted in the
+  `ensure_zola` rewrite. Download banners live in
+  `download_zola`; cache hits and PATH hits are
+  silent, which is the principled behaviour for a
+  subordinate build step.
+
+---
+
 ### PLG-JIRA-E2E review sweep (2026-04-20)
 
 Four findings raised and fixed in the same commit

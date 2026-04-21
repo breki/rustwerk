@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+{% set root = get_section(path="_index.md") %}
+<section class="hero">
+  <h1>{{ config.title }}</h1>
+  <p class="lede">{{ config.description }}</p>
+</section>
+
+<div class="section-grid">
+  {% for sub in root.subsections %}
+    {% set sec = get_section(path=sub) %}
+    <a class="section-card" href="{{ sec.permalink }}">
+      <h2>{{ sec.title }}</h2>
+      <p>{{ sec.pages | length }} note{% if sec.pages | length != 1 %}s{% endif %}</p>
+      {% if sec.description %}<p class="muted">{{ sec.description }}</p>{% endif %}
+    </a>
+  {% endfor %}
+</div>
+
+{% if root.content %}
+<article class="prose">{{ root.content | safe }}</article>
+{% endif %}
+{% endblock %}

@@ -19,3 +19,8 @@ Thumbs.db
 # Environment
 .env
 .env.*
+
+# Knowledge graph: staged content, built site, downloaded zola binary
+/tools/kg/site/content/
+/tools/kg/site/public/
+/tools/kg/bin/

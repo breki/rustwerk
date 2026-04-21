@@ -13,6 +13,79 @@ learnings have already been absorbed into the template.
 
 ---
 
+## 2026-04-21
+
+- **[Logged, not fixed locally] Template has no knowledge
+  graph scaffolding, but every serious project grows
+  one.** Rustwerk just built a browsable KG system from
+  scratch: Zola site under `tools/kg/site/`, authoring
+  notes under `knowledge/` with TOML frontmatter, four
+  typed sections (`architecture/`, `concepts/`,
+  `decisions/`, `integrations/`), a typed-edge
+  convention (`extra.links = [{ relation, target }]`),
+  custom Tera templates rendering badges / related /
+  backlinks, shell wrappers under `tools/kg/scripts/`,
+  and an `xtask kg {build,serve}` subcommand that
+  auto-downloads the `zola` binary into
+  `tools/kg/bin/`. All of this is generic: none of it
+  is rustwerk-specific except the note content itself.
+  Any rustbase-derived project eventually wants the
+  same thing, and the authoring conventions (note
+  types, edge relations) set a useful shared shape
+  across projects. **Fix:** fold the scaffolding into
+  rustbase — empty `knowledge/{architecture,concepts,
+  decisions,integrations}/_index.md`, `tools/kg/`
+  directory with templates + sass + scripts, the
+  `xtask kg` module, a `knowledge/search.md` stub, the
+  KG section in the template's `CLAUDE.md`, and the
+  gitignore entries. Ship it dormant: an empty but
+  working KG that renders a placeholder homepage until
+  the first note is authored.
+
+- **[Logged, not fixed locally] No pwsh twin
+  convention for `.sh` scripts.** Rustwerk targets
+  Windows as a first-class platform, but the template
+  has no convention for how `scripts/*.sh` files
+  should reach Windows users. Two options in tension:
+  (a) ship a `.ps1` twin for every `.sh` — doubles the
+  surface area and means every bugfix lands twice;
+  (b) route everything through `cargo xtask` so the
+  `.sh` / `.ps1` files are trivial 2-line wrappers
+  with no logic to keep in sync. Rustwerk landed on
+  (b) for the new KG scripts (see
+  `tools/kg/scripts/kg-{build,serve}.{sh,ps1}`), but
+  only after first writing a 70-line pwsh port that
+  duplicated bash logic. **Fix:** document the
+  convention in the template's `CLAUDE.md` —
+  "non-trivial script logic lives in xtask; shell
+  files are wrappers only" — and provide the canonical
+  wrapper shapes. On the bash side:
+  `exec cargo xtask <cmd> -- "$@"`. On the pwsh side:
+  `& cargo xtask <cmd> -- @args; exit $LASTEXITCODE`
+  with `$ErrorActionPreference = 'Stop'`.
+
+- **[Logged, not fixed locally] `clippy::pedantic`
+  trips on `PowerShell`, `FFI`, `JSON`, `WebSocket`
+  and similar well-known identifiers via
+  `clippy::doc_markdown`.** Writing doc comments that
+  mention these terms requires each occurrence to be
+  backticked, producing output like ``PowerShell on
+  Windows, `curl` + `tar` on Unix`` where only
+  `PowerShell` needed backticks for the lint, not for
+  the reader. I hit this exactly once while writing
+  `xtask/src/kg.rs`. The fix is already a documented
+  clippy feature — a `clippy.toml` with a
+  `doc-valid-idents` allowlist. **Fix:** ship
+  `clippy.toml` in the template with a curated list
+  of identifiers common in Rust infra code — e.g.
+  `["PowerShell", "FFI", "JSON", "ABI", "WebSocket",
+  "macOS", "GitHub", "OAuth", "stdin", "stdout",
+  "stderr", "cdylib", "ADF"]`. Projects append
+  domain-specific entries (`Jira`, `rustwerk`, `WBS`)
+  on top.
+
+---
+
 ## 2026-04-19
 
 - **[Fixed locally] `xtask check` filter drops user errors
