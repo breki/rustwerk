@@ -6,6 +6,79 @@ findings.
 
 ---
 
+### PLG-JIRA-E2E review sweep (2026-04-20)
+
+Four findings raised and fixed in the same commit
+(test-only; no version bump):
+
+#### AQ-128 — `push_one_issue` returned positional `(String, String)`
+
+- **Date:** 2026-04-20
+- **Category:** API design
+- **Where:** `crates/rustwerk-jira-plugin/tests/jira_live.rs::push_one_issue`
+- **Description:** Positional tuple forced call-site
+  mental bookkeeping ("first is key, second is raw
+  response"). Per Rust API Guidelines C-STRUCT-PRIVATE,
+  named fields self-document.
+- **Resolution:** Extracted
+  `struct PushedIssue { key: String, raw_response: String }`.
+  The signature now returns
+  `(TeardownGuard, PushedIssue)` — also leaves room
+  for adding `self_url` etc. later without breaking
+  callers.
+
+#### AQ-129 — Teardown attached after partial-success window
+
+- **Date:** 2026-04-20
+- **Category:** Abstraction boundaries
+- **Description:** Same defect as RT-145 from the
+  artisan lens: RAII teardown's entire point is
+  covering partial success, but the original layout
+  attached the guard only *after* shape asserts had
+  already panicked on any malformed payload.
+- **Resolution:** `push_one_issue` now extracts the
+  key from the raw payload, constructs the
+  `TeardownGuard` immediately, and only *then* runs
+  shape assertions. Every subsequent panic still
+  triggers teardown.
+
+#### AQ-130 — `LiveEnv` derived `Debug` printed the token verbatim
+
+- **Date:** 2026-04-20
+- **Category:** Type safety / credential hygiene
+- **Where:** `jira_live.rs::LiveEnv`
+- **Description:** Derived `Debug` rendered the API
+  token as plain text. No caller uses `{:?}` on
+  `LiveEnv` today, but any future `dbg!` or an
+  `expect()` chain that includes the struct would
+  leak the credential to stderr / CI logs.
+- **Resolution:** Hand-wrote
+  `impl Debug for LiveEnv` that redacts `token` to
+  `"***"` while keeping the other fields visible for
+  diagnostics.
+
+#### AQ-131 — `issue_exists` panicked "unexpected status" on environmental failures
+
+- **Date:** 2026-04-20
+- **Category:** Error handling
+- **Where:** `jira_live.rs::issue_exists`
+- **Description:** Legitimate environmental responses
+  (401/403 from expired token, 5xx from rate-limit)
+  surfaced as `panic!("unexpected status {s}")` —
+  misleading text labelling them as "unexpected"
+  when they're environmental, and a transient 5xx
+  during the panic-path test would flake it with the
+  wrong signal.
+- **Resolution:** Changed return type to
+  `Result<bool, String>`. Distinct error classes for
+  credentials-rejected (401/403), server-error
+  (5xx), and genuinely unexpected codes; transport
+  errors go through the same `redact_ureq_error`
+  helper so they're both informative and
+  auth-safe.
+
+---
+
 ### PLG-JIRA-PARENT review sweep (2026-04-20)
 
 Six findings raised and fixed in the same commit

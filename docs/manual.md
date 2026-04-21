@@ -1004,6 +1004,37 @@ repeated pushes quiet and avoids spurious workflow
 events. A failed transition leaves `last_status`
 absent so the next push retries.
 
+#### Live-Jira Smoke Test
+
+Wiring bugs that the in-process HTTP fake cannot
+catch — TLS config, header casing, real ADF
+validator quirks, gateway-fallback cloud-id
+extraction — are exercised by an opt-in integration
+test at
+`crates/rustwerk-jira-plugin/tests/jira_live.rs`.
+Both test functions are `#[ignore]`d by default, so
+`cargo xtask validate` never reaches Jira.
+
+Run them against a free-tier Jira Cloud project by
+setting four env vars (any missing one causes the
+test to skip cleanly with no network call):
+
+```
+RUSTWERK_JIRA_TEST_URL=https://foo.atlassian.net \
+RUSTWERK_JIRA_TEST_TOKEN=... \
+RUSTWERK_JIRA_TEST_USERNAME=you@example.com \
+RUSTWERK_JIRA_TEST_PROJECT=RUST \
+cargo xtask test -- --ignored jira_live
+```
+
+The happy-path test creates a UUID-suffixed issue,
+asserts the response shape, and deletes the issue in
+a Drop guard. A second test deliberately panics
+inside a `catch_unwind` scope to assert the Drop
+guard runs even on failure — no residue is left
+behind in the target project if a future regression
+crashes the test mid-flight.
+
 ### Feature Flag
 
 The `plugins` feature is enabled by default. To build

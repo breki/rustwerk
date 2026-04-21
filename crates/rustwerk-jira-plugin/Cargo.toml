@@ -11,7 +11,13 @@ categories = ["command-line-utilities"]
 publish = false
 
 [lib]
-crate-type = ["cdylib"]
+# `rlib` is added alongside `cdylib` so integration tests
+# under `tests/` (e.g. PLG-JIRA-E2E's live smoke test) can
+# link against the plugin and call the FFI entry points as
+# plain Rust functions. The host still loads the `.dll` /
+# `.so` / `.dylib` at runtime via libloading — nothing
+# about the plugin-discovery contract changes.
+crate-type = ["cdylib", "rlib"]
 
 [lints.rust]
 warnings = "deny"

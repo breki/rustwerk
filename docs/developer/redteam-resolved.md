@@ -5,6 +5,101 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### PLG-JIRA-E2E review sweep (2026-04-20)
+
+Six findings raised and fixed in the same commit
+(test-only; no version bump):
+
+#### RT-141 — `ureq::Error` Display in teardown stderr was a credential-leak footgun
+
+- **Date:** 2026-04-20
+- **Category:** Security (fragile)
+- **Where:** `crates/rustwerk-jira-plugin/tests/jira_live.rs` — `TeardownGuard::drop` error arm, `issue_exists` error paths
+- **Description:** `eprintln!("... {e}")` printed the
+  full `ureq::Error` Display, which can include the
+  request URL. Today auth sits in the `Authorization`
+  header (safe), but a future ureq variant or a
+  refactor that embeds auth in the URL would leak the
+  real API token into stderr / CI logs.
+- **Resolution:** Added `redact_ureq_error(&e)` that
+  renders `HTTP {status}` or `transport ({kind})`
+  only, never the full Display. Used at every
+  error-rendering site in the test.
+
+#### RT-142 — `non_empty_env` accepted whitespace-only values
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (UX)
+- **Where:** `jira_live.rs::non_empty_env`
+- **Description:** `.filter(|s| !s.is_empty())` let
+  whitespace-only env vars through. A trailing-space
+  token from a `.env` file or shell heredoc would
+  reach Jira and produce a baffling 401 instead of a
+  clean skip.
+- **Resolution:** Changed predicate to
+  `!s.trim().is_empty()`.
+
+#### RT-143 — `panic = "abort"` would silently invalidate the panic-path test
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (future-fragility)
+- **Where:** `jira_live.rs::jira_live_teardown_runs_on_panic`
+- **Description:** The test uses `catch_unwind` to
+  prove the Drop guard runs on panic. Under
+  `panic = "abort"`, Drop never runs and the test
+  becomes meaningless (process aborts mid-assertion).
+- **Resolution:** Gated the test on
+  `#[cfg(panic = "unwind")]`. If a future profile
+  flips to abort panics, the function drops out of
+  the test binary rather than silently lying about
+  what it proves.
+
+#### RT-144 — 2.5s DELETE-propagation budget was flaky
+
+- **Date:** 2026-04-20
+- **Category:** Correctness (flake vector)
+- **Where:** `jira_live_teardown_runs_on_panic`
+- **Description:** 5 × 500ms polling was borderline
+  for a slow tenant; under load a DELETE-followed-by-
+  GET race could produce false-positive "still
+  exists" readings.
+- **Resolution:** Bumped to a 10s deadline with
+  exponential backoff (250ms → 500ms → 1s → 2s).
+
+#### RT-145 — Teardown guard attached after shape assertions leaked issues on partial failure
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Where:** `push_one_issue` (original version)
+- **Description:** The helper asserted `code == 0`
+  and `parsed["success"] == true` *before* returning,
+  so the caller couldn't construct the guard until
+  the function had already panicked on any malformed
+  response. If Jira accepted the POST (issue exists)
+  but the plugin later panicked on a shape check, the
+  issue leaked.
+- **Resolution:** Refactored `push_one_issue` to
+  return `(TeardownGuard, PushedIssue)`. The key is
+  extracted from the raw payload *before* any
+  assertion fires; the guard wraps it immediately so
+  every subsequent panic still triggers teardown.
+
+#### RT-146 — Same partial-failure leak window when plugin reports `success: false` with a valid key
+
+- **Date:** 2026-04-20
+- **Category:** Correctness
+- **Description:** Same root cause as RT-145: a
+  future plugin path that reports `success: false`
+  while still having populated `external_key` (e.g.
+  post-create transition failure) would leak the
+  created issue because the `success == true` assert
+  fired before key extraction.
+- **Resolution:** Folded into the RT-145 fix — key
+  extraction now happens *before* any success
+  assertion.
+
+---
+
 ### PLG-JIRA-PARENT review sweep (2026-04-20)
 
 Five findings raised and fixed in the same commit
