@@ -2,7 +2,7 @@
   "metadata": {
     "name": "RustWerk",
     "created_at": "2026-04-02T20:56:48.780798500Z",
-    "modified_at": "2026-04-20T21:57:09.355514500Z"
+    "modified_at": "2026-04-26T12:54:39.405401500Z"
   },
   "tasks": {
     "AI-BATCH": {
@@ -461,6 +461,51 @@
         "plugin"
       ]
     },
+    "PLG-DISP": {
+      "title": "Plugin host dispatcher module",
+      "description": "New host-side dispatcher that each domain command calls after a successful local mutation. Reads plugin_state.<plugin>.key, decides create vs update vs skip, and calls the existing push_all FFI for the affected task. Foundation for every later wire-up; design carefully because regret here means revisiting every wire-up.",
+      "status": "todo",
+      "effort_estimate": "3H",
+      "complexity": 5,
+      "tags": [
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-DOCS": {
+      "title": "Documentation sweep for new invocation model",
+      "description": "Update docs/manual.md, llms.txt, and knowledge/integrations/jira-plugin.md to reflect the implicit-invocation model. Flip the ADR (knowledge/decisions/plugin-invocation-model.md) status from 'Accepted, not yet implemented' to current state.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-WIRE-ALL",
+        "PLG-NOPLUG",
+        "PLG-RETRY",
+        "PLG-LINK-BULK",
+        "PLG-RECON-FORCE"
+      ],
+      "effort_estimate": "2H",
+      "complexity": 2,
+      "tags": [
+        "docs",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-GATE": {
+      "title": "Two-state create gate logic",
+      "description": "Implement the asymmetric create gate: a task transitions from pre-push to post-push the first time its status becomes in_progress (assignee not required). Pre-push mutations push nothing; post-push mutations push every time. Observable from plugin_state.<plugin>.key.is_some().",
+      "status": "todo",
+      "dependencies": [
+        "PLG-DISP"
+      ],
+      "effort_estimate": "2H",
+      "complexity": 2,
+      "tags": [
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
     "PLG-HOST": {
       "title": "Plugin host with libloading dynamic loader",
       "description": "Add plugin_host.rs to binary with #[allow(unsafe_code)]. LoadedPlugin struct wrapping libloading::Library. Plugin discovery in .rustwerk/plugins/, ~/.rustwerk/plugins/, and target/. Platform-specific extension filter (.dll/.so/.dylib). API version check. String memory management via plugin's free_string.",
@@ -586,6 +631,35 @@
         "plugin"
       ]
     },
+    "PLG-LINK": {
+      "title": "plugin link single-task binding",
+      "description": "rustwerk plugin link <task-id> <jira-key>. Validates key syntax, GETs the issue against the configured Jira project to confirm it exists, then writes plugin_state.jira = { key, self, last_pushed_at } to the task. Refuses if the key 404s. Sole command in the design that writes plugin_state without performing a push.",
+      "status": "todo",
+      "effort_estimate": "3H",
+      "complexity": 3,
+      "tags": [
+        "bootstrap",
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-LINK-BULK": {
+      "title": "plugin link --bulk batched form",
+      "description": "Batched variant: validates every key against Jira before writing any binding. Atomic — partial bootstraps do not leave half the project linked. Input format: CSV or JSON file mapping rustwerk task IDs to Jira keys.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-LINK"
+      ],
+      "effort_estimate": "2H",
+      "complexity": 2,
+      "tags": [
+        "bootstrap",
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
     "PLG-MAP": {
       "title": "Task-to-Jira issue mapping (ADF format)",
       "description": "Map TaskDto to Jira issue creation payload. POST /rest/api/3/issue. Description in Atlassian Document Format. Project key from config. Issue type defaults to Task.",
@@ -598,6 +672,99 @@
       "tags": [
         "jira",
         "plugin"
+      ]
+    },
+    "PLG-NOPLUG": {
+      "title": "--no-plugins escape flag",
+      "description": "CLI-level flag that suppresses plugin invocation for the current command. Sole supported escape; no ambient env-var toggle (silent suppression would let drift accumulate invisibly).",
+      "status": "todo",
+      "dependencies": [
+        "PLG-WIRE-STATUS"
+      ],
+      "effort_estimate": "1H",
+      "complexity": 2,
+      "tags": [
+        "cli",
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-RECON": {
+      "title": "Rename plugin push to plugin reconcile",
+      "description": "Rename the existing operator-facing verb. Default behavior respects the create gate: only post-push tasks (have a key) plus tasks currently in_progress are pushed. Reconcile becomes a diagnostic / bulk-repair escape hatch, not the primary surface.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-GATE"
+      ],
+      "effort_estimate": "1H",
+      "complexity": 1,
+      "tags": [
+        "cli",
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-RECON-FORCE": {
+      "title": "reconcile --force-create-all flag",
+      "description": "Loud flag that bypasses the create gate during reconcile. Specifically for the bootstrapping case where rustwerk is the source and Jira starts empty — every task gets a Jira issue regardless of state. Kept explicit because force-creating hundreds of issues should require an obvious operator gesture.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-RECON"
+      ],
+      "effort_estimate": "1H",
+      "complexity": 1,
+      "tags": [
+        "bootstrap",
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-RETRY": {
+      "title": "Retry queue with opportunistic drain",
+      "description": "On plugin failure: commit the local mutation, append the failure to plugin_state.<plugin>.pending on the affected task, exit non-zero with a message naming the queued work. Drain the queue opportunistically when any subsequent event fires for the same task.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-WIRE-STATUS"
+      ],
+      "effort_estimate": "4H",
+      "complexity": 5,
+      "tags": [
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-WIRE-ALL": {
+      "title": "Wire dispatcher into remaining mutating commands",
+      "description": "Fan out the dispatcher call to task add, task assign, task unassign, task update (title/desc/tags), task depend, task undepend. Once a task is post-push, every mutation pushes the full snapshot.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-WIRE-STATUS"
+      ],
+      "effort_estimate": "4H",
+      "complexity": 3,
+      "tags": [
+        "jira",
+        "plugin",
+        "plugin-invocation"
+      ]
+    },
+    "PLG-WIRE-STATUS": {
+      "title": "Wire dispatcher into task status set",
+      "description": "First end-to-end wire-up: task status set fires the dispatcher after a successful local mutation. Smallest slice that proves the whole architecture (dispatcher + gate + FFI + Jira round-trip) works together. Includes the 'first in_progress creates the issue' path.",
+      "status": "todo",
+      "dependencies": [
+        "PLG-GATE"
+      ],
+      "effort_estimate": "2H",
+      "complexity": 3,
+      "tags": [
+        "jira",
+        "plugin",
+        "plugin-invocation"
       ]
     },
     "PLG-WORKSPACE": {
